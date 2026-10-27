@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JARVIS</title>
+  <style>
+    body {
+      margin: 0;
+      background: #030b16;
+      color: #00eaff;
+      font-family: Arial, sans-serif;
+      text-align: center;
+    }
+    h1 {
+      margin-top: 60px;
+      font-size: clamp(40px, 9vw, 85px);
+      letter-spacing: 8px;
+      text-shadow: 0 0 25px #00eaff;
+    }
+    .core {
+      width: 190px;
+      height: 190px;
+      margin: 60px auto;
+      border: 5px solid #00eaff;
+      border-radius: 50%;
+      box-shadow: 0 0 40px #00eaff, inset 0 0 40px #00eaff;
+      display: grid;
+      place-items: center;
+      animation: pulse 2s infinite alternate;
+    }
+    @keyframes pulse {
+      to { box-shadow: 0 0 80px #00eaff; }
+    }
+    .status { color: #7affc4; }
+
+    /* Chat */
+    #chatverlauf {
+      margin: 20px auto;
+      padding: 0 16px;
+      max-width: 600px;
+      text-align: left;
+    }
+    .nachricht {
+      margin: 10px 0;
+      padding: 12px 15px;
+      border-radius: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .nachricht.nutzer {
+      margin-left: 15%;
+      background: #0c2a44;
+      color: white;
+    }
+    .nachricht.jarvis {
+      margin-right: 15%;
+      border: 1px solid #00eaff;
+      background: #071a2d;
+      box-shadow: 0 0 12px #00eaff33;
+    }
+    .nachricht.fehler {
+      margin-right: 15%;
+      border: 1px solid #ff6b6b;
+      color: #ff9b9b;
+    }
+    .nachricht.denkt { opacity: 0.7; font-style: italic; }
+
+    /* Verbindungseinstellungen */
+    details.einstellungen {
+      margin: 30px auto 60px;
+      padding: 0 16px;
+      max-width: 400px;
+      text-align: left;
+      color: #7aa6b8;
+    }
+    details.einstellungen summary { cursor: pointer; text-align: center; }
+    details.einstellungen input {
+      box-sizing: border-box;
+      width: 100%;
+      margin: 6px 0 12px;
+      padding: 12px;
+      border: 1px solid #00eaff;
+      background: #071a2d;
+      color: white;
+      border-radius: 8px;
+    }
+    details.einstellungen button {
+      padding: 12px 20px;
+      background: #00eaff;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    /* Trading (Binance-Spot-Testnet) */
+    .trading {
+      box-sizing: border-box;
+      width: calc(100% - 32px);
+      max-width: 600px;
+      margin: 30px auto;
+      padding: 20px;
+      border: 1px solid #ffcc66;
+      border-radius: 12px;
+      background: #071a2d;
+      box-shadow: 0 0 20px #ffcc6633;
+      text-align: left;
+    }
+    .trading h2 { text-align: center; margin-top: 0; }
+    .trading h3 { margin: 22px 0 8px; color: #7aa6b8; font-size: 15px; letter-spacing: 2px; }
+    .trading .testnet-hinweis { color: #ffcc66; text-align: center; }
+    .trading table { width: 100%; border-collapse: collapse; color: white; }
+    .trading td { padding: 6px 4px; border-bottom: 1px solid #0c2a44; }
+    .trading td.zahl { text-align: right; }
+    .trading .plus { color: #7affc4; }
+    .trading .minus { color: #ff9b9b; }
+    .trading .info { color: #7aa6b8; white-space: pre-line; line-height: 1.5; }
+    .trading select, .trading input[type="number"] {
+      padding: 12px;
+      border: 1px solid #00eaff;
+      background: #030b16;
+      color: white;
+      border-radius: 8px;
+    }
+    .trading input[type="number"] { width: 110px; }
+    .order-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .trading .knopf {
+      padding: 12px 20px;
+      background: #00eaff;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .trading .knopf.zweit { background: transparent; color: #00eaff; border: 1px solid #00eaff; }
+    .trading .knopf:disabled { opacity: 0.5; cursor: wait; }
+    .notaus {
+      width: 100%;
+      padding: 18px;
+      background: #d62828;
+      color: white;
+      font-size: 20px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .notaus.aktiv { background: #4a1414; border: 2px solid #ff6b6b; font-size: 16px; }
+    #order-ergebnis { min-height: 1.4em; }
+    #protokoll { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+    #protokoll li { padding: 6px 0; border-bottom: 1px solid #0c2a44; overflow-wrap: anywhere; }
+    #protokoll .p-order { color: #7affc4; }
+    #protokoll .p-abgelehnt { color: #ffcc66; }
+    #protokoll .p-fehler { color: #ff9b9b; }
+    #protokoll .p-notaus { color: #ff6b6b; font-weight: bold; }
+    #protokoll .zeit { color: #7aa6b8; margin-right: 6px; }
+
+    /* Marktanalyse (echte öffentliche Marktdaten, nur Anzeige) */
+    .analyse {
+      box-sizing: border-box;
+      width: calc(100% - 32px);
+      max-width: 1100px;
+      margin: 30px auto;
+      padding: 20px;
+      border: 1px solid #00eaff;
+      border-radius: 12px;
+      background: #071a2d;
+      box-shadow: 0 0 20px #00eaff33;
+      text-align: left;
+    }
+    .analyse h2 { text-align: center; margin-top: 0; }
+    .analyse .analyse-hinweis { color: #7aa6b8; text-align: center; }
+    .analyse-steuerung { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .analyse select {
+      padding: 12px;
+      border: 1px solid #00eaff;
+      background: #030b16;
+      color: white;
+      border-radius: 8px;
+    }
+    .analyse button {
+      padding: 12px 20px;
+      background: transparent;
+      color: #00eaff;
+      border: 1px solid #00eaff;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .analyse button:disabled { opacity: 0.5; cursor: wait; }
+    .legende { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: #9fc7d6; margin-bottom: 8px; }
+    .legende span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--farbe); }
+    .chart { width: 100%; height: 600px; }
+    .analyse .info { color: #9fc7d6; white-space: pre-line; line-height: 1.6; overflow-wrap: anywhere; }
+    #analyse-hinweise { list-style: none; padding: 0; margin: 0; color: #ffcc66; font-size: 14px; overflow-wrap: anywhere; }
+    #analyse-hinweise li { padding: 4px 0; }
+    @media (max-width: 700px) {
+      .analyse { padding: 14px 10px; }
+      .chart { height: 520px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>J.A.R.V.I.S.</h1>
+  <div class="core">SYSTEM ONLINE</div>
+  <h2 class="status">Dashboard aktiviert</h2>
+  <p>Persönlicher KI-Assistent</p>
+  <p>Version 0.4 – KI-Chat + Testnet-Trading + Marktanalyse</p>
+
+<div id="uhr" style="font-size:32px; margin-top:25px; color:#00eaff;"></div>
+
+<script>
+  function uhrAktualisieren() {
+    const jetzt = new Date();
+    document.getElementById("uhr").textContent =
+      jetzt.toLocaleTimeString("de-DE");
+  }
+
+  uhrAktualisieren();
+  setInterval(uhrAktualisieren, 1000);
+</script>
+<div style="
+  margin: 30px auto;
+  padding: 20px;
+  max-width: 350px;
+  border: 1px solid #00eaff;
+  border-radius: 12px;
+  box-shadow: 0 0 20px #00eaff55;
+  background: #071a2d;
+">
+  <h2>JARVIS SYSTEMSTATUS</h2>
+  <p style="color:#7affc4;">● Dashboard: ONLINE</p>
+  <p id="ki-status">● KI-Verbindung: NICHT VERBUNDEN</p>
+  <p id="markt-status">● Marktdaten: NICHT VERBUNDEN</p>
+  <p id="trading-status">● Trading: DEAKTIVIERT</p>
+</div>
+
+<div id="chatverlauf"></div>
+
+<div style="margin:30px auto; max-width:400px;">
+  <input type="text" id="befehl"
+    placeholder="Frag JARVIS etwas..."
+    style="padding:15px; width:65%; border:1px solid #00eaff; background:#071a2d; color:white; border-radius:8px;">
+  <button id="senden" onclick="jarvisAntwort()"
+    style="padding:15px; background:#00eaff; border:0; border-radius:8px; cursor:pointer;">
+    SENDEN
+  </button>
+</div>
+
+<section class="analyse" id="analyse">
+  <h2>MARKTANALYSE</h2>
+  <p class="analyse-hinweis">Echte öffentliche Marktdaten. Technische Einordnung – keine Anlageberatung und kein Handelssignal.</p>
+  <div class="analyse-steuerung">
+    <select id="analyse-symbol" aria-label="Handelspaar">
+      <option value="BTCUSDT">BTCUSDT</option>
+      <option value="ETHUSDT">ETHUSDT</option>
+    </select>
+    <select id="analyse-intervall" aria-label="Intervall">
+      <option value="15m">15 Minuten</option>
+      <option value="1h" selected>1 Stunde</option>
+      <option value="4h">4 Stunden</option>
+      <option value="1d">1 Tag</option>
+    </select>
+    <button id="analyse-aktualisieren" type="button">Aktualisieren</button>
+  </div>
+  <div class="legende" aria-hidden="true">
+    <span style="--farbe:#ffcc66">EMA 20</span>
+    <span style="--farbe:#00eaff">EMA 50</span>
+    <span style="--farbe:#c792ea">EMA 200</span>
+    <span style="--farbe:#7aa6b8">Darunter: Volumen · RSI 14 (30/70) · MACD 12/26/9</span>
+  </div>
+  <div id="analyse-chart" class="chart" role="img" aria-label="Kurschart mit EMA, Volumen, RSI und MACD"></div>
+  <p id="analyse-status" class="info"></p>
+  <p id="analyse-zusammenfassung" class="info"></p>
+  <ul id="analyse-hinweise"></ul>
+</section>
+
+<section class="trading">
+  <h2>TRADING – TESTNET</h2>
+  <p class="testnet-hinweis">Nur Binance-Spot-Testnet mit Spielgeld. Keine echten Orders, keine Echtgeld-Verbindung.</p>
+
+  <button id="notaus" class="notaus" onclick="notausUmschalten()">NOT-AUS</button>
+  <p id="trading-zustand" class="info">Status wird geladen …</p>
+
+  <h3>MARKT (TESTNET-KURSE)</h3>
+  <table id="kurse"></table>
+  <p class="info">Testnet-Kurse können vom echten Markt abweichen.</p>
+
+  <h3>KONTOSTAND (SPIELGELD)</h3>
+  <table id="guthaben"></table>
+
+  <h3>MANUELLE ORDER</h3>
+  <div class="order-zeile">
+    <select id="order-symbol"><option>BTCUSDT</option><option>ETHUSDT</option></select>
+    <select id="order-seite">
+      <option value="BUY">Kaufen</option>
+      <option value="SELL">Verkaufen</option>
+    </select>
+    <input type="number" id="order-betrag" value="10" min="10" max="50" step="1" aria-label="Betrag in USDT"> USDT
+  </div>
+  <p class="order-zeile">
+    <label><input type="checkbox" id="order-nur-pruefen" checked> Nur prüfen (nicht ausführen)</label>
+  </p>
+  <div class="order-zeile">
+    <button id="order-senden" class="knopf" onclick="orderSenden()">Order senden</button>
+    <button class="knopf zweit" onclick="tradingLaden()">Aktualisieren</button>
+    <button class="knopf zweit" onclick="diagnoseStarten()">Diagnose</button>
+  </div>
+  <p id="order-ergebnis" class="info"></p>
+  <p id="diagnose-ergebnis" class="info"></p>
+
+  <h3>PROTOKOLL</h3>
+  <ul id="protokoll"></ul>
+</section>
+
+<details class="einstellungen">
+  <summary>⚙ Verbindung einrichten</summary>
+  <p>Diese Angaben werden nur auf diesem Gerät gespeichert, nicht in der Datei.</p>
+  <label for="worker-url">Worker-Adresse</label>
+  <input type="url" id="worker-url" placeholder="https://jarvis.NAME.workers.dev">
+  <label for="zugangscode">Zugangscode</label>
+  <input type="password" id="zugangscode" placeholder="Ihr JARVIS-Zugangscode">
+  <button onclick="verbindungSpeichern()">Speichern und prüfen</button>
+</details>
+
+<script>
+// Chatverlauf für die KI: abwechselnd user/assistant
+const verlauf = [];
+const MAX_VERLAUF = 20;
+
+function einstellungLesen(name) {
+  try { return localStorage.getItem(name) || ""; } catch (e) { return ""; }
+}
+
+function einstellungSchreiben(name, wert) {
+  try { localStorage.setItem(name, wert); } catch (e) { /* privater Modus: nur für diese Sitzung */ }
+}
+
+const verbindung = {
+  url: einstellungLesen("jarvis-worker-url"),
+  code: einstellungLesen("jarvis-zugangscode"),
+};
+
+function kiStatusSetzen(text, farbe) {
+  const status = document.getElementById("ki-status");
+  status.textContent = "● KI-Verbindung: " + text;
+  status.style.color = farbe || "";
+}
+
+function nachrichtAnzeigen(text, art) {
+  const element = document.createElement("div");
+  element.className = "nachricht " + art;
+  element.textContent = text;
+  const chat = document.getElementById("chatverlauf");
+  chat.appendChild(element);
+  element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  return element;
+}
+
+function begruessung() {
+  const stunde = new Date().getHours();
+  if (stunde < 11) return "Guten Morgen";
+  if (stunde < 18) return "Guten Tag";
+  return "Guten Abend";
+}
+
+// Antwort ohne KI, solange keine Verbindung eingerichtet ist
+function offlineAntwort(befehl) {
+  if (befehl.toLowerCase() === "hallo jarvis") {
+    return begruessung() + ", Sir. Ich bin bereit. Für echte Antworten richten Sie bitte unten die Verbindung ein.";
+  }
+  return "Befehl empfangen – " + befehl + ". (Offline-Modus: KI-Verbindung noch nicht eingerichtet.)";
+}
+
+async function workerAnfrage(pfad, optionen) {
+  const antwort = await fetch(verbindung.url.replace(/\/+$/, "") + pfad, {
+    ...optionen,
+    headers: {
+      "content-type": "application/json",
+      "x-jarvis-zugang": verbindung.code,
+    },
+  });
+  let daten = {};
+  try { daten = await antwort.json(); } catch (e) { /* leere oder ungültige Antwort */ }
+  if (!antwort.ok) {
+    throw new Error(daten.fehler || "Fehler " + antwort.status);
+  }
+  return daten;
+}
+
+async function verbindungPruefen() {
+  if (!verbindung.url || !verbindung.code) {
+    kiStatusSetzen("NICHT EINGERICHTET");
+    return;
+  }
+  kiStatusSetzen("PRÜFE …");
+  try {
+    const daten = await workerAnfrage("/status", { method: "GET" });
+    if (daten.ki_konfiguriert) {
+      kiStatusSetzen("VERBUNDEN (" + daten.modell + ")", "#7affc4");
+    } else {
+      kiStatusSetzen("WORKER OHNE API-SCHLÜSSEL", "#ffcc66");
+    }
+  } catch (e) {
+    kiStatusSetzen("FEHLER – " + e.message, "#ff9b9b");
+  }
+}
+
+function verbindungSpeichern() {
+  verbindung.url = document.getElementById("worker-url").value.trim();
+  verbindung.code = document.getElementById("zugangscode").value;
+  einstellungSchreiben("jarvis-worker-url", verbindung.url);
+  einstellungSchreiben("jarvis-zugangscode", verbindung.code);
+  verbindungPruefen();
+  tradingLaden();
+  if (window.analyseLaden) analyseLaden({ erzwingen: true });
+}
+
+async function jarvisAntwort() {
+  const eingabe = document.getElementById("befehl");
+  const knopf = document.getElementById("senden");
+  const befehl = eingabe.value.trim();
+  if (!befehl || knopf.disabled) return;
+
+  eingabe.value = "";
+  nachrichtAnzeigen(befehl, "nutzer");
+
+  if (!verbindung.url || !verbindung.code) {
+    const text = offlineAntwort(befehl);
+    nachrichtAnzeigen("JARVIS: " + text, "jarvis");
+    jarvisSprechen(text);
+    return;
+  }
+
+  verlauf.push({ role: "user", content: befehl });
+  knopf.disabled = true;
+  const platzhalter = nachrichtAnzeigen("JARVIS denkt nach …", "jarvis denkt");
+
+  try {
+    // Nur die letzten Nachrichten senden; Anfang muss eine user-Nachricht sein
+    let auszug = verlauf.slice(-MAX_VERLAUF);
+    if (auszug[0].role !== "user") auszug = auszug.slice(1);
+
+    const daten = await workerAnfrage("/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages: auszug }),
+    });
+    verlauf.push({ role: "assistant", content: daten.antwort });
+    platzhalter.className = "nachricht jarvis";
+    platzhalter.textContent = "JARVIS: " + daten.antwort;
+    jarvisSprechen(daten.antwort);
+  } catch (e) {
+    verlauf.pop(); // unbeantwortete Frage entfernen, damit der Verlauf abwechselnd bleibt
+    platzhalter.className = "nachricht fehler";
+    platzhalter.textContent = "Verbindungsproblem: " + e.message;
+  } finally {
+    knopf.disabled = false;
+    eingabe.focus();
+  }
+}
+
+document.getElementById("befehl").addEventListener("keydown", function (event) {
+  if (event.key === "Enter") jarvisAntwort();
+});
+
+document.getElementById("worker-url").value = verbindung.url;
+document.getElementById("zugangscode").value = verbindung.code;
+verbindungPruefen();
+</script>
+<script>
+// ---------- Trading (Binance-Spot-Testnet, Spielgeld) ----------
+// Alle Binance-Anfragen laufen über den Worker; der Browser kennt keine Binance-Schlüssel.
+let tradingZustand = { notaus: null, limits: null, positionen: {} };
+let letzteKurse = {};
+
+function zahl(wert, stellen) {
+  return Number(wert).toLocaleString("de-DE", { maximumFractionDigits: stellen });
+}
+
+function statusZeileSetzen(id, text, farbe) {
+  const zeile = document.getElementById(id);
+  zeile.textContent = text;
+  zeile.style.color = farbe || "";
+}
+
+function zelle(text, klasse) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  if (klasse) td.className = klasse;
+  return td;
+}
+
+function tabelleFuellen(id, zeilen) {
+  const tabelle = document.getElementById(id);
+  tabelle.replaceChildren(...zeilen.map((zellen) => {
+    const tr = document.createElement("tr");
+    tr.append(...zellen);
+    return tr;
+  }));
+}
+
+function verbunden() {
+  return Boolean(verbindung.url && verbindung.code);
+}
+
+async function tradingLaden() {
+  if (!verbunden()) {
+    document.getElementById("trading-zustand").textContent = "Bitte zuerst unten die Verbindung einrichten.";
+    return;
+  }
+  await kurseLaden(); // zuerst, damit Positionswerte berechnet werden können
+  await Promise.allSettled([tradingStatusLaden(), kontoLaden(), protokollLaden()]);
+}
+
+async function kurseLaden() {
+  try {
+    const daten = await workerAnfrage("/markt", { method: "GET" });
+    letzteKurse = {};
+    tabelleFuellen("kurse", daten.kurse.map((k) => {
+      letzteKurse[k.symbol] = k.preis;
+      const klasse = "zahl " + (k.aenderung_prozent >= 0 ? "plus" : "minus");
+      return [
+        zelle(k.symbol),
+        zelle(zahl(k.preis, 2) + " USDT", "zahl"),
+        zelle((k.aenderung_prozent >= 0 ? "+" : "") + zahl(k.aenderung_prozent, 2) + " %", klasse),
+      ];
+    }));
+    statusZeileSetzen("markt-status", "● Marktdaten: TESTNET VERBUNDEN", "#7affc4");
+  } catch (e) {
+    tabelleFuellen("kurse", [[zelle("Kurse nicht abrufbar: " + e.message, "minus")]]);
+    statusZeileSetzen("markt-status", "● Marktdaten: FEHLER", "#ff9b9b");
+  }
+}
+
+async function tradingStatusLaden() {
+  const feld = document.getElementById("trading-zustand");
+  const knopf = document.getElementById("notaus");
+  try {
+    const s = await workerAnfrage("/trading/status", { method: "GET" });
+    tradingZustand = s;
+    knopf.textContent = s.notaus ? "NOT-AUS AKTIV – TIPPEN ZUM AUFHEBEN" : "NOT-AUS";
+    knopf.classList.toggle("aktiv", s.notaus);
+
+    const zeilen = [
+      s.notaus ? "Handel GESPERRT" + (s.notaus_grund ? " (" + s.notaus_grund + ")" : "") : "Handel freigegeben (nur manuell)",
+      "Automatik: AUS",
+      "Orders heute: " + s.orders_heute + " / " + s.limits.maxOrdersProTag,
+      "Limits: " + s.limits.minOrderUsdt + "–" + s.limits.maxOrderUsdt + " USDT je Order, max. "
+        + s.limits.maxPositionUsdt + " USDT je Position",
+    ];
+    for (const [symbol, menge] of Object.entries(s.positionen)) {
+      if (!(menge > 0)) continue;
+      const wert = letzteKurse[symbol] ? " (≈ " + zahl(menge * letzteKurse[symbol], 2) + " USDT)" : "";
+      zeilen.push("JARVIS-Position " + symbol.replace(/USDT$/, "") + ": " + zahl(menge, 8) + wert);
+    }
+    feld.textContent = zeilen.join("\n");
+
+    const betrag = document.getElementById("order-betrag");
+    betrag.min = s.limits.minOrderUsdt;
+    betrag.max = s.limits.maxOrderUsdt;
+    const auswahl = document.getElementById("order-symbol");
+    if ([...auswahl.options].map((o) => o.value).join() !== s.limits.symbole.join()) {
+      auswahl.replaceChildren(...s.limits.symbole.map((sym) => new Option(sym, sym)));
+    }
+
+    statusZeileSetzen("trading-status",
+      s.notaus ? "● Trading: NOT-AUS AKTIV" : "● Trading: TESTNET – MANUELL, AUTOMATIK AUS",
+      s.notaus ? "#ff9b9b" : "#7affc4");
+  } catch (e) {
+    feld.textContent = "Status nicht abrufbar: " + e.message;
+    statusZeileSetzen("trading-status", "● Trading: FEHLER", "#ff9b9b");
+  }
+}
+
+async function kontoLaden() {
+  try {
+    const daten = await workerAnfrage("/konto", { method: "GET" });
+    const wichtig = ["USDT", "BTC", "ETH"];
+    const zeilen = daten.guthaben
+      .filter((b) => wichtig.includes(b.asset))
+      .map((b) => [
+        zelle(b.asset),
+        zelle(zahl(b.frei, 8), "zahl"),
+        zelle(b.gesperrt > 0 ? "gesperrt: " + zahl(b.gesperrt, 8) : "", "zahl"),
+      ]);
+    const weitere = daten.guthaben.length - zeilen.length;
+    if (weitere > 0) zeilen.push([zelle("+ " + weitere + " weitere Testnet-Coins")]);
+    tabelleFuellen("guthaben", zeilen.length ? zeilen : [[zelle("Kein Guthaben gefunden.")]]);
+  } catch (e) {
+    tabelleFuellen("guthaben", [[zelle("Kontostand nicht abrufbar: " + e.message, "minus")]]);
+  }
+}
+
+async function protokollLaden() {
+  const liste = document.getElementById("protokoll");
+  try {
+    const daten = await workerAnfrage("/protokoll", { method: "GET" });
+    liste.replaceChildren(...daten.eintraege.slice(0, 20).map((eintrag) => {
+      const li = document.createElement("li");
+      li.className = "p-" + eintrag.art;
+      const zeit = document.createElement("span");
+      zeit.className = "zeit";
+      zeit.textContent = new Date(eintrag.zeit).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "medium" });
+      li.append(zeit, eintrag.text);
+      return li;
+    }));
+    if (!daten.eintraege.length) liste.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Noch keine Einträge." }));
+  } catch (e) {
+    liste.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Protokoll nicht abrufbar: " + e.message, className: "p-fehler" }));
+  }
+}
+
+async function orderSenden() {
+  if (!verbunden()) return;
+  const symbol = document.getElementById("order-symbol").value;
+  const seite = document.getElementById("order-seite").value;
+  const betrag = Number(document.getElementById("order-betrag").value);
+  const nurPruefen = document.getElementById("order-nur-pruefen").checked;
+  const ergebnis = document.getElementById("order-ergebnis");
+  const knopf = document.getElementById("order-senden");
+  const text = (seite === "BUY" ? "Kauf " : "Verkauf ") + symbol + " für " + betrag + " USDT";
+
+  if (!nurPruefen && !confirm("Testnet-Order wirklich ausführen?\n\n" + text + "\n\n(Spielgeld im Binance-Testnet, kein echtes Geld)")) {
+    return;
+  }
+
+  knopf.disabled = true;
+  ergebnis.style.color = "";
+  ergebnis.textContent = "Sende " + (nurPruefen ? "Prüf-Order" : "Order") + " …";
+  try {
+    const d = await workerAnfrage("/order", {
+      method: "POST",
+      body: JSON.stringify({ symbol, seite, betrag_usdt: betrag, nur_pruefen: nurPruefen }),
+    });
+    ergebnis.style.color = "#7affc4";
+    ergebnis.textContent = d.nur_geprueft
+      ? "✔ Geprüft: Binance würde " + text + " annehmen (nicht ausgeführt)."
+      : "✔ Ausgeführt (" + d.order.status + "): " + zahl(d.order.menge, 8) + " " + symbol.replace(/USDT$/, "")
+        + " für " + zahl(d.order.usdt, 2) + " USDT, Ø " + zahl(d.order.durchschnittspreis, 2) + " USDT";
+  } catch (e) {
+    ergebnis.style.color = "#ff9b9b";
+    ergebnis.textContent = "✖ " + e.message;
+  } finally {
+    knopf.disabled = false;
+    tradingLaden();
+  }
+}
+
+async function notausUmschalten() {
+  if (!verbunden()) return;
+  // Bei unbekanntem Zustand immer sperren
+  const aktivieren = tradingZustand.notaus !== true;
+  if (!aktivieren && !confirm("Not-Aus aufheben und manuelle Testnet-Orders wieder erlauben?")) {
+    return;
+  }
+  try {
+    await workerAnfrage("/trading/notaus", { method: "POST", body: JSON.stringify({ aktiv: aktivieren }) });
+  } catch (e) {
+    alert("Not-Aus konnte nicht geändert werden: " + e.message);
+  }
+  await Promise.allSettled([tradingStatusLaden(), protokollLaden()]);
+}
+
+async function diagnoseStarten() {
+  if (!verbunden()) return;
+  const feld = document.getElementById("diagnose-ergebnis");
+  feld.style.color = "";
+  feld.textContent = "Diagnose läuft …";
+  try {
+    const d = await workerAnfrage("/binance/diagnose", { method: "GET" });
+    const jaNein = (wert) => (wert ? "ja" : "NEIN");
+    const zeilen = [
+      "Testnet: " + d.testnet,
+      "Erreichbar: " + jaNein(d.erreichbar) + (d.standort_gesperrt ? " – Standort gesperrt (451)" : ""),
+      "Zeitabweichung: " + (d.zeit_abweichung_ms === null ? "–" : d.zeit_abweichung_ms + " ms"),
+      "Schlüssel im Worker: " + jaNein(d.schluessel_hinterlegt),
+      "Konto lesbar: " + jaNein(d.konto_ok),
+      "Speicher (KV): " + jaNein(d.kv_verbunden),
+      ...d.meldungen.map((m) => "⚠ " + m),
+    ];
+    feld.style.color = d.meldungen.length ? "#ffcc66" : "#7affc4";
+    feld.textContent = zeilen.join("\n");
+  } catch (e) {
+    feld.style.color = "#ff9b9b";
+    feld.textContent = "Diagnose fehlgeschlagen: " + e.message;
+  }
+  protokollLaden();
+}
+
+tradingLaden();
+// Kurse alle 30 Sekunden auffrischen, solange die Seite sichtbar ist
+setInterval(function () {
+  if (verbunden() && document.visibilityState === "visible") kurseLaden();
+}, 30000);
+</script>
+<!-- Marktanalyse: lokale Kopie von TradingView Lightweight Charts 5.2.1 (Apache-2.0, siehe vendor/LICENSE-lightweight-charts.txt) -->
+<script src="vendor/lightweight-charts-5.2.1.standalone.production.js"></script>
+<script src="analyse.js"></script>
+<script>
+function jarvisSprechen(text) {
+  if ("speechSynthesis" in window) {
+    const stimme = new SpeechSynthesisUtterance(text);
+    stimme.lang = "de-DE";
+    stimme.rate = 0.9;
+    stimme.pitch = 0.8;
+
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(stimme);
+  }
+}
+</script>
+<!-- Spracherkennung „Hey Jarvis“ ist bis Phase 5 deaktiviert (alte Version liegt in backup/). -->
+</body>
+</html>
