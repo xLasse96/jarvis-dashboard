@@ -221,6 +221,8 @@
         throw new Error("Unvollständige Antwort des Workers.");
       }
       chartFuellen(daten, neueAuswahl);
+      // Für die Kursverlauf-Kachel im Cockpit (dieselben echten Daten, keine eigene Anfrage)
+      window.dispatchEvent(new CustomEvent("jarvis-kerzen", { detail: daten }));
       zustand.schluessel = schluessel;
       zustand.geladenAm = Date.now();
       const ersatz = daten.quelle_name && daten.quelle_name !== "Binance" ? " (Ersatzquelle)" : "";
@@ -236,6 +238,7 @@
       if (neueAuswahl) {
         // Nie Daten eines anderen Paares oder Intervalls unter der neuen Auswahl stehen lassen
         seriendatenLeeren();
+        window.dispatchEvent(new CustomEvent("jarvis-kerzen", { detail: null }));
         zustand.schluessel = "";
         element("analyse-zusammenfassung").textContent = "";
         hinweiseAnzeigen([]);

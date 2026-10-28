@@ -2,327 +2,948 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
   <title>JARVIS</title>
   <style>
+    :root {
+      --bg: #020912;
+      --panel: rgba(6, 22, 38, 0.92);
+      --panel-kopf: rgba(0, 234, 255, 0.05);
+      --linie: rgba(0, 234, 255, 0.16);
+      --linie-stark: rgba(0, 234, 255, 0.45);
+      --akzent: #00eaff;
+      --text: #d6f4ff;
+      --gedimmt: #7aa6b8;
+      --ok: #7affc4;
+      --warn: #ffcc66;
+      --fehler: #ff6b6b;
+      --mono: Consolas, "Cascadia Mono", "Roboto Mono", ui-monospace, monospace;
+      --kopf-hoehe: 60px;
+      --fuss-hoehe: 30px;
+      --leuchten: 0 0 18px rgba(0, 234, 255, 0.07), inset 0 0 22px rgba(0, 234, 255, 0.03);
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; }
     body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(ellipse at 50% 35%, rgba(0, 234, 255, 0.08), transparent 60%),
+        linear-gradient(rgba(0, 234, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 234, 255, 0.03) 1px, transparent 1px);
+      background-size: auto, 32px 32px, 32px 32px;
+      color: var(--text);
+      font: 15px/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    }
+    input, select, button { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+      outline: 2px solid var(--akzent);
+      outline-offset: 2px;
+    }
+
+    /* ---------- Kopfleiste ---------- */
+    .kopf {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-height: var(--kopf-hoehe);
+      padding: 8px 16px;
+      background: rgba(2, 9, 18, 0.94);
+      border-bottom: 1px solid var(--linie-stark);
+      box-shadow: 0 1px 16px rgba(0, 234, 255, 0.08);
+    }
+    .marke { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    .logo {
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: 0.3em;
+      color: var(--akzent);
+      text-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
+      white-space: nowrap;
+    }
+    .kopf-untertitel {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      color: var(--gedimmt);
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kopf-rechts { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .pille {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      padding: 3px 9px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 3px;
+      color: var(--gedimmt);
+      white-space: nowrap;
+    }
+    .pille.gesperrt { color: var(--fehler); border-color: rgba(255, 107, 107, 0.7); background: rgba(255, 107, 107, 0.08); }
+    .pille.frei { color: var(--warn); border-color: rgba(255, 204, 102, 0.7); }
+    .uhr { font-family: var(--mono); font-size: 16px; color: var(--akzent); letter-spacing: 0.05em; }
+
+    /* ---------- Reiter (Desktop oben in der Kopfleiste, Smartphone unten) ---------- */
+    .reiter { display: flex; gap: 4px; margin: 0 auto; }
+    .reiter button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      min-width: 84px;
+      min-height: 44px;
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--gedimmt);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .reiter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .reiter button:hover { color: var(--text); }
+    .reiter button[aria-selected="true"] {
+      color: var(--akzent);
+      border-color: var(--linie-stark);
+      background: rgba(0, 234, 255, 0.08);
+      box-shadow: 0 0 12px rgba(0, 234, 255, 0.25), inset 0 -2px 0 var(--akzent);
+    }
+    .reiter button[aria-selected="true"] svg { filter: drop-shadow(0 0 4px rgba(0, 234, 255, 0.8)); }
+
+    /* ---------- Fußzeile ---------- */
+    .fuss {
+      display: flex;
+      justify-content: center;
+      min-height: var(--fuss-hoehe);
+      padding: 6px 16px;
+      border-top: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--gedimmt);
+      letter-spacing: 0.08em;
+    }
+
+    /* ---------- Bereiche ---------- */
+    main { flex: 1 0 auto; padding: 14px 16px; }
+    .cockpit {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(280px, 340px);
+      grid-template-areas: "links mitte rechts";
+      height: calc(100vh - var(--kopf-hoehe) - var(--fuss-hoehe) - 28px);
+      min-height: 640px;
+    }
+    .spalte { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; }
+    .links { grid-area: links; overflow: auto; }
+    .mitte { grid-area: mitte; }
+    .rechts { grid-area: rechts; }
+
+    /* ---------- Karten ---------- */
+    .karte {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--linie);
+      border-radius: 4px;
+      box-shadow: var(--leuchten);
+    }
+    .karte::before, .karte::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 0 solid var(--akzent);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    .karte::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+    .karte::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+    .karte-titel {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       margin: 0;
-      background: #030b16;
-      color: #00eaff;
-      font-family: Arial, sans-serif;
+      padding: 8px 12px;
+      background: var(--panel-kopf);
+      border-bottom: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--akzent);
+    }
+    .karte-titel::before { content: "["; color: var(--gedimmt); }
+    .karte-titel .zu { color: var(--gedimmt); }
+    .karte-titel .zusatz { margin-left: auto; color: var(--gedimmt); font-weight: 400; letter-spacing: 0.08em; font-size: 11px; }
+    .karte-inhalt { padding: 10px 12px 12px; min-height: 0; }
+    .klein { font-size: 12px; color: var(--gedimmt); margin: 8px 0 0; }
+    .info { color: var(--gedimmt); white-space: pre-line; line-height: 1.5; overflow-wrap: anywhere; margin: 8px 0 0; }
+
+    /* Statuslisten */
+    .statusliste, .funktionen { list-style: none; margin: 0; padding: 0; }
+    .statusliste li {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    .statusliste li:last-child, .funktionen li:last-child { border-bottom: 0; }
+    .funktionen li {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--linie);
+      font-size: 13px;
+    }
+    .funktionen b { font-family: var(--mono); font-size: 11px; font-weight: 400; letter-spacing: 0.04em; text-align: right; }
+    .funktionen .ok { color: var(--ok); }
+    .funktionen .aus { color: var(--gedimmt); }
+    .funktionen .gesperrt { color: var(--fehler); }
+
+    /* Verbindung */
+    details.einstellungen summary { cursor: pointer; list-style: none; }
+    details.einstellungen summary::-webkit-details-marker { display: none; }
+    details.einstellungen summary .zusatz::after { content: "▸ öffnen"; }
+    details.einstellungen[open] summary .zusatz::after { content: "▾ schließen"; }
+    details.einstellungen label { display: block; margin-top: 8px; font-size: 12px; color: var(--gedimmt); }
+    details.einstellungen .feld { width: 100%; margin: 4px 0 4px; }
+    details.einstellungen .knopf { width: 100%; margin-top: 8px; }
+
+    /* Felder und Knöpfe */
+    .feld {
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 4px;
+      background: #020a14;
+      color: var(--text);
+    }
+    .knopf {
+      min-height: 44px;
+      padding: 10px 18px;
+      border: 1px solid var(--akzent);
+      border-radius: 4px;
+      background: var(--akzent);
+      color: #00222b;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    .knopf.zweit { background: transparent; color: var(--akzent); border-color: var(--linie-stark); }
+    .knopf.zweit:hover { border-color: var(--akzent); }
+    .knopf:disabled { opacity: 0.5; cursor: wait; }
+
+    /* ---------- Kern ---------- */
+    /* Die Kern-Karte wächst mit ihrem Inhalt (z. B. geöffnete Sprachvorschau); die mittlere Spalte scrollt dann */
+    .kern-karte { flex: 0 0 auto; min-height: 300px; }
+    .kern-buehne {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      padding: 12px 18px 18px;
+      min-height: 0;
+    }
+
+    /* Umlaufbahn: Kern in der Mitte, Module werden per Skript gleichmäßig links und rechts im Bogen verteilt.
+       Neues Modul = weiterer <button class="aktion"> in .kern-aktionen; die Verteilung passt sich an.
+       Reicht der Platz nicht, schaltet das Skript auf .kompakt (Raster unter dem Kern). */
+    .orbit { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .orbit .kern { position: relative; z-index: 1; }
+    .kern-aktionen { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    .kern-aktionen .aktion { position: absolute; left: 0; top: 0; width: 196px; pointer-events: auto; transform: translate(var(--x, 0px), var(--y, 0px)); }
+    .kern-aktionen .aktion:not([style*="--x"]) { visibility: hidden; }
+    .orbit.kompakt .kern-aktionen {
+      position: static;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
+      width: 100%;
+      margin-top: 12px;
+    }
+    .orbit.kompakt .kern-aktionen .aktion { position: relative; width: auto; transform: none; visibility: visible; }
+    .orbit.kompakt .verbindungen { display: none; }
+
+    /* Leitungen zwischen Kern, Statuspunkten und Schnellzugriff (per Skript gezeichnet) */
+    .verbindungen { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .verbindungen .leitung-schein { fill: none; stroke: rgba(0, 234, 255, 0.07); stroke-width: 7; stroke-linejoin: round; }
+    .verbindungen .leitung { fill: none; stroke: rgba(0, 234, 255, 0.38); stroke-width: 1.4; stroke-linejoin: round; transition: stroke 0.25s, stroke-width 0.25s; }
+    .verbindungen .leitung.hell { stroke: var(--akzent); stroke-width: 2.4; filter: drop-shadow(0 0 5px var(--akzent)); }
+    .verbindungen .anschluss { fill: var(--akzent); filter: drop-shadow(0 0 4px var(--akzent)); }
+    .verbindungen .puls { fill: #d8fdff; filter: drop-shadow(0 0 5px var(--akzent)); }
+    .verbindungen .impuls { fill: #ffffff; filter: drop-shadow(0 0 8px var(--akzent)); }
+
+    .kern {
+      width: min(460px, 46vh);
+      aspect-ratio: 1;
+      min-width: 220px;
+    }
+    .kern canvas { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 16px rgba(0, 234, 255, 0.35)); }
+    .kern-text {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
       text-align: center;
+      color: var(--gedimmt);
+      overflow-wrap: anywhere;
+      max-width: 360px;
     }
-    h1 {
-      margin-top: 60px;
-      font-size: clamp(40px, 9vw, 85px);
-      letter-spacing: 8px;
-      text-shadow: 0 0 25px #00eaff;
+    /* Untertitel: letzte echte Frage und Antwort aus dem Gespräch */
+    .untertitel { max-width: 520px; min-height: 2.6em; text-align: center; }
+    .untertitel p { margin: 0; overflow-wrap: anywhere; }
+    #untertitel-frage { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em; color: var(--gedimmt); text-transform: uppercase; }
+    #untertitel-antwort {
+      font-size: 15px;
+      color: #9ff3ff;
+      text-shadow: 0 0 10px rgba(0, 234, 255, 0.45);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
-    .core {
-      width: 190px;
-      height: 190px;
-      margin: 60px auto;
-      border: 5px solid #00eaff;
+
+    /* Statusleiste über dem Kern */
+    .kern-knoten { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px; list-style: none; margin: 0; padding: 0; }
+    .kern-knoten li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px 5px 10px;
+      border: 1px solid var(--linie);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.25);
+      font-family: var(--mono);
+    }
+    .kern-knoten li::before {
+      content: "";
+      flex: none;
+      width: 9px;
+      height: 9px;
       border-radius: 50%;
-      box-shadow: 0 0 40px #00eaff, inset 0 0 40px #00eaff;
+      background: var(--gedimmt);
+    }
+    .kern-knoten .name { font-size: 10px; letter-spacing: 0.16em; color: var(--gedimmt); text-transform: uppercase; }
+    .kern-knoten .wert { font-size: 12px; color: var(--text); }
+    .kern-knoten [data-zustand="ok"]::before { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .kern-knoten [data-zustand="warn"]::before { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+    .kern-knoten [data-zustand="fehler"]::before { background: var(--fehler); box-shadow: 0 0 8px var(--fehler); }
+
+    /* Module (Schnellzugriff) */
+    .aktion {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 58px;
+      padding: 8px 16px 8px 8px;
+      background: linear-gradient(90deg, rgba(0, 234, 255, 0.13), rgba(0, 234, 255, 0.02) 70%);
+      border: 1px solid var(--linie-stark);
+      border-radius: 29px 6px 6px 29px;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    /* Module links vom Kern: gespiegelt, die runde Seite zeigt zum Kern */
+    .orbit:not(.kompakt) .aktion.links {
+      flex-direction: row-reverse;
+      padding: 8px 8px 8px 16px;
+      border-radius: 6px 29px 29px 6px;
+      background: linear-gradient(270deg, rgba(0, 234, 255, 0.13), rgba(0, 234, 255, 0.02) 70%);
+      text-align: right;
+    }
+    .aktion:hover, .aktion:focus-visible { border-color: var(--akzent); box-shadow: 0 0 16px rgba(0, 234, 255, 0.35); }
+    .aktion-symbol {
       display: grid;
       place-items: center;
-      animation: pulse 2s infinite alternate;
+      flex: none;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 234, 255, 0.18), rgba(0, 234, 255, 0.02) 70%);
+      box-shadow: inset 0 0 10px rgba(0, 234, 255, 0.25);
     }
-    @keyframes pulse {
-      to { box-shadow: 0 0 80px #00eaff; }
-    }
-    .status { color: #7affc4; }
+    .aktion:hover .aktion-symbol { box-shadow: inset 0 0 12px rgba(0, 234, 255, 0.5), 0 0 10px rgba(0, 234, 255, 0.4); }
+    .aktion svg { width: 22px; height: 22px; fill: none; stroke: var(--akzent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .aktion b { display: block; font-family: var(--mono); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; }
+    .aktion small { display: block; margin-top: 2px; font-size: 11px; color: var(--gedimmt); }
 
-    /* Chat */
-    #chatverlauf {
-      margin: 20px auto;
-      padding: 0 16px;
-      max-width: 600px;
-      text-align: left;
+    /* Befehlszeile unter dem Kern */
+    .befehlszeile {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: min(680px, 100%);
+      padding: 4px 4px 4px 14px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 6px;
+      background: rgba(2, 10, 20, 0.9);
+      box-shadow: 0 0 16px rgba(0, 234, 255, 0.18), inset 0 0 12px rgba(0, 234, 255, 0.05);
+    }
+    .befehlszeile:focus-within { border-color: var(--akzent); box-shadow: 0 0 22px rgba(0, 234, 255, 0.35); }
+    .befehl-symbol { color: var(--akzent); font-size: 14px; }
+    .befehlszeile .feld { flex: 1; min-width: 0; border: 0; background: transparent; }
+    .befehlszeile .feld:focus-visible { outline: none; }
+
+    /* Mikrofonknopf mit sichtbarem Zustand: bereit, zuhören, verarbeiten, Fehler */
+    .mikro {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--akzent);
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .mikro svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+    .mikro:hover { border-color: var(--akzent); }
+    .mikro[data-zustand="zuhoeren"] { color: #fff; background: rgba(255, 107, 107, 0.2); border-color: var(--fehler); animation: mikro-puls 1.2s ease-in-out infinite; }
+    .mikro[data-zustand="verarbeiten"] { color: var(--warn); border-color: var(--warn); }
+    .mikro[data-zustand="fehler"] { color: var(--fehler); border-color: rgba(255, 107, 107, 0.6); }
+    .mikro[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+    @keyframes mikro-puls { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.55); } 50% { box-shadow: 0 0 0 7px rgba(255, 107, 107, 0); } }
+
+    .sprach-status { width: min(680px, 100%); margin: 0; text-align: center; font-size: 13px; color: var(--gedimmt); }
+    .sprach-status:empty { display: none; }
+    .sprach-status[data-art="fehler"] { color: #ff9b9b; }
+    .sprach-vorschau {
+      width: min(680px, 100%);
+      padding: 10px 12px;
+      border: 1px solid var(--warn);
+      border-radius: 6px;
+      background: rgba(255, 204, 102, 0.05);
+    }
+    .sprach-vorschau label { display: block; margin-bottom: 6px; font-size: 12px; color: var(--warn); }
+    .sprach-vorschau textarea { width: 100%; min-height: 56px; resize: vertical; font: inherit; }
+    .sprach-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .sprachleiste { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; width: min(680px, 100%); font-size: 12px; color: var(--gedimmt); }
+    .schalter {
+      min-height: 36px;
+      padding: 6px 12px;
+      border: 1px solid var(--linie);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--gedimmt);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .schalter[aria-pressed="true"] { color: var(--akzent); border-color: var(--linie-stark); background: rgba(0, 234, 255, 0.08); }
+    .schalter:disabled { opacity: 0.45; cursor: default; }
+    .stimme-wahl { display: flex; align-items: center; gap: 6px; }
+    .stimme-wahl .feld { min-height: 36px; max-width: min(420px, 100%); padding: 4px 8px; font-size: 12px; }
+    .stimme-wahl { max-width: 100%; }
+    .stimmtest {
+      width: min(680px, 100%);
+      padding: 10px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.25);
+      font-size: 13px;
+    }
+    .stimmtest-wahl { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--gedimmt); }
+    .stimmtest-wahl .feld { min-height: 40px; max-width: 100%; font-size: 13px; }
+    .stimmtest-titel { margin: 12px 0 6px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--akzent); }
+    .stimmtest-protokoll, .stimmen-liste { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+    .stimmtest-protokoll li, .stimmen-liste li { padding: 3px 0; border-bottom: 1px solid var(--linie); }
+    .stimmtest-protokoll .fehler { color: #ff9b9b; }
+    .stimmen-liste { max-height: 200px; overflow-y: auto; }
+    .stimmen-liste .gewaehlt { color: var(--akzent); }
+    .sprach-hinweis { flex-basis: 100%; text-align: center; font-size: 11px; }
+    .sprach-hinweis:empty { display: none; }
+
+    /* ---------- Chat ---------- */
+    .chat-karte { flex: 1 1 0; min-height: 190px; }
+    .mitte { overflow-y: auto; }
+    .chat-karte .karte-inhalt { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    #chatverlauf { flex: 1; min-height: 120px; overflow-y: auto; padding-right: 4px; }
+    #chatverlauf:empty::before {
+      content: "Noch keine Unterhaltung.";
+      color: var(--gedimmt);
+      font-size: 13px;
     }
     .nachricht {
-      margin: 10px 0;
-      padding: 12px 15px;
-      border-radius: 12px;
+      margin: 8px 0;
+      padding: 10px 13px;
+      border-radius: 4px;
       line-height: 1.45;
       white-space: pre-wrap;
       overflow-wrap: anywhere;
     }
-    .nachricht.nutzer {
-      margin-left: 15%;
-      background: #0c2a44;
-      color: white;
-    }
-    .nachricht.jarvis {
-      margin-right: 15%;
-      border: 1px solid #00eaff;
-      background: #071a2d;
-      box-shadow: 0 0 12px #00eaff33;
-    }
-    .nachricht.fehler {
-      margin-right: 15%;
-      border: 1px solid #ff6b6b;
-      color: #ff9b9b;
-    }
+    .nachricht.nutzer { margin-left: 14%; background: #0c2a44; color: #fff; }
+    .nachricht.jarvis { margin-right: 14%; border: 1px solid var(--linie-stark); background: #061a2c; box-shadow: 0 0 10px rgba(0, 234, 255, 0.12); }
+    .nachricht.fehler { margin-right: 14%; border: 1px solid var(--fehler); color: #ff9b9b; }
     .nachricht.denkt { opacity: 0.7; font-style: italic; }
+    .eingabe { display: flex; gap: 8px; }
+    .eingabe .feld { flex: 1; min-width: 0; }
 
-    /* Verbindungseinstellungen */
-    details.einstellungen {
-      margin: 30px auto 60px;
-      padding: 0 16px;
-      max-width: 400px;
-      text-align: left;
-      color: #7aa6b8;
+    /* ---------- Tabellen, Protokoll ---------- */
+    table { width: 100%; border-collapse: collapse; color: #fff; font-size: 14px; }
+    td { padding: 6px 4px; border-bottom: 1px solid var(--linie); }
+    td.zahl { text-align: right; font-family: var(--mono); }
+    .plus { color: var(--ok); }
+    .minus { color: #ff9b9b; }
+    td.leer { color: var(--gedimmt); font-size: 13px; }
+    .mini-chart { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--linie); }
+    .mini-chart svg { display: block; width: 100%; height: 70px; }
+    #mini-linie { fill: none; stroke: var(--akzent); stroke-width: 1.6; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px rgba(0, 234, 255, 0.7)); }
+    #mini-flaeche { fill: rgba(0, 234, 255, 0.08); stroke: none; }
+    .protokoll-karte { flex: 1 1 0; min-height: 220px; }
+    .protokoll-karte .karte-inhalt { flex: 1; overflow-y: auto; max-height: 460px; }
+    #protokoll { list-style: none; padding: 0; margin: 0; font-size: 13px; }
+    #protokoll li {
+      margin: 0 0 6px;
+      padding: 6px 8px;
+      border: 1px solid var(--linie);
+      border-left: 3px solid var(--gedimmt);
+      background: rgba(0, 0, 0, 0.2);
+      overflow-wrap: anywhere;
     }
-    details.einstellungen summary { cursor: pointer; text-align: center; }
-    details.einstellungen input {
-      box-sizing: border-box;
-      width: 100%;
-      margin: 6px 0 12px;
-      padding: 12px;
-      border: 1px solid #00eaff;
-      background: #071a2d;
-      color: white;
-      border-radius: 8px;
-    }
-    details.einstellungen button {
-      padding: 12px 20px;
-      background: #00eaff;
-      border: 0;
-      border-radius: 8px;
-      cursor: pointer;
-    }
+    #protokoll .p-order { color: var(--ok); border-left-color: var(--ok); }
+    #protokoll .p-abgelehnt { color: var(--warn); border-left-color: var(--warn); }
+    #protokoll .p-fehler { color: #ff9b9b; border-left-color: var(--fehler); }
+    #protokoll .p-notaus { color: var(--fehler); border-left-color: var(--fehler); font-weight: bold; }
+    #protokoll .zeit { display: block; color: var(--gedimmt); font-family: var(--mono); font-size: 11px; }
 
-    /* Trading (Binance-Spot-Testnet) */
-    .trading {
-      box-sizing: border-box;
-      width: calc(100% - 32px);
-      max-width: 600px;
-      margin: 30px auto;
-      padding: 20px;
-      border: 1px solid #ffcc66;
-      border-radius: 12px;
-      background: #071a2d;
-      box-shadow: 0 0 20px #ffcc6633;
-      text-align: left;
-    }
-    .trading h2 { text-align: center; margin-top: 0; }
-    .trading h3 { margin: 22px 0 8px; color: #7aa6b8; font-size: 15px; letter-spacing: 2px; }
-    .trading .testnet-hinweis { color: #ffcc66; text-align: center; }
-    .trading table { width: 100%; border-collapse: collapse; color: white; }
-    .trading td { padding: 6px 4px; border-bottom: 1px solid #0c2a44; }
-    .trading td.zahl { text-align: right; }
-    .trading .plus { color: #7affc4; }
-    .trading .minus { color: #ff9b9b; }
-    .trading .info { color: #7aa6b8; white-space: pre-line; line-height: 1.5; }
-    .trading select, .trading input[type="number"] {
-      padding: 12px;
-      border: 1px solid #00eaff;
-      background: #030b16;
-      color: white;
-      border-radius: 8px;
-    }
-    .trading input[type="number"] { width: 110px; }
-    .order-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .trading .knopf {
-      padding: 12px 20px;
-      background: #00eaff;
-      border: 0;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .trading .knopf.zweit { background: transparent; color: #00eaff; border: 1px solid #00eaff; }
-    .trading .knopf:disabled { opacity: 0.5; cursor: wait; }
-    .notaus {
-      width: 100%;
-      padding: 18px;
-      background: #d62828;
-      color: white;
-      font-size: 20px;
-      font-weight: bold;
-      letter-spacing: 3px;
-      border: 0;
-      border-radius: 10px;
-      cursor: pointer;
-    }
-    .notaus.aktiv { background: #4a1414; border: 2px solid #ff6b6b; font-size: 16px; }
-    #order-ergebnis { min-height: 1.4em; }
-    #protokoll { list-style: none; padding: 0; margin: 0; font-size: 14px; }
-    #protokoll li { padding: 6px 0; border-bottom: 1px solid #0c2a44; overflow-wrap: anywhere; }
-    #protokoll .p-order { color: #7affc4; }
-    #protokoll .p-abgelehnt { color: #ffcc66; }
-    #protokoll .p-fehler { color: #ff9b9b; }
-    #protokoll .p-notaus { color: #ff6b6b; font-weight: bold; }
-    #protokoll .zeit { color: #7aa6b8; margin-right: 6px; }
-
-    /* Marktanalyse (echte öffentliche Marktdaten, nur Anzeige) */
-    .analyse {
-      box-sizing: border-box;
-      width: calc(100% - 32px);
-      max-width: 1100px;
-      margin: 30px auto;
-      padding: 20px;
-      border: 1px solid #00eaff;
-      border-radius: 12px;
-      background: #071a2d;
-      box-shadow: 0 0 20px #00eaff33;
-      text-align: left;
-    }
-    .analyse h2 { text-align: center; margin-top: 0; }
-    .analyse .analyse-hinweis { color: #7aa6b8; text-align: center; }
+    /* ---------- Marktanalyse ---------- */
     .analyse-steuerung { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
-    .analyse select {
-      padding: 12px;
-      border: 1px solid #00eaff;
-      background: #030b16;
-      color: white;
-      border-radius: 8px;
-    }
-    .analyse button {
-      padding: 12px 20px;
-      background: transparent;
-      color: #00eaff;
-      border: 1px solid #00eaff;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-    .analyse button:disabled { opacity: 0.5; cursor: wait; }
     .legende { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: #9fc7d6; margin-bottom: 8px; }
     .legende span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--farbe); }
     .chart { width: 100%; height: 600px; }
-    .analyse .info { color: #9fc7d6; white-space: pre-line; line-height: 1.6; overflow-wrap: anywhere; }
-    #analyse-hinweise { list-style: none; padding: 0; margin: 0; color: #ffcc66; font-size: 14px; overflow-wrap: anywhere; }
-    #analyse-hinweise li { padding: 4px 0; }
-    @media (max-width: 700px) {
-      .analyse { padding: 14px 10px; }
+    #analyse-status { font-family: var(--mono); font-size: 13px; }
+    #analyse-hinweise { list-style: none; padding: 0; margin: 8px 0 0; color: var(--warn); font-size: 14px; overflow-wrap: anywhere; }
+    #analyse-hinweise li { padding: 3px 0; }
+    .analyse-zweispaltig { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+
+    /* ---------- Trading ---------- */
+    .trading-raster {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      grid-template-areas: "notaus konto" "notaus order";
+      align-items: start;
+    }
+    .notaus-karte { grid-area: notaus; border-color: rgba(255, 107, 107, 0.5); }
+    .notaus-karte::before, .notaus-karte::after { border-color: var(--fehler); }
+    .konto-karte { grid-area: konto; }
+    .order-karte { grid-area: order; }
+    .testnet-hinweis { margin: 0 0 12px; color: var(--warn); font-size: 14px; }
+    .notaus {
+      width: 100%;
+      min-height: 96px;
+      padding: 18px;
+      background: #c81e1e;
+      color: #fff;
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      border: 2px solid #ff8a8a;
+      border-radius: 6px;
+      box-shadow: 0 0 22px rgba(255, 70, 70, 0.35);
+      cursor: pointer;
+    }
+    .notaus.aktiv {
+      background: repeating-linear-gradient(-45deg, #3a0d10 0 14px, #2a0a0c 14px 28px);
+      border-color: var(--fehler);
+      color: #ffd0d0;
+      font-size: 16px;
+      letter-spacing: 0.1em;
+    }
+    #trading-zustand { font-family: var(--mono); font-size: 14px; color: var(--text); }
+    .order-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .order-zeile input[type="number"] { width: 110px; }
+    #order-ergebnis { min-height: 1.4em; }
+
+    /* ---------- Anpassung an kleinere Bildschirme ---------- */
+    @media (max-width: 1199px) {
+      .cockpit {
+        height: auto;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas: "mitte mitte" "links rechts";
+      }
+      .links { overflow: visible; }
+      .kern-karte { min-height: 0; }
+      .chat-karte { flex: none; }
+      #chatverlauf { max-height: 360px; }
+      .kopf-untertitel { display: none; }
+    }
+    @media (max-width: 760px) {
+      body { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
+      main { padding: 10px; }
+      .kopf { padding: 8px 10px; gap: 8px; }
+      .logo { font-size: 15px; letter-spacing: 0.16em; }
+      .kopf-rechts { gap: 6px; }
+      .pille { padding: 3px 6px; letter-spacing: 0.04em; }
+      .uhr { font-size: 13px; }
+      #chatverlauf { min-height: 48px; }
+      /* Reiter als feste Leiste unten – gut mit dem Daumen erreichbar */
+      .reiter {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        margin: 0;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        background: rgba(2, 9, 18, 0.97);
+        border-top: 1px solid var(--linie-stark);
+      }
+      .reiter button { flex: 1; min-width: 0; }
+      .cockpit { grid-template-columns: minmax(0, 1fr); grid-template-areas: "mitte" "links" "rechts"; gap: 10px; }
+      .spalte { gap: 10px; }
+      .kern-buehne { padding: 12px; }
+      .befehl-symbol { display: none; }
+      /* Eingabefeld in eigener Zeile, darunter Mikrofon und Senden groß nebeneinander */
+      .befehlszeile { flex-wrap: wrap; padding: 4px; gap: 6px; }
+      .befehlszeile .feld { flex: 1 1 100%; }
+      .befehlszeile .mikro, .befehlszeile .knopf { flex: 1 1 0; justify-content: center; }
+      .befehlszeile .mikro { font-size: 11px; letter-spacing: 0.02em; white-space: nowrap; }
+      .sprachleiste { justify-content: flex-start; }
+      .kern-knoten li { padding: 4px 9px 4px 8px; }
+      .kern { width: min(330px, 84vw); min-width: 0; }
+      .orbit.kompakt .kern-aktionen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .aktion { min-width: 0; padding-right: 10px; gap: 8px; }
+      .aktion small { display: none; }
+      .aktion b { font-size: 11px; letter-spacing: 0.05em; }
+      .aktion-symbol { width: 34px; height: 34px; }
+      .aktion svg { width: 18px; height: 18px; }
+      #chatverlauf { max-height: 50vh; }
+      .chat-karte, .protokoll-karte { min-height: 0; }
+      .protokoll-karte .karte-inhalt { max-height: 320px; }
+      .nachricht.nutzer { margin-left: 8%; }
+      .nachricht.jarvis, .nachricht.fehler { margin-right: 8%; }
+      .fuss { display: none; }
       .chart { height: 520px; }
+      .analyse-zweispaltig { grid-template-columns: minmax(0, 1fr); }
+      .trading-raster { grid-template-columns: minmax(0, 1fr); grid-template-areas: "notaus" "konto" "order"; }
+      .notaus { min-height: 80px; font-size: 19px; }
+    }
+
+    /* Reduzierte Bewegung: alle Animationen aus */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
     }
   </style>
 </head>
 <body>
-  <h1>J.A.R.V.I.S.</h1>
-  <div class="core">SYSTEM ONLINE</div>
-  <h2 class="status">Dashboard aktiviert</h2>
-  <p>Persönlicher KI-Assistent</p>
-  <p>Version 0.4 – KI-Chat + Testnet-Trading + Marktanalyse</p>
 
-<div id="uhr" style="font-size:32px; margin-top:25px; color:#00eaff;"></div>
+<header class="kopf">
+  <div class="marke">
+    <span class="logo">J.A.R.V.I.S.</span>
+    <span class="kopf-untertitel">v0.7 · Persönlicher KI-Assistent</span>
+  </div>
+  <nav class="reiter" role="tablist" aria-label="Bereiche">
+    <button type="button" role="tab" id="reiter-cockpit" aria-controls="ansicht-cockpit" data-ansicht="cockpit">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>Cockpit</button>
+    <button type="button" role="tab" id="reiter-analyse" aria-controls="ansicht-analyse" data-ansicht="analyse">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 17h16"/><polyline points="3,13 7,8 11,11 17,4"/></svg>Analyse</button>
+    <button type="button" role="tab" id="reiter-trading" aria-controls="ansicht-trading" data-ansicht="trading">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l6.5 3v5c0 4-3 6.6-6.5 8-3.5-1.4-6.5-4-6.5-8V5z"/><path d="M7.5 10l2 2 3.5-4"/></svg>Trading</button>
+  </nav>
+  <div class="kopf-rechts">
+    <span id="kopf-handel" class="pille getrennt">HANDEL: NICHT VERBUNDEN</span>
+    <time id="uhr" class="uhr"></time>
+  </div>
+</header>
+
+<main>
+
+<!-- ===================== COCKPIT ===================== -->
+<section id="ansicht-cockpit" class="cockpit" role="tabpanel" aria-labelledby="reiter-cockpit">
+
+  <div class="spalte links">
+    <article class="karte">
+      <h2 class="karte-titel">System <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <ul class="statusliste">
+          <li style="color: var(--ok);">● Dashboard: ONLINE</li>
+          <li id="ki-status">● KI-Verbindung: NICHT VERBUNDEN</li>
+          <li id="markt-status">● Marktdaten: NICHT VERBUNDEN</li>
+          <li id="trading-status">● Trading: DEAKTIVIERT</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="karte">
+      <h2 class="karte-titel">Funktionen <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <ul class="funktionen">
+          <li><span>Sprachausgabe (Vorlesen)</span><b id="vorlesen-status" class="aus">wird geprüft</b></li>
+          <li><span>Spracheingabe</span><b id="spracheingabe-status" class="aus">wird geprüft</b></li>
+          <li><span>Paper-Trading</span><b class="aus">noch nicht eingerichtet</b></li>
+          <li><span>Automatik-Trading</span><b class="gesperrt">gesperrt</b></li>
+          <li><span>Echtgeld-Handel</span><b class="gesperrt">ausgeschlossen</b></li>
+        </ul>
+      </div>
+    </article>
+
+    <details class="karte einstellungen" id="verbindung-karte">
+      <summary class="karte-titel">Verbindung <span class="zu">]</span><span class="zusatz"></span></summary>
+      <div class="karte-inhalt">
+        <p class="klein" style="margin-top: 0;">Diese Angaben werden nur auf diesem Gerät gespeichert, nicht in der Datei.</p>
+        <label for="worker-url">Worker-Adresse</label>
+        <input class="feld" type="url" id="worker-url" placeholder="https://jarvis.NAME.workers.dev">
+        <label for="zugangscode">Zugangscode</label>
+        <input class="feld" type="password" id="zugangscode" placeholder="Ihr JARVIS-Zugangscode" autocomplete="current-password">
+        <button class="knopf" onclick="verbindungSpeichern()">Speichern und prüfen</button>
+      </div>
+    </details>
+  </div>
+
+  <div class="spalte mitte">
+    <article class="karte kern-karte">
+      <h2 class="karte-titel">Kern <span class="zu">]</span></h2>
+      <div class="kern-buehne">
+        <ul class="kern-knoten" aria-label="Kurzstatus">
+          <li id="knoten-ki" data-zustand="aus"><span class="name">KI</span><span class="wert">nicht eingerichtet</span></li>
+          <li id="knoten-markt" data-zustand="aus"><span class="name">Marktdaten</span><span class="wert">nicht verbunden</span></li>
+          <li id="knoten-handel" data-zustand="aus"><span class="name">Handel</span><span class="wert">nicht verbunden</span></li>
+        </ul>
+
+        <div class="orbit" id="orbit">
+          <svg id="kern-verbindungen" class="verbindungen" aria-hidden="true"></svg>
+          <div id="kern" class="kern" data-zustand="offline" aria-hidden="true"><canvas id="kern-leinwand"></canvas></div>
+          <!-- Module: Reihenfolge = abwechselnd rechts/links, von oben nach unten. Weitere Module hier ergänzen. -->
+          <div class="kern-aktionen" aria-label="Module">
+          <button type="button" class="aktion" onclick="ansichtZeigen('analyse')">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 17h16"/><polyline points="3,13 7,8 11,11 17,4"/></svg></span>
+            <span><b>Analyse</b><small>Charts &amp; Indikatoren</small></span></button>
+          <button type="button" class="aktion" onclick="ansichtZeigen('trading')">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l6.5 3v5c0 4-3 6.6-6.5 8-3.5-1.4-6.5-4-6.5-8V5z"/></svg></span>
+            <span><b>Trading</b><small>Not-Aus &amp; Testnet</small></span></button>
+          <button type="button" class="aktion" onclick="allesAktualisieren()">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-2.2-4.9"/><polyline points="16.5,2.5 16.5,6.5 12.5,6.5"/></svg></span>
+            <span><b>Aktualisieren</b><small>Daten neu laden</small></span></button>
+          <button type="button" class="aktion" onclick="verbindungOeffnen()">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.3 4.3l2.1 2.1M13.6 13.6l2.1 2.1M4.3 15.7l2.1-2.1M13.6 6.4l2.1-2.1"/></svg></span>
+            <span><b>Verbindung</b><small>Worker &amp; Zugang</small></span></button>
+          </div>
+        </div>
+
+        <p id="kern-text" class="kern-text" aria-live="polite">KI: NICHT EINGERICHTET</p>
+        <div class="untertitel" aria-hidden="true">
+          <p id="untertitel-frage"></p>
+          <p id="untertitel-antwort"></p>
+        </div>
+
+        <div class="befehlszeile">
+          <span class="befehl-symbol" aria-hidden="true">▶</span>
+          <input class="feld" type="text" id="befehl" placeholder="Befehl oder Frage an JARVIS …" aria-label="Nachricht an JARVIS">
+          <button type="button" class="mikro" id="mikro" data-zustand="bereit" aria-pressed="false" aria-describedby="sprach-status">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="2" width="6" height="10" rx="3"/><path d="M4 9a6 6 0 0 0 12 0M10 15v3M7 18h6"/></svg>
+            <span id="mikro-text">Sprechen</span></button>
+          <button class="knopf" id="senden" onclick="jarvisAntwort()">SENDEN</button>
+        </div>
+
+        <!-- Spracheingabe: Ergebnis nur als bearbeitbarer Vorschlag, Versand erst nach „Senden“ -->
+        <p id="sprach-status" class="sprach-status" role="status" aria-live="polite"></p>
+        <div id="sprach-vorschau" class="sprach-vorschau" hidden>
+          <label for="sprach-text">Erkannter Text – bitte prüfen und bei Bedarf korrigieren. Verschickt wird erst mit „Senden“ (Strg + Enter).</label>
+          <textarea id="sprach-text" class="feld" rows="2"></textarea>
+          <div class="sprach-knoepfe">
+            <button type="button" class="knopf" id="sprach-senden">Senden</button>
+            <button type="button" class="knopf zweit" id="sprach-uebernehmen">Ins Eingabefeld</button>
+            <button type="button" class="knopf zweit" id="sprach-verwerfen">Verwerfen</button>
+          </div>
+        </div>
+
+        <div class="sprachleiste">
+          <button type="button" class="schalter" id="vorlesen-schalter" aria-pressed="true">Vorlesen: an</button>
+          <button type="button" class="schalter" id="vorlesen-stopp" disabled>Vorlesen stoppen</button>
+          <label class="stimme-wahl">Stimme <select class="feld" id="stimme-wahl"></select></label>
+          <button type="button" class="schalter" id="stimme-testen" aria-controls="stimmtest" aria-expanded="false">Stimme testen</button>
+          <span id="sprach-hinweis" class="sprach-hinweis"></span>
+        </div>
+
+        <!-- Stimmtest: fester Testtext, keine KI-Anfrage. Misst Start, Dauer, Lücken und Fehler der echten Wiedergabe. -->
+        <section id="stimmtest" class="stimmtest" hidden aria-label="Stimmtest">
+          <p class="klein" style="margin-top: 0;">Fester deutscher Testtext, keine KI-Anfrage (spielt auch bei „Vorlesen: aus“).
+            Vergleich: Stockt schon <b>A</b>, liegt es eher an der Stimme bzw. ihrem Dienst. Stockt nur <b>C</b>, aber nicht <b>B</b>,
+            liegt es eher an der satzweisen Aufteilung.</p>
+          <label class="stimmtest-wahl">Teststimme – nur für diesen Test, ändert nicht die Vorlesestimme
+            <select class="feld" id="teststimme-wahl"></select></label>
+          <p class="klein" id="testsprache-hinweis"></p>
+          <div class="sprach-knoepfe">
+            <button type="button" class="knopf zweit" id="stimmtest-kurz">A · Kurzer Satz direkt</button>
+            <button type="button" class="knopf zweit" id="stimmtest-lang">B · Langer Text am Stück</button>
+            <button type="button" class="knopf zweit" id="stimmtest-teile">C · Langer Text satzweise</button>
+            <button type="button" class="knopf zweit" id="stimmtest-stopp">Stopp</button>
+          </div>
+          <h3 class="stimmtest-titel">Messwerte (neueste oben)</h3>
+          <ol id="stimmtest-protokoll" class="stimmtest-protokoll"><li>Noch kein Test.</li></ol>
+          <h3 class="stimmtest-titel">Verfügbare Stimmen (<span id="stimmen-anzahl">0</span>)</h3>
+          <ul id="stimmen-liste" class="stimmen-liste"></ul>
+        </section>
+      </div>
+    </article>
+
+    <article class="karte chat-karte">
+      <h2 class="karte-titel">Gesprächsverlauf <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <div id="chatverlauf" aria-live="polite"></div>
+      </div>
+    </article>
+  </div>
+
+  <div class="spalte rechts">
+    <article class="karte">
+      <h2 class="karte-titel">Markt <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
+      <div class="karte-inhalt">
+        <div id="mini-chart" class="mini-chart" hidden>
+          <svg viewBox="0 0 300 70" preserveAspectRatio="none" aria-hidden="true">
+            <polygon id="mini-flaeche" points=""/>
+            <polyline id="mini-linie" points=""/>
+          </svg>
+          <p id="mini-text" class="klein" style="margin-top: 4px;"></p>
+        </div>
+        <table id="kurse"><tr><td class="leer">Kurse erscheinen nach dem Einrichten der Verbindung.</td></tr></table>
+        <p class="klein">Testnet-Kurse können vom echten Markt abweichen.</p>
+        <button class="knopf zweit" type="button" style="width: 100%; margin-top: 10px;" onclick="ansichtZeigen('analyse')">Zur Marktanalyse →</button>
+      </div>
+    </article>
+
+    <article class="karte protokoll-karte">
+      <h2 class="karte-titel">Protokoll <span class="zu">]</span><span class="zusatz">letzte 20</span></h2>
+      <div class="karte-inhalt">
+        <ul id="protokoll"><li>Noch nicht geladen.</li></ul>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ===================== MARKTANALYSE ===================== -->
+<section id="ansicht-analyse" role="tabpanel" aria-labelledby="reiter-analyse" hidden>
+  <article class="karte">
+    <h2 class="karte-titel">Marktanalyse <span class="zu">]</span><span class="zusatz">echte öffentliche Marktdaten</span></h2>
+    <div class="karte-inhalt">
+      <p class="klein" style="margin: 0 0 10px;">Technische Einordnung – keine Anlageberatung und kein Handelssignal.</p>
+      <div class="analyse-steuerung">
+        <select class="feld" id="analyse-symbol" aria-label="Handelspaar">
+          <option value="BTCUSDT">BTCUSDT</option>
+          <option value="ETHUSDT">ETHUSDT</option>
+        </select>
+        <select class="feld" id="analyse-intervall" aria-label="Intervall">
+          <option value="15m">15 Minuten</option>
+          <option value="1h" selected>1 Stunde</option>
+          <option value="4h">4 Stunden</option>
+          <option value="1d">1 Tag</option>
+        </select>
+        <button class="knopf zweit" id="analyse-aktualisieren" type="button">Aktualisieren</button>
+      </div>
+      <div class="legende" aria-hidden="true">
+        <span style="--farbe:#ffcc66">EMA 20</span>
+        <span style="--farbe:#00eaff">EMA 50</span>
+        <span style="--farbe:#c792ea">EMA 200</span>
+        <span style="--farbe:#7aa6b8">Darunter: Volumen · RSI 14 (30/70) · MACD 12/26/9</span>
+      </div>
+      <div id="analyse-chart" class="chart" role="img" aria-label="Kurschart mit EMA, Volumen, RSI und MACD"></div>
+      <p id="analyse-status" class="info"></p>
+      <div class="analyse-zweispaltig">
+        <p id="analyse-zusammenfassung" class="info"></p>
+        <ul id="analyse-hinweise"></ul>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ===================== TRADING ===================== -->
+<section id="ansicht-trading" role="tabpanel" aria-labelledby="reiter-trading" hidden>
+  <div class="trading-raster">
+    <article class="karte notaus-karte">
+      <h2 class="karte-titel">Not-Aus <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Nur Binance-Spot-Testnet mit Spielgeld. Keine echten Orders, keine Echtgeld-Verbindung. Automatik ist im Worker fest ausgeschaltet.</p>
+        <button id="notaus" class="notaus" onclick="notausUmschalten()">NOT-AUS</button>
+        <p id="trading-zustand" class="info">Status wird geladen …</p>
+      </div>
+    </article>
+
+    <article class="karte konto-karte">
+      <h2 class="karte-titel">Kontostand <span class="zu">]</span><span class="zusatz">Spielgeld</span></h2>
+      <div class="karte-inhalt">
+        <table id="guthaben"><tr><td class="leer">Kontostand erscheint nach dem Einrichten der Verbindung.</td></tr></table>
+      </div>
+    </article>
+
+    <article class="karte order-karte">
+      <h2 class="karte-titel">Manuelle Order <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
+      <div class="karte-inhalt">
+        <div class="order-zeile">
+          <select class="feld" id="order-symbol" aria-label="Handelspaar"><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          <select class="feld" id="order-seite" aria-label="Seite">
+            <option value="BUY">Kaufen</option>
+            <option value="SELL">Verkaufen</option>
+          </select>
+          <input class="feld" type="number" id="order-betrag" value="10" min="10" max="50" step="1" aria-label="Betrag in USDT"> USDT
+        </div>
+        <p class="order-zeile">
+          <label><input type="checkbox" id="order-nur-pruefen" checked> Nur prüfen (nicht ausführen)</label>
+        </p>
+        <div class="order-zeile">
+          <button id="order-senden" class="knopf" onclick="orderSenden()">Order senden</button>
+          <button class="knopf zweit" onclick="tradingLaden()">Aktualisieren</button>
+          <button class="knopf zweit" onclick="diagnoseStarten()">Diagnose</button>
+        </div>
+        <p id="order-ergebnis" class="info"></p>
+        <p id="diagnose-ergebnis" class="info"></p>
+      </div>
+    </article>
+  </div>
+</section>
+
+</main>
+
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung</footer>
 
 <script>
-  function uhrAktualisieren() {
-    const jetzt = new Date();
-    document.getElementById("uhr").textContent =
-      jetzt.toLocaleTimeString("de-DE");
-  }
+function uhrAktualisieren() {
+  document.getElementById("uhr").textContent = new Date().toLocaleTimeString("de-DE");
+}
+uhrAktualisieren();
+setInterval(uhrAktualisieren, 1000);
 
-  uhrAktualisieren();
-  setInterval(uhrAktualisieren, 1000);
+// Sprachausgabe ist eine Browserfunktion: nur anzeigen, was dieser Browser wirklich kann
+(function () {
+  const feld = document.getElementById("vorlesen-status");
+  const vorhanden = "speechSynthesis" in window;
+  feld.textContent = vorhanden ? "vom Browser unterstützt" : "nicht unterstützt";
+  feld.className = vorhanden ? "ok" : "aus";
+})();
 </script>
-<div style="
-  margin: 30px auto;
-  padding: 20px;
-  max-width: 350px;
-  border: 1px solid #00eaff;
-  border-radius: 12px;
-  box-shadow: 0 0 20px #00eaff55;
-  background: #071a2d;
-">
-  <h2>JARVIS SYSTEMSTATUS</h2>
-  <p style="color:#7affc4;">● Dashboard: ONLINE</p>
-  <p id="ki-status">● KI-Verbindung: NICHT VERBUNDEN</p>
-  <p id="markt-status">● Marktdaten: NICHT VERBUNDEN</p>
-  <p id="trading-status">● Trading: DEAKTIVIERT</p>
-</div>
-
-<div id="chatverlauf"></div>
-
-<div style="margin:30px auto; max-width:400px;">
-  <input type="text" id="befehl"
-    placeholder="Frag JARVIS etwas..."
-    style="padding:15px; width:65%; border:1px solid #00eaff; background:#071a2d; color:white; border-radius:8px;">
-  <button id="senden" onclick="jarvisAntwort()"
-    style="padding:15px; background:#00eaff; border:0; border-radius:8px; cursor:pointer;">
-    SENDEN
-  </button>
-</div>
-
-<section class="analyse" id="analyse">
-  <h2>MARKTANALYSE</h2>
-  <p class="analyse-hinweis">Echte öffentliche Marktdaten. Technische Einordnung – keine Anlageberatung und kein Handelssignal.</p>
-  <div class="analyse-steuerung">
-    <select id="analyse-symbol" aria-label="Handelspaar">
-      <option value="BTCUSDT">BTCUSDT</option>
-      <option value="ETHUSDT">ETHUSDT</option>
-    </select>
-    <select id="analyse-intervall" aria-label="Intervall">
-      <option value="15m">15 Minuten</option>
-      <option value="1h" selected>1 Stunde</option>
-      <option value="4h">4 Stunden</option>
-      <option value="1d">1 Tag</option>
-    </select>
-    <button id="analyse-aktualisieren" type="button">Aktualisieren</button>
-  </div>
-  <div class="legende" aria-hidden="true">
-    <span style="--farbe:#ffcc66">EMA 20</span>
-    <span style="--farbe:#00eaff">EMA 50</span>
-    <span style="--farbe:#c792ea">EMA 200</span>
-    <span style="--farbe:#7aa6b8">Darunter: Volumen · RSI 14 (30/70) · MACD 12/26/9</span>
-  </div>
-  <div id="analyse-chart" class="chart" role="img" aria-label="Kurschart mit EMA, Volumen, RSI und MACD"></div>
-  <p id="analyse-status" class="info"></p>
-  <p id="analyse-zusammenfassung" class="info"></p>
-  <ul id="analyse-hinweise"></ul>
-</section>
-
-<section class="trading">
-  <h2>TRADING – TESTNET</h2>
-  <p class="testnet-hinweis">Nur Binance-Spot-Testnet mit Spielgeld. Keine echten Orders, keine Echtgeld-Verbindung.</p>
-
-  <button id="notaus" class="notaus" onclick="notausUmschalten()">NOT-AUS</button>
-  <p id="trading-zustand" class="info">Status wird geladen …</p>
-
-  <h3>MARKT (TESTNET-KURSE)</h3>
-  <table id="kurse"></table>
-  <p class="info">Testnet-Kurse können vom echten Markt abweichen.</p>
-
-  <h3>KONTOSTAND (SPIELGELD)</h3>
-  <table id="guthaben"></table>
-
-  <h3>MANUELLE ORDER</h3>
-  <div class="order-zeile">
-    <select id="order-symbol"><option>BTCUSDT</option><option>ETHUSDT</option></select>
-    <select id="order-seite">
-      <option value="BUY">Kaufen</option>
-      <option value="SELL">Verkaufen</option>
-    </select>
-    <input type="number" id="order-betrag" value="10" min="10" max="50" step="1" aria-label="Betrag in USDT"> USDT
-  </div>
-  <p class="order-zeile">
-    <label><input type="checkbox" id="order-nur-pruefen" checked> Nur prüfen (nicht ausführen)</label>
-  </p>
-  <div class="order-zeile">
-    <button id="order-senden" class="knopf" onclick="orderSenden()">Order senden</button>
-    <button class="knopf zweit" onclick="tradingLaden()">Aktualisieren</button>
-    <button class="knopf zweit" onclick="diagnoseStarten()">Diagnose</button>
-  </div>
-  <p id="order-ergebnis" class="info"></p>
-  <p id="diagnose-ergebnis" class="info"></p>
-
-  <h3>PROTOKOLL</h3>
-  <ul id="protokoll"></ul>
-</section>
-
-<details class="einstellungen">
-  <summary>⚙ Verbindung einrichten</summary>
-  <p>Diese Angaben werden nur auf diesem Gerät gespeichert, nicht in der Datei.</p>
-  <label for="worker-url">Worker-Adresse</label>
-  <input type="url" id="worker-url" placeholder="https://jarvis.NAME.workers.dev">
-  <label for="zugangscode">Zugangscode</label>
-  <input type="password" id="zugangscode" placeholder="Ihr JARVIS-Zugangscode">
-  <button onclick="verbindungSpeichern()">Speichern und prüfen</button>
-</details>
-
 <script>
 // Chatverlauf für die KI: abwechselnd user/assistant
 const verlauf = [];
@@ -341,10 +962,34 @@ const verbindung = {
   code: einstellungLesen("jarvis-zugangscode"),
 };
 
-function kiStatusSetzen(text, farbe) {
+// Statuspunkt neben dem Kern. zustand: aus | ok | warn | fehler
+function knotenSetzen(id, zustand, wert) {
+  const knoten = document.getElementById(id);
+  knoten.dataset.zustand = zustand;
+  knoten.querySelector(".wert").textContent = wert;
+}
+
+// zustand: offline | pruefe | verbunden | warnung | fehler (steuert die Farbe des Kerns)
+function kiStatusSetzen(text, farbe, zustand) {
   const status = document.getElementById("ki-status");
   status.textContent = "● KI-Verbindung: " + text;
   status.style.color = farbe || "";
+  document.getElementById("kern").dataset.zustand = zustand || "offline";
+  document.getElementById("kern-text").textContent = zustand === "verbunden" ? "Bereit für Befehle" : "KI: " + text;
+  const knoten = {
+    offline: ["aus", "nicht eingerichtet"],
+    pruefe: ["warn", "wird geprüft"],
+    verbunden: ["ok", "bereit"],
+    warnung: ["warn", "ohne API-Schlüssel"],
+    fehler: ["fehler", "Fehler"],
+  }[zustand || "offline"];
+  knotenSetzen("knoten-ki", knoten[0], knoten[1]);
+}
+
+// Untertitel unter dem Kern: letzte echte Frage und Antwort
+function untertitelSetzen(frage, antwort) {
+  if (frage !== null) document.getElementById("untertitel-frage").textContent = frage ? "Sie: " + frage : "";
+  document.getElementById("untertitel-antwort").textContent = antwort;
 }
 
 function nachrichtAnzeigen(text, art) {
@@ -353,7 +998,7 @@ function nachrichtAnzeigen(text, art) {
   element.textContent = text;
   const chat = document.getElementById("chatverlauf");
   chat.appendChild(element);
-  element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  chat.scrollTop = chat.scrollHeight;
   return element;
 }
 
@@ -367,7 +1012,7 @@ function begruessung() {
 // Antwort ohne KI, solange keine Verbindung eingerichtet ist
 function offlineAntwort(befehl) {
   if (befehl.toLowerCase() === "hallo jarvis") {
-    return begruessung() + ", Sir. Ich bin bereit. Für echte Antworten richten Sie bitte unten die Verbindung ein.";
+    return begruessung() + ", Sir. Ich bin bereit. Für echte Antworten richten Sie bitte links die Verbindung ein.";
   }
   return "Befehl empfangen – " + befehl + ". (Offline-Modus: KI-Verbindung noch nicht eingerichtet.)";
 }
@@ -390,19 +1035,19 @@ async function workerAnfrage(pfad, optionen) {
 
 async function verbindungPruefen() {
   if (!verbindung.url || !verbindung.code) {
-    kiStatusSetzen("NICHT EINGERICHTET");
+    kiStatusSetzen("NICHT EINGERICHTET", "", "offline");
     return;
   }
-  kiStatusSetzen("PRÜFE …");
+  kiStatusSetzen("PRÜFE …", "", "pruefe");
   try {
     const daten = await workerAnfrage("/status", { method: "GET" });
     if (daten.ki_konfiguriert) {
-      kiStatusSetzen("VERBUNDEN (" + daten.modell + ")", "#7affc4");
+      kiStatusSetzen("VERBUNDEN (" + daten.modell + ")", "#7affc4", "verbunden");
     } else {
-      kiStatusSetzen("WORKER OHNE API-SCHLÜSSEL", "#ffcc66");
+      kiStatusSetzen("WORKER OHNE API-SCHLÜSSEL", "#ffcc66", "warnung");
     }
   } catch (e) {
-    kiStatusSetzen("FEHLER – " + e.message, "#ff9b9b");
+    kiStatusSetzen("FEHLER – " + e.message, "#ff9b9b", "fehler");
   }
 }
 
@@ -428,12 +1073,16 @@ async function jarvisAntwort() {
   if (!verbindung.url || !verbindung.code) {
     const text = offlineAntwort(befehl);
     nachrichtAnzeigen("JARVIS: " + text, "jarvis");
+    untertitelSetzen(befehl, text);
     jarvisSprechen(text);
     return;
   }
 
   verlauf.push({ role: "user", content: befehl });
   knopf.disabled = true;
+  const kern = document.getElementById("kern");
+  kern.classList.add("denkt");
+  untertitelSetzen(befehl, "…");
   const platzhalter = nachrichtAnzeigen("JARVIS denkt nach …", "jarvis denkt");
 
   try {
@@ -448,13 +1097,16 @@ async function jarvisAntwort() {
     verlauf.push({ role: "assistant", content: daten.antwort });
     platzhalter.className = "nachricht jarvis";
     platzhalter.textContent = "JARVIS: " + daten.antwort;
-    jarvisSprechen(daten.antwort);
+    untertitelSetzen(null, daten.antwort);
+    antwortVorlesen(daten);
   } catch (e) {
     verlauf.pop(); // unbeantwortete Frage entfernen, damit der Verlauf abwechselnd bleibt
     platzhalter.className = "nachricht fehler";
     platzhalter.textContent = "Verbindungsproblem: " + e.message;
+    untertitelSetzen(null, "Verbindungsproblem – Details im Gesprächsverlauf.");
   } finally {
     knopf.disabled = false;
+    kern.classList.remove("denkt");
     eingabe.focus();
   }
 }
@@ -465,6 +1117,8 @@ document.getElementById("befehl").addEventListener("keydown", function (event) {
 
 document.getElementById("worker-url").value = verbindung.url;
 document.getElementById("zugangscode").value = verbindung.code;
+// Ohne gespeicherte Verbindung die Einstellungen gleich aufgeklappt zeigen
+if (!verbindung.url || !verbindung.code) document.getElementById("verbindung-karte").open = true;
 verbindungPruefen();
 </script>
 <script>
@@ -481,6 +1135,19 @@ function statusZeileSetzen(id, text, farbe) {
   const zeile = document.getElementById(id);
   zeile.textContent = text;
   zeile.style.color = farbe || "";
+}
+
+// Anzeige oben rechts: gesperrt | frei | unbekannt | getrennt
+function kopfHandelSetzen(zustand) {
+  const texte = {
+    gesperrt: "HANDEL GESPERRT",
+    frei: "HANDEL FREI · NUR MANUELL",
+    unbekannt: "HANDEL: STATUS UNBEKANNT",
+    getrennt: "HANDEL: NICHT VERBUNDEN",
+  };
+  const pille = document.getElementById("kopf-handel");
+  pille.textContent = texte[zustand];
+  pille.className = "pille " + zustand;
 }
 
 function zelle(text, klasse) {
@@ -505,7 +1172,10 @@ function verbunden() {
 
 async function tradingLaden() {
   if (!verbunden()) {
-    document.getElementById("trading-zustand").textContent = "Bitte zuerst unten die Verbindung einrichten.";
+    document.getElementById("trading-zustand").textContent = "Bitte zuerst im Cockpit die Verbindung einrichten.";
+    kopfHandelSetzen("getrennt");
+    knotenSetzen("knoten-markt", "aus", "nicht verbunden");
+    knotenSetzen("knoten-handel", "aus", "nicht verbunden");
     return;
   }
   await kurseLaden(); // zuerst, damit Positionswerte berechnet werden können
@@ -526,9 +1196,11 @@ async function kurseLaden() {
       ];
     }));
     statusZeileSetzen("markt-status", "● Marktdaten: TESTNET VERBUNDEN", "#7affc4");
+    knotenSetzen("knoten-markt", "ok", "Testnet verbunden");
   } catch (e) {
     tabelleFuellen("kurse", [[zelle("Kurse nicht abrufbar: " + e.message, "minus")]]);
     statusZeileSetzen("markt-status", "● Marktdaten: FEHLER", "#ff9b9b");
+    knotenSetzen("knoten-markt", "fehler", "Fehler");
   }
 }
 
@@ -540,6 +1212,8 @@ async function tradingStatusLaden() {
     tradingZustand = s;
     knopf.textContent = s.notaus ? "NOT-AUS AKTIV – TIPPEN ZUM AUFHEBEN" : "NOT-AUS";
     knopf.classList.toggle("aktiv", s.notaus);
+    kopfHandelSetzen(s.notaus ? "gesperrt" : "frei");
+    knotenSetzen("knoten-handel", s.notaus ? "fehler" : "warn", s.notaus ? "gesperrt (Not-Aus)" : "frei, nur manuell");
 
     const zeilen = [
       s.notaus ? "Handel GESPERRT" + (s.notaus_grund ? " (" + s.notaus_grund + ")" : "") : "Handel freigegeben (nur manuell)",
@@ -569,6 +1243,8 @@ async function tradingStatusLaden() {
   } catch (e) {
     feld.textContent = "Status nicht abrufbar: " + e.message;
     statusZeileSetzen("trading-status", "● Trading: FEHLER", "#ff9b9b");
+    kopfHandelSetzen("unbekannt");
+    knotenSetzen("knoten-handel", "warn", "Status unbekannt");
   }
 }
 
@@ -697,18 +1373,1155 @@ setInterval(function () {
 <script src="vendor/lightweight-charts-5.2.1.standalone.production.js"></script>
 <script src="analyse.js"></script>
 <script>
-function jarvisSprechen(text) {
-  if ("speechSynthesis" in window) {
-    const stimme = new SpeechSynthesisUtterance(text);
-    stimme.lang = "de-DE";
-    stimme.rate = 0.9;
-    stimme.pitch = 0.8;
+// ---------- Kern: Drahtgitterkugel mit Partikelhülle (Canvas) ----------
+// Reine Darstellung echter Zustände: Farbe = KI-Verbindung, unruhiger = JARVIS denkt, pulsierend = JARVIS liest vor.
+(function () {
+  const huelle = document.getElementById("kern");
+  const leinwand = document.getElementById("kern-leinwand");
+  const ctx = leinwand.getContext("2d");
+  const wenigBewegung = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const FARBEN = {
+    offline: [80, 170, 195],
+    pruefe: [255, 204, 102],
+    warnung: [255, 204, 102],
+    verbunden: [0, 234, 255],
+    fehler: [255, 107, 107],
+  };
 
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(stimme);
+  // Gleichmäßig verteilte Kugelpunkte (Fibonacci-Kugel), jeweils mit den drei nächsten Nachbarn verbunden
+  const KUGEL = [];
+  const ANZAHL = 110;
+  for (let i = 0; i < ANZAHL; i++) {
+    const y = 1 - (2 * (i + 0.5)) / ANZAHL;
+    const r = Math.sqrt(1 - y * y);
+    const phi = i * Math.PI * (3 - Math.sqrt(5));
+    KUGEL.push([Math.cos(phi) * r, y, Math.sin(phi) * r]);
   }
+  const KANTEN = [];
+  const bekannt = new Set();
+  KUGEL.forEach((p, i) => {
+    KUGEL.map((q, j) => [j, (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2])
+      .filter(([j]) => j !== i)
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 3)
+      .forEach(([j]) => {
+        const schluessel = Math.min(i, j) + "-" + Math.max(i, j);
+        if (!bekannt.has(schluessel)) { bekannt.add(schluessel); KANTEN.push([i, j]); }
+      });
+  });
+  // Partikelhülle um die Kugel
+  const PARTIKEL = Array.from({ length: 320 }, () => {
+    const u = Math.random() * 2 - 1;
+    const w = Math.random() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    const radius = 1.18 + Math.random() * 0.42;
+    return { p: [Math.cos(w) * s * radius, u * radius, Math.sin(w) * s * radius], groesse: 0.6 + Math.random() * 1.2, phase: Math.random() * Math.PI * 2 };
+  });
+  const STRAHLEN = Array.from({ length: 16 }, (_, i) => ({
+    winkel: (i / 16) * Math.PI * 2 + Math.random() * 0.3,
+    laenge: 0.6 + Math.random() * 0.5,
+    phase: Math.random() * Math.PI * 2,
+  }));
+
+  const aktuell = { farbe: FARBEN.offline.slice(), tempo: 0.12, glanz: 0.55, strahlen: 0, unruhe: 0 };
+  let winkel = 0;
+  let zeit = 0;
+  let zuletzt = 0;
+  let breite = 0;
+
+  function ziel() {
+    const zustand = huelle.dataset.zustand || "offline";
+    const aus = zustand === "offline";
+    const t = { farbe: FARBEN[zustand] || FARBEN.offline, tempo: aus ? 0.12 : 0.35, glanz: aus ? 0.55 : 1, strahlen: aus ? 0 : 0.18, unruhe: 0 };
+    // Zuhören: nur solange die Spracherkennung wirklich läuft (Klasse setzt die Spracheingabe)
+    if (huelle.classList.contains("hoert")) Object.assign(t, { tempo: 0.5, strahlen: 0.35, unruhe: 0.45, glanz: 0.95 + 0.15 * Math.sin(zeit * 4) });
+    if (huelle.classList.contains("denkt")) Object.assign(t, { tempo: 1.3, strahlen: 0.85, unruhe: 1, glanz: 1.15 });
+    if (huelle.classList.contains("spricht")) Object.assign(t, { tempo: 0.6, strahlen: 0.65, glanz: 1.05 + 0.3 * Math.sin(zeit * 9) });
+    return t;
+  }
+  const naeher = (a, b, f) => a + (b - a) * f;
+
+  function groesseAnpassen() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    breite = huelle.clientWidth;
+    leinwand.width = Math.round(breite * dpr);
+    leinwand.height = Math.round(breite * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function zeichnen() {
+    const S = breite;
+    if (!S) return;
+    const m = S / 2;
+    const R = S * 0.3;
+    const [r, g, b] = aktuell.farbe.map(Math.round);
+    const farbe = (a) => `rgba(${r},${g},${b},${a})`;
+    ctx.clearRect(0, 0, S, S);
+    ctx.globalCompositeOperation = "lighter";
+
+    // Drehung um die senkrechte Achse, leicht nach vorn gekippt
+    const cos = Math.cos(winkel), sin = Math.sin(winkel), ck = Math.cos(0.38), sk = Math.sin(0.38);
+    const projektion = (p, f = 1) => {
+      const x = p[0] * cos - p[2] * sin;
+      const z = p[0] * sin + p[2] * cos;
+      return [m + x * R * f, m + (p[1] * ck - z * sk) * R * f, p[1] * sk + z * ck];
+    };
+
+    // Leuchten im Zentrum
+    const glanz = aktuell.glanz;
+    const verlauf = ctx.createRadialGradient(m, m, 0, m, m, R * 1.25);
+    verlauf.addColorStop(0, farbe(Math.min(1, 1 * glanz)));
+    verlauf.addColorStop(0.22, farbe(0.75 * glanz));
+    verlauf.addColorStop(0.6, farbe(0.22 * glanz));
+    verlauf.addColorStop(1, farbe(0));
+    ctx.fillStyle = verlauf;
+    ctx.beginPath();
+    ctx.arc(m, m, R * 1.25, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Strahlen (nur wenn JARVIS denkt oder spricht deutlich sichtbar)
+    if (aktuell.strahlen > 0.01) {
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = farbe(0.5 * aktuell.strahlen);
+      for (const s of STRAHLEN) {
+        const laenge = R * (0.4 + s.laenge * (0.8 + 0.4 * Math.sin(zeit * 2 + s.phase))) * (0.6 + aktuell.strahlen) * 1.9;
+        const a = s.winkel + winkel * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(m + Math.cos(a) * R * 0.15, m + Math.sin(a) * R * 0.15);
+        ctx.lineTo(m + Math.cos(a) * laenge, m + Math.sin(a) * laenge);
+        ctx.stroke();
+      }
+    }
+
+    // Drahtgitterkugel, vordere Linien heller als hintere
+    const punkte = KUGEL.map((p) => projektion(p));
+    ctx.lineWidth = 1.1;
+    for (const [i, j] of KANTEN) {
+      const tiefe = (punkte[i][2] + punkte[j][2] + 2) / 4;
+      ctx.strokeStyle = farbe(0.2 + 0.65 * tiefe);
+      ctx.beginPath();
+      ctx.moveTo(punkte[i][0], punkte[i][1]);
+      ctx.lineTo(punkte[j][0], punkte[j][1]);
+      ctx.stroke();
+    }
+
+    // Zwei schräge Umlaufbahnen
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = farbe(0.55);
+    for (const [neigung, drehung, rx] of [[1.15, winkel * 0.6, 1.55], [-0.9, -winkel * 0.45 + 1.2, 1.4]]) {
+      ctx.save();
+      ctx.translate(m, m);
+      ctx.rotate(drehung * 0.25 + neigung);
+      ctx.beginPath();
+      ctx.ellipse(0, 0, R * rx, R * rx * 0.32, 0, 0.2, Math.PI * 1.6);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Partikelhülle
+    for (const t of PARTIKEL) {
+      const wackeln = 1 + 0.06 * aktuell.unruhe * Math.sin(zeit * 6 + t.phase);
+      const [x, y, z] = projektion(t.p, wackeln);
+      ctx.fillStyle = farbe(0.4 + 0.6 * ((z + 1.6) / 3.2));
+      ctx.fillRect(x, y, t.groesse * 1.3, t.groesse * 1.3);
+    }
+
+    // Äußerer Ring mit drei Segmenten und Knotenpunkten
+    const ring = S * 0.47;
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = farbe(0.4);
+    ctx.beginPath();
+    ctx.arc(m, m, ring, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = farbe(0.95);
+    ctx.fillStyle = farbe(1);
+    for (let i = 0; i < 3; i++) {
+      const start = -winkel * 0.5 + i * (Math.PI * 2 / 3);
+      ctx.beginPath();
+      ctx.arc(m, m, ring - 5, start, start + 0.9);
+      ctx.stroke();
+      ctx.fillRect(m + Math.cos(start + 0.9) * (ring - 5) - 3, m + Math.sin(start + 0.9) * (ring - 5) - 3, 6, 6);
+    }
+
+    // Heller Mittelpunkt mit Lichthof
+    ctx.shadowColor = farbe(0.9);
+    ctx.shadowBlur = R * 0.5 * glanz;
+    ctx.fillStyle = `rgba(235,255,255,${Math.min(1, 0.7 + 0.3 * glanz)})`;
+    ctx.beginPath();
+    ctx.arc(m, m, R * (0.09 + 0.05 * glanz), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.globalCompositeOperation = "source-over";
+  }
+
+  function schritt(jetzt) {
+    requestAnimationFrame(schritt);
+    // Nichts rechnen, wenn der Kern nicht zu sehen ist oder Bewegung reduziert werden soll
+    if (wenigBewegung.matches || document.hidden || huelle.offsetParent === null) { zuletzt = jetzt; return; }
+    const dt = Math.min(0.05, (jetzt - zuletzt) / 1000 || 0);
+    zuletzt = jetzt;
+    zeit += dt;
+    const t = ziel();
+    const f = Math.min(1, dt * 3);
+    aktuell.farbe = aktuell.farbe.map((v, i) => naeher(v, t.farbe[i], f));
+    for (const k of ["tempo", "glanz", "strahlen", "unruhe"]) aktuell[k] = naeher(aktuell[k], t[k], f);
+    winkel += dt * aktuell.tempo;
+    zeichnen();
+  }
+
+  // Bei reduzierter Bewegung nur ein ruhendes Bild, neu gezeichnet bei jedem Zustandswechsel
+  function standbild() {
+    if (!wenigBewegung.matches) return;
+    const t = ziel();
+    Object.assign(aktuell, t, { farbe: t.farbe.slice() });
+    zeichnen();
+  }
+  new ResizeObserver(() => { groesseAnpassen(); standbild(); zeichnen(); }).observe(huelle);
+  new MutationObserver(standbild).observe(huelle, { attributes: true, attributeFilter: ["data-zustand", "class"] });
+  wenigBewegung.addEventListener("change", standbild);
+  groesseAnpassen();
+  standbild();
+  requestAnimationFrame(schritt);
+})();
+
+// ---------- Umlaufbahn: Module gleichmäßig um den Kern verteilen und per Leitung mit dem Ring verbinden ----------
+// Erweiterbar: Jeder <button class="aktion"> in .kern-aktionen wird automatisch eingeplant – abwechselnd rechts
+// und links, von oben nach unten, im Bogen entlang des Rings. Reicht der Platz nicht, Raster unter dem Kern.
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const orbit = document.getElementById("orbit");
+  const behaelter = orbit.querySelector(".kern-aktionen");
+  const svg = document.getElementById("kern-verbindungen");
+  const kern = document.getElementById("kern");
+  const wenigBewegung = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const MODUL_BREITE = 196; // wie .kern-aktionen .aktion { width }
+  const ABSTAND_MIN = 22;   // kleinster Abstand Ring → Modul (Platz für die Leitung)
+  const ABSTAND_MAX = 72;
+  const module = () => [...behaelter.querySelectorAll(".aktion")];
+
+  function element(name, merkmale) {
+    const e = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(merkmale)) e.setAttribute(k, v);
+    return e;
+  }
+
+  // Vom Element ein Stück waagerecht weg (Knick), dann auf direktem Weg zum Ring des Kerns
+  function leitung(id, x, y, richtung, kreis, art) {
+    const kx = x + richtung * 26;
+    const winkel = Math.atan2(y - kreis.y, kx - kreis.x);
+    const rx = kreis.x + Math.cos(winkel) * kreis.r;
+    const ry = kreis.y + Math.sin(winkel) * kreis.r;
+    const d = `M${x.toFixed(1)},${y.toFixed(1)} L${kx.toFixed(1)},${y.toFixed(1)} L${rx.toFixed(1)},${ry.toFixed(1)}`;
+    svg.append(element("path", { d, class: "leitung-schein" }));
+    svg.append(element("path", { d, id, class: "leitung " + art }));
+    svg.append(element("circle", { cx: rx, cy: ry, r: 3.5, class: "anschluss" }));
+    return d;
+  }
+
+  // Lichtpunkt, der entlang der Leitung zum Kern wandert
+  function signal(id, klasse, dauer, beginn, wiederholen) {
+    const punkt = element("circle", { r: klasse === "impuls" ? 4 : 2.6, class: klasse });
+    const bewegung = element("animateMotion", { dur: dauer, begin: beginn, repeatCount: wiederholen, fill: "freeze" });
+    bewegung.append(element("mpath", { href: "#" + id }));
+    punkt.append(bewegung);
+    svg.append(punkt);
+    return punkt;
+  }
+
+  // Plätze berechnen. Ergebnis null = nicht genug Platz (dann Raster unter dem Kern).
+  function plaetze(liste, breite, kreis, hoehe) {
+    const ergebnis = [];
+    const seiten = [liste.filter((_, i) => i % 2 === 0), liste.filter((_, i) => i % 2 === 1)];
+    for (const [s, seite] of seiten.entries()) {
+      const n = seite.length;
+      // Senkrecht über rund zwei Drittel des Rings verteilt, mindestens Modulhöhe + 12 px auseinander
+      const schritt = n > 1 ? Math.max(hoehe + 12, (kreis.r * 2 * 0.66) / (n - 1)) : 0;
+      if (schritt * (n - 1) + hoehe > kreis.r * 2.2) return { grund: "zu viele Module für die Höhe" };
+      for (const [j, modul] of seite.entries()) {
+        const y = kreis.y + (j - (n - 1) / 2) * schritt;
+        // Waagerechter Abstand folgt der Rundung des Rings: oben und unten näher, in der Mitte weiter außen
+        const ringX = Math.sqrt(Math.max(0, kreis.r ** 2 - (y - kreis.y) ** 2));
+        const frei = (s === 0 ? breite - kreis.x : kreis.x) - ringX - MODUL_BREITE;
+        if (frei < ABSTAND_MIN) return { grund: `zu wenig Breite (frei ${Math.round(frei)} px)` };
+        const abstand = Math.min(ABSTAND_MAX, frei);
+        const x = s === 0 ? kreis.x + ringX + abstand : kreis.x - ringX - abstand - MODUL_BREITE;
+        ergebnis.push({ modul, x, y, links: s === 1 });
+      }
+    }
+    return { plaetze: ergebnis };
+  }
+
+  // Ergebnis: "umlaufbahn" oder der Grund für das Raster (hilft bei der Fehlersuche und in den Tests)
+  function anordnen() {
+    const liste = module();
+    svg.replaceChildren();
+    if (kern.offsetParent === null || !liste.length) return "nicht sichtbar";
+    const o = orbit.getBoundingClientRect();
+    const k = kern.getBoundingClientRect();
+    const kreis = { x: k.left - o.left + k.width / 2, y: k.top - o.top + k.height / 2, r: k.width * 0.47 };
+    const hoehe = Math.max(58, ...liste.map((m) => m.offsetHeight));
+    const { plaetze: verteilung, grund } = plaetze(liste, o.width, kreis, hoehe);
+
+    orbit.classList.toggle("kompakt", !verteilung);
+    if (!verteilung) {
+      for (const m of liste) {
+        m.style.removeProperty("--x");
+        m.style.removeProperty("--y");
+        m.classList.remove("links");
+        delete m.dataset.leitung;
+      }
+      return grund;
+    }
+
+    verteilung.forEach((p, i) => {
+      const id = "leitung-modul-" + i;
+      p.modul.style.setProperty("--x", p.x.toFixed(1) + "px");
+      p.modul.style.setProperty("--y", (p.y - hoehe / 2).toFixed(1) + "px");
+      p.modul.classList.toggle("links", p.links);
+      p.modul.dataset.leitung = id;
+      // Leitung beginnt an der dem Kern zugewandten Kante des Moduls
+      const x = p.links ? p.x + MODUL_BREITE : p.x;
+      leitung(id, x, p.y, p.links ? 1 : -1, kreis, "aktion-leitung");
+      svg.append(element("rect", { x: x - 4, y: p.y - 4, width: 8, height: 8, class: "anschluss" }));
+      // Negativer Start: alle Signale laufen sofort, nur zeitversetzt (kein wartender Punkt in der Ecke)
+      if (!wenigBewegung.matches) signal(id, "puls", "3.2s", "-" + (i * 0.8).toFixed(1) + "s", "indefinite");
+    });
+    return "umlaufbahn";
+  }
+
+  // Hervorheben und Impuls per Ereignisdelegation – gilt automatisch auch für später ergänzte Module
+  const pfadZu = (ziel) => {
+    const modul = ziel instanceof Element ? ziel.closest(".aktion") : null;
+    return modul && modul.dataset.leitung ? document.getElementById(modul.dataset.leitung) : null;
+  };
+  const hervorheben = (an) => (e) => {
+    const modul = e.target.closest(".aktion");
+    if (!modul || (e.relatedTarget instanceof Node && modul.contains(e.relatedTarget))) return;
+    const pfad = pfadZu(modul);
+    if (pfad) pfad.classList.toggle("hell", an);
+  };
+  behaelter.addEventListener("pointerover", hervorheben(true));
+  behaelter.addEventListener("pointerout", hervorheben(false));
+  behaelter.addEventListener("focusin", hervorheben(true));
+  behaelter.addEventListener("focusout", hervorheben(false));
+  // Klick: ein heller Impuls läuft zum Kern
+  behaelter.addEventListener("click", (e) => {
+    const pfad = pfadZu(e.target);
+    if (wenigBewegung.matches || !pfad) return;
+    const impuls = signal(pfad.id, "impuls", "0.6s", "indefinite", "1");
+    impuls.setAttribute("visibility", "hidden");
+    impuls.querySelector("animateMotion").beginElement();
+    requestAnimationFrame(() => impuls.removeAttribute("visibility"));
+    setTimeout(() => impuls.remove(), 650);
+  });
+
+  const beobachter = new ResizeObserver(anordnen);
+  beobachter.observe(orbit);
+  beobachter.observe(kern);
+  window.addEventListener("load", anordnen);
+  window.addEventListener("resize", () => requestAnimationFrame(anordnen));
+  wenigBewegung.addEventListener("change", anordnen);
+  window.moduleAnordnen = anordnen;
+  anordnen();
+})();
+
+// ---------- Kursverlauf-Kachel (echte Kerzen aus der Marktanalyse, keine eigene Anfrage) ----------
+window.addEventListener("jarvis-kerzen", (e) => {
+  const feld = document.getElementById("mini-chart");
+  const d = e.detail;
+  if (!d || !Array.isArray(d.kerzen) || d.kerzen.length < 2) {
+    feld.hidden = true;
+    return;
+  }
+  const k = d.kerzen.slice(-48);
+  const werte = k.map((x) => x.c);
+  const min = Math.min(...werte);
+  const spanne = Math.max(...werte) - min || 1;
+  const punkte = werte.map((w, i) => (i / (werte.length - 1) * 300).toFixed(1) + "," + (64 - (w - min) / spanne * 58).toFixed(1));
+  document.getElementById("mini-linie").setAttribute("points", punkte.join(" "));
+  document.getElementById("mini-flaeche").setAttribute("points", "0,70 " + punkte.join(" ") + " 300,70");
+  const aenderung = (werte[werte.length - 1] - werte[0]) / werte[0] * 100;
+  document.getElementById("mini-text").textContent = d.symbol + " · " + d.intervall + " · letzte " + k.length + " Kerzen · "
+    + (aenderung >= 0 ? "+" : "") + aenderung.toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " % · echte Marktdaten ("
+    + (d.quelle_name || d.quelle) + ")";
+  feld.hidden = false;
+});
+
+// ---------- Schnellzugriff ----------
+function verbindungOeffnen() {
+  ansichtZeigen("cockpit");
+  const karte = document.getElementById("verbindung-karte");
+  karte.open = true;
+  karte.scrollIntoView({ block: "nearest" });
+  document.getElementById("worker-url").focus();
 }
+
+function allesAktualisieren() {
+  if (!verbunden()) {
+    verbindungOeffnen();
+    return;
+  }
+  verbindungPruefen();
+  tradingLaden();
+  if (window.analyseLaden) analyseLaden({ erzwingen: true });
+}
+
+// ---------- Bereiche (Cockpit, Analyse, Trading) ----------
+const ANSICHTEN = ["cockpit", "analyse", "trading"];
+
+function ansichtZeigen(name) {
+  if (!ANSICHTEN.includes(name)) name = "cockpit";
+  for (const a of ANSICHTEN) {
+    const aktiv = a === name;
+    document.getElementById("ansicht-" + a).hidden = !aktiv;
+    const reiter = document.getElementById("reiter-" + a);
+    reiter.setAttribute("aria-selected", String(aktiv));
+    reiter.tabIndex = aktiv ? 0 : -1;
+  }
+  try { history.replaceState(null, "", "#" + name); } catch (e) { /* z. B. eingeschränkte Umgebung */ }
+  // Beim Öffnen der Analyse nachladen; analyse.js nutzt dabei seinen Zwischenspeicher
+  if (name === "analyse" && window.analyseLaden) analyseLaden();
+  // Beim Öffnen des Cockpits die Module neu anordnen (Fenstergröße kann sich inzwischen geändert haben)
+  if (name === "cockpit" && window.moduleAnordnen) requestAnimationFrame(moduleAnordnen);
+}
+
+document.querySelectorAll(".reiter [role=tab]").forEach((reiter, i, alle) => {
+  reiter.addEventListener("click", () => ansichtZeigen(reiter.dataset.ansicht));
+  // Pfeiltasten wechseln zwischen den Reitern
+  reiter.addEventListener("keydown", (event) => {
+    const schritt = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!schritt) return;
+    const ziel = alle[(i + schritt + alle.length) % alle.length];
+    ansichtZeigen(ziel.dataset.ansicht);
+    ziel.focus();
+  });
+});
+window.addEventListener("hashchange", () => ansichtZeigen(location.hash.slice(1)));
+ansichtZeigen(location.hash.slice(1));
 </script>
-<!-- Spracherkennung „Hey Jarvis“ ist bis Phase 5 deaktiviert (alte Version liegt in backup/). -->
+<script>
+// ---------- Sprachbedienung ----------
+// Sprache dient ausschließlich der Texteingabe für den Chat: Erkannter Text erscheint in einer bearbeitbaren
+// Vorschau und wird erst nach ausdrücklichem „Senden“ verschickt. Es gibt keine Sprachbefehle – keine Orders,
+// kein Not-Aus, keine Einstellungen per Sprache. Das Mikrofon startet nur per Klick und nur für eine Äußerung.
+
+const sprache = {
+  vorlesen: einstellungLesen("jarvis-vorlesen") !== "aus",
+  stimme: einstellungLesen("jarvis-stimme"),
+};
+// Jede neue Ansage und jeder Stopp erhöht die Nummer: Teile einer älteren Ansage verstummen dann sofort
+let ansageNummer = 0;
+let ansageTimer = null;
+let laufendeTeile = []; // Verweise halten: manche Browser verlieren sonst das Ende-Ereignis langer Ansagen
+const VORLESE_TEIL_MAX = 180;
+
+function deutscheStimmen() {
+  if (!("speechSynthesis" in window)) return [];
+  return window.speechSynthesis.getVoices().filter((v) => (v.lang || "").toLowerCase().startsWith("de"));
+}
+
+// Kern und Stopp-Knopf folgen dem tatsächlichen Zustand der Wiedergabe
+function vorlesenAnzeigen(laeuft) {
+  document.getElementById("kern").classList.toggle("spricht", laeuft);
+  document.getElementById("vorlesen-stopp").disabled = !laeuft;
+}
+
+function vorlesenStoppen() {
+  ansageNummer++;
+  clearTimeout(ansageTimer);
+  laufendeTeile = [];
+  if (aktuellesAudio) {
+    aktuellesAudio.pause();
+    aktuellesAudio = null;
+  }
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  vorlesenAnzeigen(false);
+}
+
+// ---------- Google-Stimme (Audio vom Worker) ----------
+let aktuellesAudio = null;
+
+// Antwort vorlesen: bevorzugt das Audio des Workers (Google TTS), sonst die Browserstimme.
+// Ein gemeldeter TTS-Fehler wird sichtbar angezeigt, statt stillschweigend auszuweichen.
+function antwortVorlesen(daten) {
+  if (!sprache.vorlesen || !daten) return;
+  if (daten.tts_fehler) ttsHinweis("Google-Stimme nicht verfügbar (" + daten.tts_fehler + ") – es spricht die Browserstimme.");
+  if (daten.audioContent) googleAudioAbspielen(daten.audioContent, daten.antwort);
+  else jarvisSprechen(daten.antwort);
+}
+
+function ttsHinweis(text) {
+  console.warn("JARVIS Sprachausgabe: " + text);
+  const status = document.getElementById("sprach-status");
+  status.textContent = text;
+  status.dataset.art = "fehler";
+}
+
+// Format am Anfang der Base64-Daten erkennen (LINEAR16 liefert WAV mit „RIFF“-Kopf)
+function audioTyp(base64) {
+  if (base64.startsWith("UklGR")) return "audio/wav";
+  if (base64.startsWith("SUQz") || base64.startsWith("//")) return "audio/mpeg";
+  if (base64.startsWith("T2dnUw")) return "audio/ogg";
+  return "audio/wav";
+}
+
+function googleAudioAbspielen(base64, ersatzText) {
+  if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) window.spracheingabeBeenden("vorlesen");
+  vorlesenStoppen();
+  const nummer = ansageNummer;
+  const audio = new Audio("data:" + audioTyp(base64) + ";base64," + base64);
+  aktuellesAudio = audio;
+  const ausweichen = (grund) => {
+    if (nummer !== ansageNummer) return;
+    aktuellesAudio = null;
+    ttsHinweis("Google-Audio konnte nicht abgespielt werden (" + grund + ") – es spricht die Browserstimme.");
+    jarvisSprechen(ersatzText);
+  };
+  audio.onplaying = () => { if (nummer === ansageNummer) vorlesenAnzeigen(true); };
+  audio.onended = () => {
+    if (nummer !== ansageNummer) return;
+    aktuellesAudio = null;
+    vorlesenAnzeigen(false);
+  };
+  audio.onerror = () => ausweichen("Audioformat");
+  const start = audio.play();
+  if (start && typeof start.catch === "function") start.catch((e) => ausweichen((e && e.name) || "Wiedergabe blockiert"));
+}
+
+// Text für die Sprachausgabe aufbereiten: Formatierungszeichen, Links und Symbole führen sonst zu Aussetzern
+function vorleseText(text) {
+  return String(text)
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/https?:\/\/\S+/g, "Link")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, " ")
+    .replace(/[*_`#>~|]+/g, " ")
+    .replace(/\s+[–—]\s+/g, ", ")
+    .replace(/…/g, "...")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,!?;:])/g, "$1")
+    .trim();
+}
+
+// In kurze Teile zerlegen: satzweise, lange Sätze an Kommas, notfalls an Wortgrenzen.
+// Lange Einzelansagen stocken oder brechen bei manchen Browserstimmen ab.
+function vorleseTeile(text, max = VORLESE_TEIL_MAX) {
+  const teile = [];
+  let aktuell = "";
+  const anhaengen = (stueck) => {
+    if (!stueck) return;
+    if (!aktuell) aktuell = stueck;
+    else if (aktuell.length + 1 + stueck.length <= max) aktuell += " " + stueck;
+    else { teile.push(aktuell); aktuell = stueck; }
+  };
+  for (const satz of text.split(/(?<=[.!?])\s+/)) {
+    if (satz.length <= max) { anhaengen(satz); continue; }
+    for (const stueck of satz.split(/(?<=[,;:])\s+/)) {
+      let rest = stueck;
+      while (rest.length > max) {
+        let schnitt = rest.lastIndexOf(" ", max);
+        if (schnitt < max / 2) schnitt = max;
+        anhaengen(rest.slice(0, schnitt).trim());
+        rest = rest.slice(schnitt).trim();
+      }
+      anhaengen(rest);
+    }
+  }
+  if (aktuell) teile.push(aktuell);
+  return teile;
+}
+
+// beobachter (nur Stimmtest): { start(i), ende(i), fertig(), fehler(e) } – misst die echte Wiedergabe;
+// mit beobachter wird auch bei „Vorlesen: aus“ gesprochen, weil der Test ausdrücklich angefordert wurde.
+function jarvisSprechen(text, beobachter) {
+  if (!("speechSynthesis" in window) || (!sprache.vorlesen && !beobachter)) return;
+  const melden = (art, wert) => { if (beobachter && beobachter[art]) beobachter[art](wert); };
+  // Nur der Stimmtest darf eine eigene Teststimme/-sprache mitgeben; die Live-Ausgabe nutzt immer die Einstellung
+  const testStimme = beobachter && "stimme" in beobachter;
+  const teile = vorleseTeile(vorleseText(text || ""));
+  if (!teile.length) return;
+  // Keine Aufnahme während des Vorlesens: eine laufende Aufnahme endet, erkannter Text bleibt erhalten
+  if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) window.spracheingabeBeenden("vorlesen");
+  const synth = window.speechSynthesis;
+  // Nie zwei Wiedergaben: laufende Ansage beenden. Direkt nach cancel() gestartete Ansagen werden in Chrome/Edge
+  // teils angeschnitten – deshalb dann ein kurzer Abstand vor dem Neustart.
+  const lief = Boolean(synth.speaking || synth.pending);
+  vorlesenStoppen();
+  const nummer = ansageNummer;
+  const stimme = testStimme ? beobachter.stimme : deutscheStimmen().find((v) => v.voiceURI === sprache.stimme);
+  const standardSprache = (testStimme && beobachter.sprache) || "de-DE";
+  let index = 0;
+
+  // Teile nacheinander sprechen: der nächste erst, wenn der vorige wirklich fertig ist
+  const naechsterTeil = () => {
+    if (nummer !== ansageNummer) return;
+    if (index >= teile.length) {
+      laufendeTeile = [];
+      vorlesenAnzeigen(false);
+      melden("fertig");
+      return;
+    }
+    const nr = index;
+    const ansage = new SpeechSynthesisUtterance(teile[index++]);
+    ansage.lang = standardSprache;
+    // Natürliche (neuronale) Stimmen klingen mit veränderter Tonhöhe/Geschwindigkeit oft holprig
+    ansage.rate = 1;
+    ansage.pitch = 1;
+    if (stimme) {
+      ansage.voice = stimme;
+      ansage.lang = stimme.lang;
+    }
+    let erledigt = false;
+    ansage.onstart = () => {
+      if (nummer !== ansageNummer) return;
+      vorlesenAnzeigen(true);
+      melden("start", nr);
+    };
+    ansage.onend = () => {
+      if (erledigt) return;
+      erledigt = true;
+      if (nummer === ansageNummer) melden("ende", nr);
+      naechsterTeil();
+    };
+    ansage.onerror = (e) => {
+      if (erledigt || nummer !== ansageNummer) return;
+      erledigt = true;
+      // Echter Fehler: Ansage beenden statt mit dem nächsten Teil holprig weiterzumachen
+      if (!e || (e.error !== "interrupted" && e.error !== "canceled")) {
+        melden("fehler", e);
+        vorlesenStoppen();
+      }
+    };
+    laufendeTeile.push(ansage);
+    if (synth.paused) synth.resume();
+    synth.speak(ansage);
+  };
+  ansageTimer = setTimeout(naechsterTeil, lief ? 120 : 0);
+}
+
+// Vorlesen ein/aus, Stopp und Stimmenwahl
+(function () {
+  const schalter = document.getElementById("vorlesen-schalter");
+  const stopp = document.getElementById("vorlesen-stopp");
+  const wahl = document.getElementById("stimme-wahl");
+  const status = document.getElementById("vorlesen-status");
+  const vorhanden = "speechSynthesis" in window;
+
+  function anzeigen() {
+    schalter.setAttribute("aria-pressed", String(vorhanden && sprache.vorlesen));
+    schalter.textContent = "Vorlesen: " + (vorhanden && sprache.vorlesen ? "an" : "aus");
+    status.textContent = !vorhanden ? "nicht unterstützt" : sprache.vorlesen ? "an (Browserstimme)" : "ausgeschaltet";
+    status.className = vorhanden && sprache.vorlesen ? "ok" : "aus";
+  }
+
+  function stimmenFuellen() {
+    const stimmen = deutscheStimmen();
+    const optionen = [new Option(stimmen.length ? "Standardstimme" : "Keine deutsche Stimme gefunden", "")];
+    for (const v of stimmen) optionen.push(new Option(v.name + " (" + v.lang + ")", v.voiceURI));
+    wahl.replaceChildren(...optionen);
+    wahl.value = stimmen.some((v) => v.voiceURI === sprache.stimme) ? sprache.stimme : "";
+  }
+
+  schalter.addEventListener("click", () => {
+    sprache.vorlesen = !sprache.vorlesen;
+    einstellungSchreiben("jarvis-vorlesen", sprache.vorlesen ? "an" : "aus");
+    if (!sprache.vorlesen) vorlesenStoppen();
+    anzeigen();
+  });
+  stopp.addEventListener("click", vorlesenStoppen);
+  wahl.addEventListener("change", () => {
+    sprache.stimme = wahl.value;
+    einstellungSchreiben("jarvis-stimme", wahl.value);
+  });
+
+  if (vorhanden) {
+    stimmenFuellen();
+    // Stimmen werden in manchen Browsern erst nachträglich geladen
+    if (typeof window.speechSynthesis.addEventListener === "function") window.speechSynthesis.addEventListener("voiceschanged", stimmenFuellen);
+  } else {
+    schalter.disabled = true;
+    wahl.disabled = true;
+    wahl.replaceChildren(new Option("nicht verfügbar", ""));
+  }
+  anzeigen();
+  // Für die lokalen Tests (Nachbildung der Sprachausgabe)
+  window.sprachausgabeAktualisieren = () => { stimmenFuellen(); anzeigen(); };
+})();
+
+// Stimmtest: fester Text ohne KI-Anfrage. Vergleicht A (kurzer Satz, ein Stück), B (langer Text, ein Stück) und
+// C (langer Text, satzweise wie bei echten Antworten) und misst, was der Browser tatsächlich meldet.
+(function () {
+  const vorhanden = "speechSynthesis" in window;
+  // Feste, selbst formulierte Testtexte je Sprache (keine Zitate)
+  const TEXTE = {
+    de: {
+      kurz: "Guten Tag, Sir. Dies ist ein kurzer Stimmtest.",
+      lang: "Guten Tag, Sir. Dies ist ein längerer Stimmtest für die Sprachausgabe von JARVIS. "
+        + "Er besteht aus mehreren Sätzen, damit Pausen und Übergänge zwischen den Sätzen gut hörbar sind. "
+        + "Achten Sie bitte auf Aussetzer, Wiederholungen oder abgehackte Wörter. Vielen Dank, das war der Test.",
+    },
+    en: {
+      kurz: "Good evening, sir. This is a short voice test for your assistant.",
+      lang: "Good evening, sir. This is a longer voice test for your personal assistant. "
+        + "It contains several sentences, so that pauses and transitions between them are easy to hear. "
+        + "Please listen for gaps, repeated words or clipped syllables. Thank you, that concludes the test.",
+    },
+  };
+  const teststimmeWahl = document.getElementById("teststimme-wahl");
+  const bereich = document.getElementById("stimmtest");
+  const oeffner = document.getElementById("stimme-testen");
+  const protokoll = document.getElementById("stimmtest-protokoll");
+  const liste = document.getElementById("stimmen-liste");
+  const ms = (x) => Math.round(x) + " ms";
+  const sek = (x) => (x / 1000).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s";
+
+  function gewaehlteStimme() {
+    return deutscheStimmen().find((v) => v.voiceURI === sprache.stimme) || null;
+  }
+
+  // Teststimme: leer = eingestellte (deutsche) Vorlesestimme; sonst eine beliebige Stimme nur für diesen Test.
+  // Die Sprache des Testtextes richtet sich nach der Teststimme (Englisch oder Deutsch).
+  function teststimme() {
+    const uri = teststimmeWahl.value;
+    if (!uri || !vorhanden) return { stimme: gewaehlteStimme(), sprache: "de", lang: "de-DE" };
+    const v = window.speechSynthesis.getVoices().find((s) => s.voiceURI === uri) || null;
+    const englisch = Boolean(v && (v.lang || "").toLowerCase().startsWith("en"));
+    return { stimme: v, sprache: englisch ? "en" : "de", lang: v ? v.lang : "de-DE" };
+  }
+
+  function stimmName() {
+    const s = teststimme().stimme;
+    return s ? `${s.name} [${s.localService ? "lokal" : "online"}]` : "Standardstimme des Browsers";
+  }
+
+  // Auswahl: zuerst Englisch (Vereinigtes Königreich), dann übriges Englisch, dann Deutsch
+  function teststimmenFuellen() {
+    const bisher = teststimmeWahl.value;
+    const stimmen = vorhanden ? window.speechSynthesis.getVoices() : [];
+    const gruppe = (titel, auswahl) => {
+      if (!auswahl.length) return null;
+      const g = document.createElement("optgroup");
+      g.label = titel;
+      for (const v of auswahl.sort((a, b) => a.name.localeCompare(b.name))) {
+        g.append(new Option(`${v.name} (${v.lang}, ${v.localService ? "lokal" : "online"})`, v.voiceURI));
+      }
+      return g;
+    };
+    const sprachteil = (v) => (v.lang || "").toLowerCase().replace("_", "-");
+    const uk = stimmen.filter((v) => sprachteil(v) === "en-gb");
+    const englisch = stimmen.filter((v) => sprachteil(v).startsWith("en") && sprachteil(v) !== "en-gb");
+    const deutsch = stimmen.filter((v) => sprachteil(v).startsWith("de"));
+    teststimmeWahl.replaceChildren(
+      new Option("Eingestellte Vorlesestimme (Deutsch)", ""),
+      ...[gruppe("Englisch – Vereinigtes Königreich", uk), gruppe("Englisch – andere", englisch), gruppe("Deutsch", deutsch)].filter(Boolean),
+    );
+    teststimmeWahl.value = [...teststimmeWahl.options].some((o) => o.value === bisher) ? bisher : "";
+    const hinweis = document.getElementById("testsprache-hinweis");
+    const t = teststimme();
+    hinweis.textContent = (t.sprache === "en" ? "Testtext: Englisch. " : "Testtext: Deutsch. ")
+      + (uk.length
+        ? uk.length + " britische Stimme(n) verfügbar."
+        : "Keine britische Stimme gefunden – in Edge erscheinen sie als „Online (Natural)“ (Internet nötig) oder lokal nach Installation von „Englisch (Vereinigtes Königreich)“ in den Windows-Spracheinstellungen.");
+  }
+
+  function eintrag(text, fehler) {
+    if (protokoll.firstElementChild && protokoll.firstElementChild.textContent === "Noch kein Test.") protokoll.replaceChildren();
+    const li = document.createElement("li");
+    li.textContent = text;
+    if (fehler) li.className = "fehler";
+    protokoll.prepend(li);
+    while (protokoll.children.length > 10) protokoll.lastElementChild.remove();
+  }
+
+  // Alle Stimmen mit vollständigem Namen, Sprache und Art (lokal auf dem Gerät oder online über den Anbieter)
+  function stimmenZeigen() {
+    if (!vorhanden) {
+      liste.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Sprachausgabe wird von diesem Browser nicht unterstützt." }));
+      document.getElementById("stimmen-anzahl").textContent = "0";
+      return;
+    }
+    const stimmen = window.speechSynthesis.getVoices().slice()
+      .sort((a, b) => Number((b.lang || "").startsWith("de")) - Number((a.lang || "").startsWith("de")) || a.name.localeCompare(b.name));
+    document.getElementById("stimmen-anzahl").textContent = String(stimmen.length);
+    liste.replaceChildren(...stimmen.map((v) => {
+      const li = document.createElement("li");
+      li.textContent = `${v.name} · ${v.lang} · ${v.localService ? "lokal (auf dem Gerät)" : "online (Dienst des Anbieters)"}`
+        + (v.default ? " · Standard" : "") + (v.voiceURI === sprache.stimme ? " · ausgewählt" : "");
+      if (v.voiceURI === sprache.stimme) li.className = "gewaehlt";
+      return li;
+    }));
+    if (!stimmen.length) liste.replaceChildren(Object.assign(document.createElement("li"), { textContent: "Der Browser meldet (noch) keine Stimmen." }));
+  }
+
+  // A und B: ein einziges Stück, ohne Aufteilung
+  function direkt(text, name) {
+    if (!vorhanden) return eintrag(name + ": Sprachausgabe nicht verfügbar.", true);
+    const synth = window.speechSynthesis;
+    const lief = Boolean(synth.speaking || synth.pending);
+    vorlesenStoppen();
+    const nummer = ansageNummer;
+    const klick = performance.now();
+    const { stimme, lang } = teststimme();
+    let start = 0;
+    let grenzen = 0;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang;
+    u.rate = 1;
+    u.pitch = 1;
+    if (stimme) { u.voice = stimme; u.lang = stimme.lang; }
+    u.onstart = () => { start = performance.now(); if (nummer === ansageNummer) vorlesenAnzeigen(true); };
+    u.onboundary = () => { grenzen++; };
+    u.onend = () => {
+      if (nummer !== ansageNummer) return;
+      vorlesenAnzeigen(false);
+      eintrag(`${name}: Start nach ${ms(start - klick)}, Dauer ${sek(performance.now() - start)}, Wortgrenzen-Ereignisse ${grenzen} · ${stimmName()}`);
+    };
+    u.onerror = (e) => {
+      if (nummer !== ansageNummer) return;
+      vorlesenAnzeigen(false);
+      eintrag(`${name}: Fehler „${(e && e.error) || "unbekannt"}“ · ${stimmName()}`, true);
+    };
+    laufendeTeile = [u];
+    // gleicher Abstand nach einem Abbruch wie bei der normalen Wiedergabe, damit nur die Aufteilung verglichen wird
+    ansageTimer = setTimeout(() => {
+      if (nummer !== ansageNummer) return;
+      if (synth.paused) synth.resume();
+      synth.speak(u);
+    }, lief ? 120 : 0);
+  }
+
+  // C: dieselbe satzweise Wiedergabe wie bei echten Antworten, mit Messung je Teil
+  function satzweise() {
+    if (!vorhanden) return eintrag("C: Sprachausgabe nicht verfügbar.", true);
+    const klick = performance.now();
+    const teile = [];
+    const t = teststimme();
+    jarvisSprechen(TEXTE[t.sprache].lang, {
+      stimme: t.stimme,
+      sprache: t.lang,
+      start: (i) => { teile[i] = { start: performance.now(), ende: null }; },
+      ende: (i) => { if (teile[i]) teile[i].ende = performance.now(); },
+      fertig: () => {
+        const gueltig = teile.filter(Boolean);
+        if (!gueltig.length) return;
+        const luecken = gueltig.slice(1).map((t, i) => t.start - gueltig[i].ende);
+        eintrag(`C · Langer Text satzweise: ${gueltig.length} Teile, Start nach ${ms(gueltig[0].start - klick)}, `
+          + `Gesamtdauer ${sek(gueltig[gueltig.length - 1].ende - gueltig[0].start)}, `
+          + `Lücken zwischen den Teilen: ${luecken.length ? luecken.map(ms).join(", ") : "–"} · ${stimmName()}`);
+      },
+      fehler: (e) => eintrag(`C · Langer Text satzweise: Fehler „${(e && e.error) || "unbekannt"}“ · ${stimmName()}`, true),
+    });
+  }
+
+  oeffner.addEventListener("click", () => {
+    bereich.hidden = !bereich.hidden;
+    oeffner.setAttribute("aria-expanded", String(!bereich.hidden));
+    oeffner.setAttribute("aria-pressed", String(!bereich.hidden));
+    if (!bereich.hidden) aktualisieren();
+  });
+  const aktualisieren = () => { stimmenZeigen(); teststimmenFuellen(); };
+  document.getElementById("stimmtest-kurz").addEventListener("click", () => direkt(TEXTE[teststimme().sprache].kurz, "A · Kurzer Satz direkt"));
+  document.getElementById("stimmtest-lang").addEventListener("click", () => direkt(TEXTE[teststimme().sprache].lang, "B · Langer Text am Stück"));
+  document.getElementById("stimmtest-teile").addEventListener("click", satzweise);
+  document.getElementById("stimmtest-stopp").addEventListener("click", vorlesenStoppen);
+  document.getElementById("stimme-wahl").addEventListener("change", aktualisieren);
+  teststimmeWahl.addEventListener("change", () => { vorlesenStoppen(); teststimmenFuellen(); });
+  if (vorhanden && typeof window.speechSynthesis.addEventListener === "function") window.speechSynthesis.addEventListener("voiceschanged", aktualisieren);
+  aktualisieren();
+  window.stimmenZeigen = aktualisieren; // für die lokalen Tests
+})();
+
+// Spracheingabe (Browser-Spracherkennung, nur Texteingabe)
+// Ablauf einer Aufnahme: ein Klick startet sie ausdrücklich. Sie läuft im Modus „continuous“, damit kurze Pausen
+// sie nicht beenden. Sie endet durch erneuten Klick, nach ZEITEN.stille ohne Sprache oder nach ZEITEN.maximal.
+// Beendet der Erkennungsdienst die Sitzung vorher von selbst, wird sie innerhalb derselben Aufnahme höchstens
+// ZEITEN.fortsetzungen-mal neu gestartet – nie nach manuellem Stopp, Esc, Fehler, Vorlesen oder Verlassen der Seite.
+(function () {
+  const knopf = document.getElementById("mikro");
+  const knopfText = document.getElementById("mikro-text");
+  const status = document.getElementById("sprach-status");
+  const vorschau = document.getElementById("sprach-vorschau");
+  const feld = document.getElementById("sprach-text");
+  const sendenKnopf = document.getElementById("sprach-senden");
+  const kern = document.getElementById("kern");
+  // Bei jedem Klick neu nachsehen: Unterstützung kann sich nicht ändern, Tests ersetzen sie aber
+  const Erkennung = () => window.SpeechRecognition || window.webkitSpeechRecognition;
+  const ZEITEN = { stille: 5000, maximal: 60000, fortsetzungen: 5 };
+  let erkennung = null;   // laufende Sitzung des Erkennungsdienstes
+  let aufnahme = null;    // eine ausdrücklich gestartete Aufnahme (kann mehrere Sitzungen umfassen)
+  let zustand = "bereit";
+
+  // Fügt einen neu erkannten Teil an, ohne Wiederholungen: Manche Browser liefern Teile, die den bisherigen Text
+  // ganz oder am Ende überlappend wiederholen (z. B. „Hallo“ → „Hallo Jarvis“). Verglichen wird wortweise.
+  function zusammenfuegen(bisher, neu) {
+    const a = bisher.trim();
+    const b = neu.trim();
+    if (!a) return b;
+    if (!b) return a;
+    const klein = (s) => s.toLowerCase().replace(/[.,!?;:]/g, "");
+    const wa = a.split(/\s+/);
+    const wb = b.split(/\s+/);
+    if (klein(b).startsWith(klein(a))) return b;          // neuer Teil enthält den bisherigen Text vollständig
+    if (klein(a).endsWith(klein(b))) return a;            // neuer Teil ist bereits enthalten
+    for (let k = Math.min(wa.length, wb.length); k > 0; k--) {
+      if (klein(wa.slice(-k).join(" ")) === klein(wb.slice(0, k).join(" "))) {
+        return wa.concat(wb.slice(k)).join(" ");
+      }
+    }
+    return a + " " + b;
+  }
+
+  // Gesamter Text: Ergebnis früherer Sitzungen + endgültige und vorläufige Teile der laufenden Sitzung
+  function gesamtText() {
+    if (!aufnahme) return "";
+    let text = aufnahme.gesammelt;
+    for (const teil of aufnahme.sitzungFertig) text = zusammenfuegen(text, teil);
+    return zusammenfuegen(text, aufnahme.sitzungVorlaeufig);
+  }
+
+  const FEHLER = {
+    "not-allowed": "Mikrofon-Zugriff verweigert. Bitte im Browser (Symbol neben der Adresse) das Mikrofon für diese Seite erlauben – oder den Text eintippen.",
+    "service-not-allowed": "Die Spracherkennung ist in diesem Browser oder auf dieser Seite gesperrt. Bitte den Text eintippen.",
+    "no-speech": "Keine Sprache erkannt. Bitte erneut versuchen oder den Text eintippen.",
+    "audio-capture": "Kein Mikrofon gefunden. Bitte ein Mikrofon anschließen oder den Text eintippen.",
+    "network": "Der Erkennungsdienst des Browsers ist nicht erreichbar (Internetverbindung nötig). Bitte den Text eintippen.",
+    "language-not-supported": "Deutsch wird von der Spracherkennung dieses Browsers nicht unterstützt. Bitte den Text eintippen.",
+  };
+
+  // zustand: bereit | zuhoeren | verarbeiten | fehler
+  function zustandSetzen(neu, meldung, beschriftung) {
+    zustand = neu;
+    knopf.dataset.zustand = neu;
+    knopf.setAttribute("aria-pressed", String(neu === "zuhoeren"));
+    knopfText.textContent = beschriftung || { bereit: "Sprechen", zuhoeren: "Zuhören – Stopp", verarbeiten: "Verarbeite …", fehler: "Sprechen" }[neu];
+    kern.classList.toggle("hoert", neu === "zuhoeren");
+    status.textContent = meldung || "";
+    status.dataset.art = neu === "fehler" ? "fehler" : "";
+  }
+
+  function unterstuetzungAnzeigen() {
+    const da = Boolean(Erkennung());
+    const feldStatus = document.getElementById("spracheingabe-status");
+    feldStatus.textContent = da ? "vom Browser unterstützt" : "nicht unterstützt";
+    feldStatus.className = da ? "ok" : "aus";
+    knopf.setAttribute("aria-disabled", String(!da));
+    knopf.title = da ? "Spracheingabe starten (eine Äußerung, danach stoppt das Mikrofon)" : "Spracheingabe wird von diesem Browser nicht unterstützt";
+    document.getElementById("sprach-hinweis").textContent = da
+      ? "Hinweis: Die Spracheingabe nutzt den Erkennungsdienst Ihres Browseranbieters; dabei wird die Aufnahme dorthin übertragen."
+      : "";
+  }
+
+  function vorschauZeigen(text, live) {
+    vorschau.hidden = false;
+    feld.value = text;
+    feld.readOnly = live;
+    sendenKnopf.disabled = live || !text.trim();
+  }
+
+  function vorschauSchliessen() {
+    vorschau.hidden = true;
+    feld.value = "";
+  }
+
+  const sekunden = (ms) => (ms / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 }) + " s";
+
+  // Startet eine Sitzung des Erkennungsdienstes innerhalb der laufenden Aufnahme
+  function sitzungStarten() {
+    const Klasse = Erkennung();
+    const sitzung = new Klasse();
+    sitzung.lang = "de-DE";
+    sitzung.interimResults = true;
+    sitzung.continuous = true; // kurze Sprechpausen beenden die Sitzung nicht
+    sitzung.maxAlternatives = 1;
+    aufnahme.sitzungFertig = [];
+    aufnahme.sitzungVorlaeufig = "";
+
+    sitzung.onstart = () => {
+      if (sitzung !== erkennung) return;
+      zustandSetzen("zuhoeren", aufnahme.fortsetzungen
+        ? "Ich höre weiter zu … Zum Beenden erneut tippen, Esc bricht ab."
+        : "Ich höre zu … Kurze Pausen sind möglich. Zum Beenden erneut tippen, Esc bricht ab.");
+    };
+    sitzung.onspeechstart = () => { if (sitzung === erkennung) aufnahme.letzteSprache = Date.now(); };
+    sitzung.onresult = (e) => {
+      if (sitzung !== erkennung) return;
+      const fertig = [];
+      let vorlaeufig = "";
+      for (let i = 0; i < e.results.length; i++) {
+        const teil = e.results[i][0].transcript;
+        if (e.results[i].isFinal) fertig.push(teil); else vorlaeufig = zusammenfuegen(vorlaeufig, teil);
+      }
+      aufnahme.sitzungFertig = fertig;
+      aufnahme.sitzungVorlaeufig = vorlaeufig;
+      aufnahme.letzteSprache = Date.now();
+      vorschauZeigen(gesamtText(), true);
+    };
+    sitzung.onerror = (e) => {
+      if (sitzung !== erkennung) return;
+      if (e.error === "aborted") return; // eigener Abbruch (Esc, Vorlesen, Verlassen der Seite)
+      // „Keine Sprache“ nach bereits erkanntem Text ist ein normales Ende, kein Fehler
+      if (e.error === "no-speech" && gesamtText()) { aufnahme.grund = "stille"; return; }
+      aufnahme.fehler = FEHLER[e.error] || "Spracheingabe fehlgeschlagen (" + e.error + "). Bitte den Text eintippen.";
+    };
+    sitzung.onend = () => {
+      if (sitzung !== erkennung) return;
+      erkennung = null;
+      // Ergebnis dieser Sitzung sichern – auch vorläufige Teile, damit nichts verloren geht
+      aufnahme.gesammelt = gesamtText();
+      aufnahme.sitzungFertig = [];
+      aufnahme.sitzungVorlaeufig = "";
+      const jetzt = Date.now();
+      const darfFortsetzen = !aufnahme.grund && !aufnahme.fehler
+        && document.visibilityState !== "hidden"
+        && aufnahme.fortsetzungen < ZEITEN.fortsetzungen
+        && jetzt - aufnahme.beginn < ZEITEN.maximal
+        && jetzt - aufnahme.letzteSprache < ZEITEN.stille;
+      if (darfFortsetzen) {
+        // Der Dienst hat von selbst gestoppt: kontrolliert innerhalb derselben Aufnahme fortsetzen
+        aufnahme.fortsetzungen++;
+        erkennung = sitzungStarten();
+        return;
+      }
+      if (!aufnahme.grund && !aufnahme.fehler) {
+        aufnahme.grund = aufnahme.fortsetzungen >= ZEITEN.fortsetzungen ? "dienst" : jetzt - aufnahme.beginn >= ZEITEN.maximal ? "maximal" : "stille";
+      }
+      aufnahmeAbschliessen();
+    };
+
+    try {
+      sitzung.start();
+    } catch (e) {
+      aufnahme.fehler = "Spracheingabe konnte nicht gestartet werden. Bitte den Text eintippen.";
+      erkennung = null;
+      setTimeout(aufnahmeAbschliessen, 0);
+    }
+    return sitzung;
+  }
+
+  // Zeitgrenzen der Aufnahme prüfen (Stille, Höchstdauer)
+  function zeitPruefen() {
+    if (!aufnahme || !erkennung || aufnahme.grund) return;
+    const jetzt = Date.now();
+    if (jetzt - aufnahme.beginn >= ZEITEN.maximal) beenden("maximal");
+    else if (jetzt - aufnahme.letzteSprache >= ZEITEN.stille) beenden("stille");
+  }
+
+  // Beendet die Aufnahme ohne Fortsetzung. stop() liefert noch die letzten Ergebnisse, abort() nicht.
+  function beenden(grund) {
+    if (!aufnahme || aufnahme.grund) return;
+    aufnahme.grund = grund;
+    if (!erkennung) return;
+    if (grund === "manuell" || grund === "stille" || grund === "maximal") {
+      zustandSetzen("verarbeiten", "Verarbeite die Aufnahme …");
+      erkennung.stop();
+    } else {
+      erkennung.abort();
+    }
+  }
+
+  function aufnahmeAbschliessen() {
+    if (!aufnahme) return;
+    clearInterval(aufnahme.uhr);
+    const text = (aufnahme.gesammelt || gesamtText()).trim();
+    const { grund, fehler } = aufnahme;
+    aufnahme = null;
+    erkennung = null;
+    kern.classList.remove("hoert");
+    if (fehler) {
+      if (text) vorschauZeigen(text, false); else vorschauSchliessen();
+      zustandSetzen("fehler", fehler + (text ? " Der bisher erkannte Text bleibt zur Prüfung erhalten." : ""));
+      return;
+    }
+    const ursache = {
+      manuell: "Aufnahme beendet.",
+      stille: "Aufnahme nach " + sekunden(ZEITEN.stille) + " ohne Sprache beendet.",
+      maximal: "Maximale Aufnahmedauer (" + sekunden(ZEITEN.maximal) + ") erreicht.",
+      dienst: "Der Erkennungsdienst des Browsers hat die Aufnahme beendet.",
+      esc: "Aufnahme abgebrochen.",
+      vorlesen: "Aufnahme beendet, weil JARVIS vorliest.",
+      verlassen: "Aufnahme beendet, weil die Seite verlassen wurde.",
+    }[grund] || "Aufnahme beendet.";
+    if (text) {
+      vorschauZeigen(text, false);
+      zustandSetzen("bereit", ursache + " Erkannter Text – bitte prüfen und mit „Senden“ bestätigen.");
+      feld.focus();
+    } else {
+      vorschauSchliessen();
+      zustandSetzen("bereit", ursache + " Nichts erkannt. Bitte erneut versuchen oder den Text eintippen.");
+    }
+  }
+
+  function starten() {
+    if (!Erkennung()) {
+      zustandSetzen("fehler", "Spracheingabe wird von diesem Browser nicht unterstützt (verfügbar z. B. in aktuellen Versionen von Chrome und Edge). Die Texteingabe funktioniert weiterhin.");
+      return;
+    }
+    // Zweiter Klick während der Aufnahme beendet sie (erkannter Text bleibt erhalten)
+    if (aufnahme) {
+      beenden("manuell");
+      return;
+    }
+    vorlesenStoppen(); // keine Aufnahme während des Vorlesens
+    vorschauSchliessen();
+    const jetzt = Date.now();
+    aufnahme = { beginn: jetzt, letzteSprache: jetzt, gesammelt: "", sitzungFertig: [], sitzungVorlaeufig: "", fortsetzungen: 0, grund: null, fehler: null, uhr: null };
+    aufnahme.uhr = setInterval(zeitPruefen, Math.max(20, Math.min(250, ZEITEN.stille / 5)));
+    zustandSetzen("verarbeiten", "Mikrofon wird gestartet – der Browser fragt ggf. nach der Freigabe.", "Starte …");
+    erkennung = sitzungStarten();
+  }
+
+  // Ausdrückliche Bestätigung: Erst hier geht der Text als normale Chat-Nachricht hinaus
+  function senden() {
+    const text = feld.value.trim();
+    if (!text || aufnahme) return;
+    if (document.getElementById("senden").disabled) {
+      zustandSetzen("bereit", "Bitte warten – JARVIS antwortet noch. Der Text bleibt erhalten.");
+      return;
+    }
+    document.getElementById("befehl").value = text;
+    vorschauSchliessen();
+    zustandSetzen("bereit", "");
+    jarvisAntwort();
+  }
+
+  function uebernehmen() {
+    const eingabe = document.getElementById("befehl");
+    eingabe.value = feld.value.trim();
+    vorschauSchliessen();
+    zustandSetzen("bereit", "In das Eingabefeld übernommen – mit Enter oder „Senden“ abschicken.");
+    eingabe.focus();
+  }
+
+  function verwerfen() {
+    vorschauSchliessen();
+    zustandSetzen("bereit", "Erkannter Text verworfen.");
+    knopf.focus();
+  }
+
+  knopf.addEventListener("click", starten);
+  sendenKnopf.addEventListener("click", senden);
+  document.getElementById("sprach-uebernehmen").addEventListener("click", uebernehmen);
+  document.getElementById("sprach-verwerfen").addEventListener("click", verwerfen);
+  feld.addEventListener("input", () => { sendenKnopf.disabled = feld.readOnly || !feld.value.trim(); });
+  feld.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); senden(); }
+    if (e.key === "Escape") { e.preventDefault(); verwerfen(); }
+  });
+  // Esc bricht die Aufnahme sofort ab; bereits erkannter Text bleibt zur Prüfung erhalten
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && aufnahme) { e.preventDefault(); beenden("esc"); } });
+  // Seite verlassen oder in den Hintergrund: Aufnahme beenden, keine Fortsetzung
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") beenden("verlassen"); });
+  window.addEventListener("pagehide", () => beenden("verlassen"));
+
+  unterstuetzungAnzeigen();
+  zustandSetzen("bereit", "");
+  // Für das Vorlesen: keine Aufnahme während der Wiedergabe
+  window.spracheingabeBeenden = (grund) => beenden(grund || "vorlesen");
+  window.spracheingabeLaeuft = () => Boolean(aufnahme);
+  // Für die lokalen Tests (Nachbildung der Spracherkennung, verkürzte Zeiten)
+  window.spracheingabeAktualisieren = unterstuetzungAnzeigen;
+  window.spracheingabeZeiten = ZEITEN;
+})();
+</script>
 </body>
 </html>
