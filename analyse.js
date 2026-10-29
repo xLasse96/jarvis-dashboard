@@ -29,6 +29,8 @@
     schluessel: "",
     geladenAm: 0,
     laedt: false,
+    stufen: [], // Preislinien für Unterstützungen/Widerstände
+    analyseStatusGeladen: false,
   };
 
   function element(id) {
@@ -152,10 +154,30 @@
       color: transparent(p.value >= 0 ? FARBEN.steigend : FARBEN.fallend),
     })));
 
+    stufenZeichnen(daten.einordnung);
+
     // Bei neuem Paar oder Intervall die letzten Kerzen zeigen, sonst Zoom und Position des Nutzers behalten
     if (neueAuswahl) {
       zustand.chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, k.length - SICHTBARE_KERZEN), to: k.length + 2 });
     }
+  }
+
+  // Unterstützungen (grün) und Widerstände (rot) als gepunktete Linien im Kurschart
+  function stufenZeichnen(einordnung) {
+    const serie = zustand.serien.kerzen;
+    for (const linie of zustand.stufen) serie.removePriceLine(linie);
+    zustand.stufen = [];
+    if (!einordnung) return;
+    const LWC = window.LightweightCharts;
+    const zeichnen = (liste, farbe, kuerzel) => {
+      for (const s of liste || []) {
+        zustand.stufen.push(serie.createPriceLine({
+          price: s.preis, color: farbe, lineWidth: 1, lineStyle: LWC.LineStyle.Dotted, axisLabelVisible: true, title: kuerzel,
+        }));
+      }
+    };
+    zeichnen(einordnung.unterstuetzungen, FARBEN.steigend, "U");
+    zeichnen(einordnung.widerstaende, FARBEN.fallend, "W");
   }
 
   function seriendatenLeeren() {
@@ -163,6 +185,7 @@
     for (const serie of Object.values(zustand.serien)) {
       serie.setData([]);
     }
+    stufenZeichnen(null);
   }
 
   function zusammenfassungText(daten) {
@@ -176,6 +199,18 @@
       z.macd.lage === null ? "MACD: nicht berechenbar" : `MACD: ${zahl(z.macd.linie, 2)} · Signal ${zahl(z.macd.signal, 2)} (${z.macd.lage})`,
       z.volumen.verhaeltnis === null ? "Volumen: nicht berechenbar" : `Volumen: ${zahl(z.volumen.verhaeltnis, 2)}× Durchschnitt der letzten 20 Kerzen (${z.volumen.einordnung})`,
     ];
+    const e = daten.einordnung;
+    if (e) {
+      const stufen = (liste) => (liste && liste.length
+        ? liste.map((s) => `${zahl(s.preis, 2)} (${s.beruehrungen}×, ${s.abstand_prozent > 0 ? "+" : ""}${zahl(s.abstand_prozent, 1)} %)`).join(" · ")
+        : "keine im angezeigten Bereich");
+      zeilen.push(
+        "Trend: " + e.trend.text,
+        "Unterstützungen: " + stufen(e.unterstuetzungen),
+        "Widerstände: " + stufen(e.widerstaende),
+        e.atr14 ? `Schwankungsbreite (ATR 14): ${zahl(e.atr14.wert, 2)} USDT ≈ ${zahl(e.atr14.prozent, 2)} % je Kerze` : "Schwankungsbreite (ATR 14): nicht berechenbar",
+      );
+    }
     return zeilen.join("\n");
   }
 
@@ -221,6 +256,12 @@
         throw new Error("Unvollständige Antwort des Workers.");
       }
       chartFuellen(daten, neueAuswahl);
+      // Eine KI-Analyse gilt nur für Paar und Intervall, für die sie angefordert wurde
+      if (neueAuswahl) element("ki-analyse-text").textContent = "";
+      if (!zustand.analyseStatusGeladen) {
+        zustand.analyseStatusGeladen = true;
+        analyseStatusLaden();
+      }
       // Für die Kursverlauf-Kachel im Cockpit (dieselben echten Daten, keine eigene Anfrage)
       window.dispatchEvent(new CustomEvent("jarvis-kerzen", { detail: daten }));
       zustand.schluessel = schluessel;
@@ -253,13 +294,76 @@
     }
   }
 
+  // ---------- KI-Analyse nur auf ausdrückliche Anfrage (kostenpflichtig, Tageslimit im Worker) ----------
+  function zaehlerZeigen(heute, limit, grund) {
+    element("ki-analyse-zaehler").textContent = (heute === null || heute === undefined
+      ? "Heute: unbekannt"
+      : `Heute ${heute} von ${limit} KI-Analysen genutzt`) + (grund ? " · " + grund : "");
+  }
+
+  // Der Produktions-Worker enthält keine KI-Analyse (/analyse antwortet mit 404): Knopf sperren statt Fehler zeigen
+  function kiAnalyseFehlt() {
+    element("ki-analyse-zaehler").textContent = "KI-Analyse ist im verbundenen Worker nicht enthalten.";
+    element("ki-analyse-knopf").disabled = true;
+  }
+
+  async function analyseStatusLaden() {
+    if (!verbunden()) return;
+    try {
+      const s = await workerAnfrage("/analyse/status", { method: "GET" });
+      zaehlerZeigen(s.heute, s.limit, s.grund);
+      element("ki-analyse-knopf").disabled = false;
+    } catch (e) {
+      if (e.message === "Unbekannter Endpunkt.") {
+        kiAnalyseFehlt();
+        return;
+      }
+      element("ki-analyse-zaehler").textContent = "Zähler nicht abrufbar: " + e.message;
+    }
+  }
+
+  async function kiAnalyseAnfordern() {
+    const knopf = element("ki-analyse-knopf");
+    const feld = element("ki-analyse-text");
+    if (!verbunden()) {
+      feld.textContent = "Bitte zuerst die Verbindung einrichten.";
+      return;
+    }
+    const symbol = element("analyse-symbol").value;
+    const intervall = element("analyse-intervall").value;
+    const bestaetigt = window.confirm(`KI-Analyse für ${symbol} · ${intervall} anfordern?\n\n`
+      + "Das ist eine kostenpflichtige Claude-Anfrage (geschätzt ca. 0,04 Cent), höchstens 20 pro Tag.\n"
+      + "Die Antwort ist eine Erklärung der Kennzahlen, kein Handelssignal.");
+    if (!bestaetigt) {
+      feld.textContent = "KI-Analyse nicht angefordert.";
+      return;
+    }
+    knopf.disabled = true;
+    feld.textContent = "JARVIS analysiert die Kennzahlen …";
+    try {
+      const d = await workerAnfrage("/analyse", { method: "POST", body: JSON.stringify({ symbol, intervall, bestaetigt: true }) });
+      // Nur als Text einfügen, nie als HTML
+      feld.textContent = d.analyse + "\n\n" + d.hinweis;
+      zaehlerZeigen(d.heute, d.limit);
+    } catch (e) {
+      feld.textContent = "KI-Analyse nicht möglich: " + e.message;
+      if (e.message === "Unbekannter Endpunkt.") {
+        kiAnalyseFehlt();
+        return;
+      }
+      analyseStatusLaden();
+    }
+    knopf.disabled = false;
+  }
+
+  element("ki-analyse-knopf").addEventListener("click", kiAnalyseAnfordern);
   element("analyse-symbol").addEventListener("change", () => analyseLaden());
   element("analyse-intervall").addEventListener("change", () => analyseLaden());
   element("analyse-aktualisieren").addEventListener("click", () => analyseLaden({ erzwingen: true }));
 
   window.analyseLaden = analyseLaden;
   // Nur für die lokalen Tests: lesender Zugriff auf das Chart-Objekt
-  window.analyseIntern = { chart: () => zustand.chart };
+  window.analyseIntern = { chart: () => zustand.chart, stufen: () => zustand.stufen.length };
 
   analyseLaden();
   setInterval(function () {

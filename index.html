@@ -553,13 +553,20 @@
       display: grid;
       gap: 14px;
       grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-      grid-template-areas: "notaus konto" "notaus order";
+      grid-template-areas: "modus modus" "notaus konto" "notaus order" "paper paper";
       align-items: start;
     }
     .notaus-karte { grid-area: notaus; border-color: rgba(255, 107, 107, 0.5); }
     .notaus-karte::before, .notaus-karte::after { border-color: var(--fehler); }
     .konto-karte { grid-area: konto; }
     .order-karte { grid-area: order; }
+    .paper-karte { grid-area: paper; }
+    .paper-frage .paper-frage-knoepfe { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .modus-karte { grid-area: modus; }
+    #handelsmodus-kopf { margin: 0 0 8px; font-family: var(--mono); font-size: 16px; color: var(--text); }
+    #handelsmodus-details { margin: 0; padding: 0; list-style: none; font-size: 14px; }
+    #handelsmodus-details li { padding: 2px 0; }
+    .ki-analyse { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linie); }
     .testnet-hinweis { margin: 0 0 12px; color: var(--warn); font-size: 14px; }
     .notaus {
       width: 100%;
@@ -649,7 +656,7 @@
       .fuss { display: none; }
       .chart { height: 520px; }
       .analyse-zweispaltig { grid-template-columns: minmax(0, 1fr); }
-      .trading-raster { grid-template-columns: minmax(0, 1fr); grid-template-areas: "notaus" "konto" "order"; }
+      .trading-raster { grid-template-columns: minmax(0, 1fr); grid-template-areas: "modus" "notaus" "konto" "order" "paper"; }
       .notaus { min-height: 80px; font-size: 19px; }
     }
 
@@ -664,7 +671,7 @@
 <header class="kopf">
   <div class="marke">
     <span class="logo">J.A.R.V.I.S.</span>
-    <span class="kopf-untertitel">v0.7 · Persönlicher KI-Assistent</span>
+    <span class="kopf-untertitel">v0.9 · Persönlicher KI-Assistent</span>
   </div>
   <nav class="reiter" role="tablist" aria-label="Bereiche">
     <button type="button" role="tab" id="reiter-cockpit" aria-controls="ansicht-cockpit" data-ansicht="cockpit">
@@ -694,6 +701,7 @@
           <li id="ki-status">● KI-Verbindung: NICHT VERBUNDEN</li>
           <li id="markt-status">● Marktdaten: NICHT VERBUNDEN</li>
           <li id="trading-status">● Trading: DEAKTIVIERT</li>
+          <li id="handelsmodus-status">● Handelsmodus: KEIN HANDEL AKTIV</li>
         </ul>
       </div>
     </article>
@@ -704,7 +712,7 @@
         <ul class="funktionen">
           <li><span>Sprachausgabe (Vorlesen)</span><b id="vorlesen-status" class="aus">wird geprüft</b></li>
           <li><span>Spracheingabe</span><b id="spracheingabe-status" class="aus">wird geprüft</b></li>
-          <li><span>Paper-Trading</span><b class="aus">noch nicht eingerichtet</b></li>
+          <li><span>Paper-Trading</span><b id="paper-funktion" class="aus">noch nicht verbunden</b></li>
           <li><span>Automatik-Trading</span><b class="gesperrt">gesperrt</b></li>
           <li><span>Echtgeld-Handel</span><b class="gesperrt">ausgeschlossen</b></li>
         </ul>
@@ -876,6 +884,15 @@
         <p id="analyse-zusammenfassung" class="info"></p>
         <ul id="analyse-hinweise"></ul>
       </div>
+      <div class="ki-analyse">
+        <div class="analyse-steuerung">
+          <button class="knopf zweit" id="ki-analyse-knopf" type="button">KI-Analyse anfordern</button>
+          <span id="ki-analyse-zaehler" class="klein"></span>
+        </div>
+        <p class="klein">Nur auf ausdrückliche Anfrage mit Bestätigung: kostenpflichtige Claude-Anfrage (geschätzt ca. 0,04 Cent),
+          höchstens 20 pro Tag. Erklärt die Kennzahlen – keine Anlageberatung, kein Handelssignal.</p>
+        <p id="ki-analyse-text" class="info" aria-live="polite"></p>
+      </div>
     </div>
   </article>
 </section>
@@ -883,6 +900,18 @@
 <!-- ===================== TRADING ===================== -->
 <section id="ansicht-trading" role="tabpanel" aria-labelledby="reiter-trading" hidden>
   <div class="trading-raster">
+    <article class="karte modus-karte" aria-live="polite">
+      <h2 class="karte-titel">Handelsmodus <span class="zu">]</span><span class="zusatz">Was ist gerade aktiv?</span></h2>
+      <div class="karte-inhalt">
+        <p id="handelsmodus-kopf">Kein Handel aktiv.</p>
+        <ul id="handelsmodus-details">
+          <li id="modus-paper">Paper-Trading (Simulation): nicht verbunden</li>
+          <li id="modus-testnet">Binance-Testnet: nicht verbunden</li>
+          <li>Echtgeld-Handel: ausgeschlossen · Automatik: AUS</li>
+        </ul>
+      </div>
+    </article>
+
     <article class="karte notaus-karte">
       <h2 class="karte-titel">Not-Aus <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
       <div class="karte-inhalt">
@@ -920,6 +949,35 @@
         </div>
         <p id="order-ergebnis" class="info"></p>
         <p id="diagnose-ergebnis" class="info"></p>
+      </div>
+    </article>
+
+    <article class="karte paper-karte">
+      <h2 class="karte-titel">Paper-Trading <span class="zu">]</span><span class="zusatz">Simulation · 10.000 USDT Spielgeld</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Reine Simulation im Worker-Speicher: keine Börse, kein Testnet, kein echtes Geld.
+          Kurse aus öffentlichen Kraken-Marktdaten, simulierte Gebühr 0,1 % je Order. Nur manuell, keine Automatik.</p>
+        <p class="klein">Per Sprache oder Chat: „Paper kaufe Bitcoin für 100 Dollar“, „Paper verkaufe alles Ethereum“,
+          „Paper Kontostand“, „Paper Positionen“. Vor jeder Order liest JARVIS Markt, Richtung und Betrag vor und wartet auf „Ja“.</p>
+        <p id="paper-uebersicht" class="info">Noch nicht geladen.</p>
+        <table id="paper-positionen"></table>
+        <div class="order-zeile">
+          <select class="feld" id="paper-symbol" aria-label="Handelspaar (Simulation)"><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          <select class="feld" id="paper-seite" aria-label="Seite (Simulation)">
+            <option value="BUY">Kaufen</option>
+            <option value="SELL">Verkaufen</option>
+          </select>
+          <input class="feld" type="number" id="paper-betrag" value="100" min="10" step="1" aria-label="Betrag in USDT (Simulation)"> USDT
+        </div>
+        <div class="order-zeile">
+          <button class="knopf" id="paper-senden" type="button">Simuliert ausführen</button>
+          <button class="knopf zweit" id="paper-alles" type="button">Position ganz verkaufen</button>
+          <button class="knopf zweit" id="paper-aktualisieren" type="button">Aktualisieren</button>
+        </div>
+        <p id="paper-ergebnis" class="info"></p>
+        <h3 class="stimmtest-titel">Verlauf der Simulation</h3>
+        <ol id="paper-historie" class="stimmtest-protokoll"><li>Noch keine simulierten Orders.</li></ol>
+        <button class="knopf zweit" id="paper-reset" type="button" style="margin-top: 10px;">Simulation auf 10.000 USDT zurücksetzen</button>
       </div>
     </article>
   </div>
@@ -1072,6 +1130,10 @@ async function jarvisAntwort(text) {
   if (ausFeld) eingabe.value = "";
   nachrichtAnzeigen(befehl, "nutzer");
 
+  // Paper-Sprachbefehle (Kauf, Verkauf, Kontostand, Positionen, Bestätigung) werden hier lokal behandelt:
+  // nie an die KI, nie an eine Börse – Orders nur über /paper/order und erst nach ausdrücklichem „Ja“.
+  if (await paperSprachbefehl(befehl)) return;
+
   if (!verbindung.url || !verbindung.code) {
     const text = offlineAntwort(befehl);
     nachrichtAnzeigen("JARVIS: " + text, "jarvis");
@@ -1178,11 +1240,365 @@ async function tradingLaden() {
     kopfHandelSetzen("getrennt");
     knotenSetzen("knoten-markt", "aus", "nicht verbunden");
     knotenSetzen("knoten-handel", "aus", "nicht verbunden");
+    paperFunktion("noch nicht verbunden", "aus");
+    handelsmodusSetzen("paper", null);
+    handelsmodusSetzen("testnet", null);
     return;
   }
   await kurseLaden(); // zuerst, damit Positionswerte berechnet werden können
-  await Promise.allSettled([tradingStatusLaden(), kontoLaden(), protokollLaden()]);
+  await Promise.allSettled([tradingStatusLaden(), kontoLaden(), protokollLaden(), paperLaden()]);
 }
+
+// ---------- Paper-Sprachbefehle (Spielgeld-Simulation, nie Börse/Testnet) ----------
+// Erkannt werden nur Sätze mit „Paper“ (bzw. Papier, Simulation, Spielgeld), z. B.
+//   „Paper kaufe Bitcoin für 100 Dollar“ · „Paper verkaufe alles Ethereum“ · „Paper Kontostand“ · „Paper Positionen“.
+// Vor jeder Order liest JARVIS Markt, Richtung und Betrag vor und wartet auf „Ja“ (oder den Knopf „Ausführen“).
+// Unklare Befehle lösen nie eine Order aus; Fragen ohne Kauf/Verkauf/Kontostand gehen wie bisher an die KI.
+const PAPER_SPRACHE = { gueltigMs: 60000, nachfrageMs: 300000 };
+let paperOffen = null;           // { id, symbol, seite, betrag, alles, text, element, uhr }
+let paperLetzteFrage = 0;        // Zeitpunkt der letzten Rückfrage (für „Ja“ ohne offene Order)
+let paperSprachLaeuft = false;   // eine bestätigte Order wird gerade simuliert
+let paperFrageNummer = 0;
+
+const PAPER_MAERKTE = [
+  { symbol: "BTCUSDT", name: "Bitcoin", muster: /\b(bitcoins?|btc|xbt)\b/ },
+  { symbol: "ETHUSDT", name: "Ethereum", muster: /\b(ethereum|etherium|ether|eth)\b/ },
+];
+const PAPER_ZAHLWOERTER = {
+  zehn: 10, zwanzig: 20, "dreißig": 30, dreissig: 30, vierzig: 40, "fünfzig": 50, fuenfzig: 50, sechzig: 60,
+  siebzig: 70, achtzig: 80, neunzig: 90, hundert: 100, einhundert: 100, zweihundert: 200, dreihundert: 300,
+  vierhundert: 400, "fünfhundert": 500, tausend: 1000, eintausend: 1000,
+};
+
+function paperNormalisieren(text) {
+  return text.toLowerCase().replace(/[„“”"'!.;:]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+// Liefert { art: "kauf"|"verkauf"|"stand"|"positionen"|"unklar", … } oder null (kein Paper-Befehl)
+function paperBefehlErkennen(original) {
+  const text = paperNormalisieren(original);
+  if (!/\b(paper|papier|simulation|simuliert|simulierte|spielgeld)\b/.test(text)) return null;
+  const verkauf = /\b(verkauf\w*|sell)\b/.test(text);
+  const kauf = /\b(kauf|kaufe|kaufen|kauft|buy)\b/.test(text);
+  const stand = /\b(kontostand|guthaben|stand|uebersicht|wie viel)\b|übersicht/.test(text);
+  const positionen = /\bpositionen?\b/.test(text);
+  if (!kauf && !verkauf) {
+    if (stand || positionen) return { art: stand && positionen ? "beides" : stand ? "stand" : "positionen" };
+    return null; // z. B. „Was ist Paper-Trading?“ → normale Frage an die KI
+  }
+  // Fragen wie „Soll ich Paper Bitcoin kaufen?“ sind keine Befehle
+  if (/^(soll|sollte|sollten|würde|wuerde|würdest|ist|was|wie|warum|wann|lohnt|kann|könnte|meinst)\b/.test(text)) return null;
+  if (kauf && verkauf) return { art: "unklar", grund: "Kauf und Verkauf zugleich genannt" };
+  const maerkte = PAPER_MAERKTE.filter((m) => m.muster.test(text));
+  if (maerkte.length !== 1) return { art: "unklar", grund: maerkte.length ? "mehrere Märkte genannt" : "Markt fehlt (Bitcoin oder Ethereum)" };
+  const markt = maerkte[0];
+  const seite = verkauf ? "SELL" : "BUY";
+  if (/\b(euro|eur)\b|€/.test(text)) return { art: "unklar", grund: "Beträge bitte in USDT oder Dollar, nicht in Euro" };
+  const alles = verkauf && /\b(alles|alle|komplett|gesamte|ganze|vollständig)\b/.test(text);
+  const zahlen = [];
+  for (const m of text.matchAll(/(\d{1,3}(?:[.\s]\d{3})+|\d+)(?:,(\d+))?/g)) {
+    zahlen.push(Number(m[1].replace(/[.\s]/g, "") + (m[2] ? "." + m[2] : "")));
+  }
+  for (const wort of text.split(" ")) if (PAPER_ZAHLWOERTER[wort]) zahlen.push(PAPER_ZAHLWOERTER[wort]);
+  if (alles) {
+    if (zahlen.length) return { art: "unklar", grund: "„alles“ und ein Betrag zugleich genannt" };
+    return { art: "verkauf", symbol: markt.symbol, name: markt.name, seite, alles: true };
+  }
+  if (zahlen.length !== 1) return { art: "unklar", grund: zahlen.length ? "mehrere Beträge genannt" : "Betrag fehlt" };
+  if (!/\b(usdt|usd|dollar|tether)\b|\$/.test(text)) return { art: "unklar", grund: "Einheit fehlt – bitte Betrag in USDT oder Dollar nennen" };
+  const betrag = zahlen[0];
+  if (!(betrag >= 10)) return { art: "unklar", grund: "Mindestbetrag ist 10 USDT" };
+  return { art: seite === "BUY" ? "kauf" : "verkauf", symbol: markt.symbol, name: markt.name, seite, betrag, alles: false };
+}
+
+function paperBestaetigungsArt(text) {
+  const t = paperNormalisieren(text).replace(/,/g, "");
+  if (/^(ja|jawohl|ja bitte|bestätigen|bestätige|bestätigt|ja bestätigen|ja bestätigt|ausführen|ja ausführen|ja bitte ausführen|order ausführen|ja order ausführen)$/.test(t)) return "ja";
+  if (/^(nein|nein danke|abbrechen|abbruch|stopp|stop|nicht ausführen|verwerfen|nein abbrechen)$/.test(t)) return "nein";
+  return null;
+}
+
+// JARVIS antwortet lokal (Verlauf, Untertitel, Vorlesen). erzwingen: auch bei „Vorlesen: aus“ (Order-Rückfrage)
+function paperAntworten(text, art, erzwingen) {
+  const element = nachrichtAnzeigen("JARVIS: " + text, "jarvis" + (art ? " " + art : ""));
+  untertitelSetzen(null, text);
+  jarvisSprechen(text, erzwingen ? {} : undefined);
+  return element;
+}
+
+function paperBetragText(o) {
+  return o.alles ? "die gesamte simulierte " + o.name + "-Position" : zahl(o.betrag, 2) + " USDT Spielgeld";
+}
+
+function paperOffenBeenden() {
+  if (!paperOffen) return null;
+  const offen = paperOffen;
+  paperOffen = null;
+  clearTimeout(offen.uhr);
+  for (const k of offen.element.querySelectorAll("button")) k.disabled = true;
+  return offen;
+}
+
+function paperRueckfrage(o) {
+  paperOffenBeenden();
+  const id = ++paperFrageNummer;
+  const richtung = o.seite === "BUY" ? "Kauf" : "Verkauf";
+  const text = "Paper-Order zur Bestätigung: " + richtung + " " + o.name + " (" + o.symbol + "), "
+    + (o.alles ? "Verkauf der gesamten simulierten Position" : "Betrag " + zahl(o.betrag, 2) + " USDT")
+    + ", zum aktuellen Kraken-Kurs. Nur Simulation mit Spielgeld, keine Börse. "
+    + "Sagen oder tippen Sie „Ja“ zum Ausführen oder „Nein“ zum Abbrechen.";
+  const element = paperAntworten(text, "paper-frage", true);
+  const knoepfe = document.createElement("div");
+  knoepfe.className = "paper-frage-knoepfe";
+  const ja = Object.assign(document.createElement("button"), { type: "button", className: "knopf", textContent: "Ausführen (Simulation)" });
+  const nein = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", textContent: "Abbrechen" });
+  ja.dataset.paperFrage = String(id);
+  ja.addEventListener("click", () => paperBestaetigen(id));
+  nein.addEventListener("click", () => paperAbbrechen(id));
+  knoepfe.append(ja, nein);
+  element.appendChild(knoepfe);
+  paperOffen = { ...o, id, element };
+  paperOffen.uhr = setTimeout(() => {
+    if (!paperOffen || paperOffen.id !== id) return;
+    paperOffenBeenden();
+    paperAntworten("Die Paper-Order ist verfallen, weil innerhalb von " + Math.round(PAPER_SPRACHE.gueltigMs / 1000)
+      + " Sekunden keine Bestätigung kam. Es wurde nichts ausgeführt.");
+  }, PAPER_SPRACHE.gueltigMs);
+  paperLetzteFrage = Date.now();
+}
+
+function paperAbbrechen(id) {
+  if (!paperOffen || (id !== undefined && paperOffen.id !== id)) return;
+  paperOffenBeenden();
+  paperAntworten("Paper-Order abgebrochen. Es wurde nichts ausgeführt.");
+}
+
+async function paperBestaetigen(id) {
+  if (paperSprachLaeuft || !paperOffen || (id !== undefined && paperOffen.id !== id)) return;
+  const o = paperOffenBeenden(); // zuerst schließen: ein zweites „Ja“ findet keine offene Order mehr
+  paperSprachLaeuft = true;
+  const platzhalter = nachrichtAnzeigen("JARVIS simuliert die Paper-Order …", "jarvis denkt");
+  try {
+    const d = await workerAnfrage("/paper/order", {
+      method: "POST",
+      body: JSON.stringify(o.alles ? { symbol: o.symbol, seite: "SELL", alles: true } : { symbol: o.symbol, seite: o.seite, betrag_usdt: o.betrag }),
+    });
+    platzhalter.remove();
+    const a = d.ausfuehrung;
+    paperAntworten("Simuliert: " + (a.seite === "BUY" ? "Kauf von " : "Verkauf von ") + zahl(a.menge, 8) + " "
+      + a.symbol.replace(/USDT$/, "") + " für " + zahl(a.betrag_usdt, 2) + " USDT zum Kurs " + zahl(a.preis, 2)
+      + " (" + a.quelle + "), Gebühr " + zahl(a.gebuehr_usdt, 2) + " USDT. Verfügbares Spielgeld: " + zahl(d.stand.usdt, 2) + " USDT.");
+    paperAnzeigen(d.stand);
+  } catch (e) {
+    platzhalter.remove();
+    // TypeError = keine Antwort vom Worker; sonst hat der Worker die Order abgelehnt (nichts gespeichert)
+    paperAntworten(e instanceof TypeError
+      ? "Keine Antwort vom Worker – ob die Simulation gespeichert wurde, ist unklar. Bitte den Paper-Stand prüfen."
+      : "Paper-Order nicht ausgeführt: " + e.message, "fehler");
+  } finally {
+    paperSprachLaeuft = false;
+  }
+}
+
+async function paperStandSagen(art) {
+  try {
+    const s = await workerAnfrage("/paper/status", { method: "GET" });
+    paperAnzeigen(s);
+    const teile = [];
+    if (art !== "positionen") {
+      teile.push("Paper-Kontostand: " + zahl(s.usdt, 2) + " USDT Spielgeld frei"
+        + (s.gesamtwert_usdt === null ? "" : ", Gesamtwert " + zahl(s.gesamtwert_usdt, 2) + " USDT, "
+          + (s.gewinn_usdt >= 0 ? "Gewinn " : "Verlust ") + zahl(Math.abs(s.gewinn_usdt), 2) + " USDT seit Start") + ".");
+    }
+    if (art !== "stand") {
+      teile.push(s.positionen.length
+        ? "Simulierte Positionen: " + s.positionen.map((p) => zahl(p.menge, 8) + " " + p.symbol.replace(/USDT$/, "")
+          + (p.wert_usdt === null ? "" : " im Wert von " + zahl(p.wert_usdt, 2) + " USDT")).join(", ") + "."
+        : "Keine simulierten Positionen.");
+    }
+    if (s.hinweis) teile.push(s.hinweis);
+    paperAntworten(teile.join(" "));
+  } catch (e) {
+    paperAntworten("Paper-Stand nicht abrufbar: " + e.message, "fehler");
+  }
+}
+
+// true = lokal behandelt (nichts an die KI); false = normaler Chat
+async function paperSprachbefehl(text) {
+  const antwort = paperBestaetigungsArt(text);
+  if (paperOffen) {
+    if (antwort === "ja") { await paperBestaetigen(); return true; }
+    if (antwort === "nein") { paperAbbrechen(); return true; }
+    // Alles andere ist keine Bestätigung: offene Order verwerfen, dann den Text normal behandeln
+    paperOffenBeenden();
+    nachrichtAnzeigen("JARVIS: Offene Paper-Order verworfen – keine eindeutige Bestätigung. Es wurde nichts ausgeführt.", "jarvis");
+  } else if (antwort && Date.now() - paperLetzteFrage < PAPER_SPRACHE.nachfrageMs) {
+    paperAntworten(antwort === "ja"
+      ? "Es gibt keine offene Paper-Order zu bestätigen. Es wird nichts ausgeführt."
+      : "Es gibt keine offene Paper-Order.");
+    return true;
+  }
+  const befehl = paperBefehlErkennen(text);
+  if (!befehl) return false;
+  if (!verbunden()) {
+    paperAntworten("Paper-Trading braucht die Verbindung zum Worker. Es wurde nichts ausgeführt.");
+    return true;
+  }
+  if (befehl.art === "unklar") {
+    paperAntworten("Diesen Paper-Befehl habe ich nicht eindeutig verstanden (" + befehl.grund + "). Es wurde nichts ausgeführt. "
+      + "Beispiele: „Paper kaufe Bitcoin für 100 Dollar“, „Paper verkaufe alles Ethereum“, „Paper Kontostand“, „Paper Positionen“.");
+    return true;
+  }
+  if (befehl.art === "kauf" || befehl.art === "verkauf") {
+    paperRueckfrage(befehl);
+    return true;
+  }
+  await paperStandSagen(befehl.art);
+  return true;
+}
+
+// ---------- Handelsmodus: zeigt, ob Paper-Trading, Binance-Testnet oder kein Handel aktiv ist ----------
+// paper: "bereit" | "fehlt" | "fehler" | null · testnet: "gesperrt" | "frei" | "fehler" | null (null = nicht verbunden)
+const handelsmodus = { paper: null, testnet: null };
+
+function handelsmodusSetzen(teil, wert) {
+  handelsmodus[teil] = wert;
+  const paper = handelsmodus.paper === "bereit";
+  const testnet = handelsmodus.testnet === "frei";
+  const kopf = paper && testnet ? "Aktiv: Paper-Trading (Simulation) und manuelles Binance-Testnet."
+    : paper ? "Aktiv: Paper-Trading (Spielgeld-Simulation). Testnet-Orders sind gesperrt."
+    : testnet ? "Aktiv: nur manuelles Binance-Testnet (Spielgeld im Testnet)."
+    : "Kein Handel aktiv.";
+  document.getElementById("handelsmodus-kopf").textContent = kopf;
+  document.getElementById("modus-paper").textContent = "Paper-Trading (Simulation): " + ({
+    bereit: "aktiv – simulierte Orders nur mit Spielgeld, keine Börse",
+    fehlt: "im verbundenen Worker nicht enthalten",
+    fehler: "derzeit nicht abrufbar",
+  }[handelsmodus.paper] || "nicht verbunden");
+  document.getElementById("modus-testnet").textContent = "Binance-Testnet: " + ({
+    gesperrt: "gesperrt durch Not-Aus – möglich ist nur „Nur prüfen“",
+    frei: "manuelle Orders möglich (Testnet-Spielgeld, Limits gelten)",
+    fehler: "Status unbekannt",
+  }[handelsmodus.testnet] || "nicht verbunden");
+  statusZeileSetzen("handelsmodus-status",
+    "● Handelsmodus: " + (paper && testnet ? "PAPER + TESTNET" : paper ? "PAPER-TRADING (SIMULATION)" : testnet ? "NUR TESTNET" : "KEIN HANDEL AKTIV"),
+    paper || testnet ? "#7affc4" : "");
+}
+
+// ---------- Paper-Trading (reine Simulation im Worker, 10.000 USDT Spielgeld) ----------
+function paperAnzeigen(s) {
+  const usd = (w) => (w === null || w === undefined ? "–" : zahl(w, 2) + " USDT");
+  const vorzeichen = (w) => (w > 0 ? "+" : "");
+  document.getElementById("paper-uebersicht").textContent = [
+    "Gesamtwert: " + usd(s.gesamtwert_usdt) + (s.gewinn_usdt === null ? "" : "  (" + vorzeichen(s.gewinn_usdt) + zahl(s.gewinn_usdt, 2)
+      + " USDT · " + vorzeichen(s.gewinn_prozent) + zahl(s.gewinn_prozent, 2) + " % seit Start)"),
+    "Verfügbares Spielgeld: " + usd(s.usdt) + " · Startkapital: " + usd(s.startkapital) + " · Gebühr: " + zahl(s.gebuehr_prozent, 2) + " %",
+    s.hinweis || "",
+  ].filter(Boolean).join("\n");
+  tabelleFuellen("paper-positionen", s.positionen.length
+    ? s.positionen.map((p) => [
+      zelle(p.symbol),
+      zelle(zahl(p.menge, 8), "zahl"),
+      zelle(usd(p.wert_usdt), "zahl"),
+      zelle(p.gewinn_usdt === null ? "–" : vorzeichen(p.gewinn_usdt) + zahl(p.gewinn_usdt, 2) + " USDT", "zahl " + (p.gewinn_usdt >= 0 ? "plus" : "minus")),
+    ])
+    : [[zelle("Keine simulierten Positionen.", "leer")]]);
+  const liste = document.getElementById("paper-historie");
+  liste.replaceChildren(...(s.historie.length ? s.historie : [null]).map((h) => {
+    const li = document.createElement("li");
+    li.textContent = h
+      ? new Date(h.zeit).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) + " · " + (h.seite === "BUY" ? "Kauf " : "Verkauf ")
+        + h.symbol + " · " + zahl(h.betrag_usdt, 2) + " USDT zu " + zahl(h.preis, 2) + " (Gebühr " + zahl(h.gebuehr_usdt, 2) + ", Kurs: " + h.quelle + ")"
+      : "Noch keine simulierten Orders.";
+    return li;
+  }));
+}
+
+function paperFunktion(text, klasse) {
+  const feld = document.getElementById("paper-funktion");
+  feld.textContent = text;
+  feld.className = klasse;
+}
+
+async function paperLaden() {
+  if (!verbunden()) {
+    paperFunktion("noch nicht verbunden", "aus");
+    return;
+  }
+  try {
+    const s = await workerAnfrage("/paper/status", { method: "GET" });
+    paperAnzeigen(s);
+    paperFunktion("Simulation bereit", "ok");
+    paperKnoepfeSperren(false);
+    handelsmodusSetzen("paper", "bereit");
+  } catch (e) {
+    // Ein älterer Worker ohne /paper-Routen antwortet mit 404
+    const fehlt = e.message === "Unbekannter Endpunkt.";
+    document.getElementById("paper-uebersicht").textContent = fehlt
+      ? "Paper-Trading ist im verbundenen Worker noch nicht enthalten (keine /paper-Routen). "
+        + "Die Simulation funktioniert erst mit einem Worker-Stand, der /paper enthält."
+      : "Paper-Trading nicht abrufbar: " + e.message;
+    paperFunktion(fehlt ? "nicht im Worker" : "nicht verfügbar", "aus");
+    paperKnoepfeSperren(fehlt);
+    handelsmodusSetzen("paper", fehlt ? "fehlt" : "fehler");
+  }
+}
+
+function paperKnoepfeSperren(gesperrt) {
+  for (const id of ["paper-senden", "paper-alles", "paper-reset"]) {
+    document.getElementById(id).disabled = gesperrt;
+  }
+}
+
+async function paperOrderSenden(alles) {
+  if (!verbunden()) return;
+  const ergebnis = document.getElementById("paper-ergebnis");
+  const symbol = document.getElementById("paper-symbol").value;
+  const seite = alles ? "SELL" : document.getElementById("paper-seite").value;
+  const betrag = Number(document.getElementById("paper-betrag").value);
+  // Beide Order-Knöpfe sperren, damit ein Doppelklick keine zweite Simulation auslöst
+  const knoepfe = ["paper-senden", "paper-alles"].map((id) => document.getElementById(id));
+  if (knoepfe.some((k) => k.disabled)) return;
+  knoepfe.forEach((k) => { k.disabled = true; });
+  ergebnis.style.color = "";
+  ergebnis.textContent = "Simuliere …";
+  try {
+    const d = await workerAnfrage("/paper/order", {
+      method: "POST",
+      body: JSON.stringify(alles ? { symbol, seite, alles: true } : { symbol, seite, betrag_usdt: betrag }),
+    });
+    const a = d.ausfuehrung;
+    ergebnis.style.color = "#7affc4";
+    ergebnis.textContent = "✔ Simuliert: " + (a.seite === "BUY" ? "Kauf " : "Verkauf ") + zahl(a.menge, 8) + " " + a.symbol.replace(/USDT$/, "")
+      + " für " + zahl(a.betrag_usdt, 2) + " USDT zu " + zahl(a.preis, 2) + " (Gebühr " + zahl(a.gebuehr_usdt, 2) + " USDT).";
+    paperAnzeigen(d.stand);
+  } catch (e) {
+    ergebnis.style.color = "#ff9b9b";
+    ergebnis.textContent = "✖ " + e.message;
+  } finally {
+    knoepfe.forEach((k) => { k.disabled = false; });
+  }
+}
+
+async function paperZuruecksetzen() {
+  if (!verbunden()) return;
+  if (!confirm("Simulation wirklich auf 10.000 USDT Spielgeld zurücksetzen?\nPositionen und Verlauf der Simulation gehen verloren.")) return;
+  const ergebnis = document.getElementById("paper-ergebnis");
+  try {
+    const d = await workerAnfrage("/paper/zuruecksetzen", { method: "POST", body: JSON.stringify({ bestaetigt: true }) });
+    ergebnis.style.color = "#7affc4";
+    ergebnis.textContent = "✔ Simulation zurückgesetzt.";
+    paperAnzeigen(d.stand);
+  } catch (e) {
+    ergebnis.style.color = "#ff9b9b";
+    ergebnis.textContent = "✖ " + e.message;
+  }
+}
+
+document.getElementById("paper-senden").addEventListener("click", () => paperOrderSenden(false));
+document.getElementById("paper-alles").addEventListener("click", () => paperOrderSenden(true));
+document.getElementById("paper-aktualisieren").addEventListener("click", paperLaden);
+document.getElementById("paper-reset").addEventListener("click", paperZuruecksetzen);
 
 async function kurseLaden() {
   try {
@@ -1216,6 +1632,7 @@ async function tradingStatusLaden() {
     knopf.classList.toggle("aktiv", s.notaus);
     kopfHandelSetzen(s.notaus ? "gesperrt" : "frei");
     knotenSetzen("knoten-handel", s.notaus ? "fehler" : "warn", s.notaus ? "gesperrt (Not-Aus)" : "frei, nur manuell");
+    handelsmodusSetzen("testnet", s.notaus ? "gesperrt" : "frei");
 
     const zeilen = [
       s.notaus ? "Handel GESPERRT" + (s.notaus_grund ? " (" + s.notaus_grund + ")" : "") : "Handel freigegeben (nur manuell)",
@@ -1247,6 +1664,7 @@ async function tradingStatusLaden() {
     statusZeileSetzen("trading-status", "● Trading: FEHLER", "#ff9b9b");
     kopfHandelSetzen("unbekannt");
     knotenSetzen("knoten-handel", "warn", "Status unbekannt");
+    handelsmodusSetzen("testnet", "fehler");
   }
 }
 
@@ -2238,6 +2656,8 @@ function jarvisSprechen(text, beobachter) {
 // sie nicht beenden. Sie endet durch erneuten Klick, nach ZEITEN.stille ohne Sprache oder nach ZEITEN.maximal.
 // Beendet der Erkennungsdienst die Sitzung vorher von selbst, wird sie innerhalb derselben Aufnahme höchstens
 // ZEITEN.fortsetzungen-mal neu gestartet – nie nach manuellem Stopp, Esc, Fehler, Vorlesen oder Verlassen der Seite.
+// Push-to-talk: Mikrofon-Knopf oder Leertaste (außerhalb von Eingabefeldern) gedrückt halten → Aufnahme läuft ohne
+// Stille-Grenze, Loslassen beendet sie und sendet. Ein kurzer Druck (< ZEITEN.halten) wirkt wie ein Klick.
 (function () {
   const knopf = document.getElementById("mikro");
   const knopfText = document.getElementById("mikro-text");
@@ -2248,9 +2668,9 @@ function jarvisSprechen(text, beobachter) {
   const kern = document.getElementById("kern");
   // Bei jedem Klick neu nachsehen: Unterstützung kann sich nicht ändern, Tests ersetzen sie aber
   const Erkennung = () => window.SpeechRecognition || window.webkitSpeechRecognition;
-  const ZEITEN = { stille: 5000, maximal: 60000, fortsetzungen: 5 };
+  const ZEITEN = { stille: 5000, maximal: 60000, fortsetzungen: 5, halten: 350 };
   // Normales Ende → automatisch senden. Abbruch (Esc, Vorlesen, Seite verlassen) oder Fehler → nur Vorschau.
-  const AUTOMATISCH_SENDEN = ["manuell", "stille", "maximal", "dienst"];
+  const AUTOMATISCH_SENDEN = ["manuell", "losgelassen", "stille", "maximal", "dienst"];
   let erkennung = null;   // laufende Sitzung des Erkennungsdienstes
   let aufnahme = null;    // eine ausdrücklich gestartete Aufnahme (kann mehrere Sitzungen umfassen)
   let zustand = "bereit";
@@ -2309,9 +2729,10 @@ function jarvisSprechen(text, beobachter) {
     feldStatus.textContent = da ? "vom Browser unterstützt" : "nicht unterstützt";
     feldStatus.className = da ? "ok" : "aus";
     knopf.setAttribute("aria-disabled", String(!da));
-    knopf.title = da ? "Spracheingabe starten (eine Äußerung, danach stoppt das Mikrofon)" : "Spracheingabe wird von diesem Browser nicht unterstützt";
+    knopf.title = da ? "Tippen: Aufnahme starten/stoppen · Gedrückt halten (oder Leertaste halten): Push-to-talk, Loslassen sendet" : "Spracheingabe wird von diesem Browser nicht unterstützt";
     document.getElementById("sprach-hinweis").textContent = da
-      ? "Hinweis: Die Spracheingabe nutzt den Erkennungsdienst Ihres Browseranbieters; dabei wird die Aufnahme dorthin übertragen."
+      ? "Push-to-talk: Mikrofon oder Leertaste gedrückt halten, Loslassen sendet. "
+        + "Hinweis: Die Spracheingabe nutzt den Erkennungsdienst Ihres Browseranbieters; dabei wird die Aufnahme dorthin übertragen."
       : "";
   }
 
@@ -2342,6 +2763,10 @@ function jarvisSprechen(text, beobachter) {
 
     sitzung.onstart = () => {
       if (sitzung !== erkennung) return;
+      if (aufnahme.ptt) {
+        zustandSetzen("zuhoeren", "Ich höre zu, solange Sie gedrückt halten … Loslassen sendet, Esc bricht ab.", "Zuhören – loslassen");
+        return;
+      }
       zustandSetzen("zuhoeren", aufnahme.fortsetzungen
         ? "Ich höre weiter zu … Zum Beenden erneut tippen, Esc bricht ab."
         : "Ich höre zu … Kurze Pausen sind möglich. Zum Beenden erneut tippen, Esc bricht ab.");
@@ -2363,6 +2788,8 @@ function jarvisSprechen(text, beobachter) {
     sitzung.onerror = (e) => {
       if (sitzung !== erkennung) return;
       if (e.error === "aborted") return; // eigener Abbruch (Esc, Vorlesen, Verlassen der Seite)
+      // Push-to-talk: Solange gedrückt gehalten wird, ist eine Sprechpause kein Fehler (Sitzung wird fortgesetzt)
+      if (e.error === "no-speech" && aufnahme.ptt) return;
       // „Keine Sprache“ nach bereits erkanntem Text ist ein normales Ende, kein Fehler
       if (e.error === "no-speech" && gesamtText()) { aufnahme.grund = "stille"; return; }
       aufnahme.fehler = FEHLER[e.error] || "Spracheingabe fehlgeschlagen (" + e.error + "). Bitte den Text eintippen.";
@@ -2379,7 +2806,7 @@ function jarvisSprechen(text, beobachter) {
         && document.visibilityState !== "hidden"
         && aufnahme.fortsetzungen < ZEITEN.fortsetzungen
         && jetzt - aufnahme.beginn < ZEITEN.maximal
-        && jetzt - aufnahme.letzteSprache < ZEITEN.stille;
+        && (aufnahme.ptt || jetzt - aufnahme.letzteSprache < ZEITEN.stille);
       if (darfFortsetzen) {
         // Der Dienst hat von selbst gestoppt: kontrolliert innerhalb derselben Aufnahme fortsetzen
         aufnahme.fortsetzungen++;
@@ -2407,7 +2834,7 @@ function jarvisSprechen(text, beobachter) {
     if (!aufnahme || !erkennung || aufnahme.grund) return;
     const jetzt = Date.now();
     if (jetzt - aufnahme.beginn >= ZEITEN.maximal) beenden("maximal");
-    else if (jetzt - aufnahme.letzteSprache >= ZEITEN.stille) beenden("stille");
+    else if (!aufnahme.ptt && jetzt - aufnahme.letzteSprache >= ZEITEN.stille) beenden("stille");
   }
 
   // Beendet die Aufnahme ohne Fortsetzung. stop() liefert noch die letzten Ergebnisse, abort() nicht.
@@ -2415,7 +2842,7 @@ function jarvisSprechen(text, beobachter) {
     if (!aufnahme || aufnahme.grund) return;
     aufnahme.grund = grund;
     if (!erkennung) return;
-    if (grund === "manuell" || grund === "stille" || grund === "maximal") {
+    if (grund === "manuell" || grund === "losgelassen" || grund === "stille" || grund === "maximal") {
       zustandSetzen("verarbeiten", "Verarbeite die Aufnahme …");
       erkennung.stop();
     } else {
@@ -2438,6 +2865,8 @@ function jarvisSprechen(text, beobachter) {
     }
     const ursache = {
       manuell: "Aufnahme beendet.",
+      losgelassen: "Losgelassen – Aufnahme beendet.",
+      unterbrochen: "Halten wurde unterbrochen – Aufnahme abgebrochen.",
       stille: "Aufnahme nach " + sekunden(ZEITEN.stille) + " ohne Sprache beendet.",
       maximal: "Maximale Aufnahmedauer (" + sekunden(ZEITEN.maximal) + ") erreicht.",
       dienst: "Der Erkennungsdienst des Browsers hat die Aufnahme beendet.",
@@ -2459,7 +2888,7 @@ function jarvisSprechen(text, beobachter) {
     }
   }
 
-  function starten() {
+  function starten(ptt) {
     if (!Erkennung()) {
       zustandSetzen("fehler", "Spracheingabe wird von diesem Browser nicht unterstützt (verfügbar z. B. in aktuellen Versionen von Chrome und Edge). Die Texteingabe funktioniert weiterhin.");
       return;
@@ -2472,7 +2901,7 @@ function jarvisSprechen(text, beobachter) {
     vorlesenStoppen(); // keine Aufnahme während des Vorlesens
     vorschauSchliessen();
     const jetzt = Date.now();
-    aufnahme = { beginn: jetzt, letzteSprache: jetzt, gesammelt: "", sitzungFertig: [], sitzungVorlaeufig: "", fortsetzungen: 0, grund: null, fehler: null, uhr: null };
+    aufnahme = { beginn: jetzt, letzteSprache: jetzt, gesammelt: "", sitzungFertig: [], sitzungVorlaeufig: "", fortsetzungen: 0, grund: null, fehler: null, uhr: null, ptt: ptt === true };
     aufnahme.uhr = setInterval(zeitPruefen, Math.max(20, Math.min(250, ZEITEN.stille / 5)));
     zustandSetzen("verarbeiten", "Mikrofon wird gestartet – der Browser fragt ggf. nach der Freigabe.", "Starte …");
     erkennung = sitzungStarten();
@@ -2506,7 +2935,63 @@ function jarvisSprechen(text, beobachter) {
     knopf.focus();
   }
 
-  knopf.addEventListener("click", starten);
+  // ---------- Push-to-talk ----------
+  let halten = null; // { quelle: "zeiger" | "taste", beginn }
+
+  function haltenBeginnen(quelle) {
+    if (halten) return;
+    // Läuft bereits eine (angetippte) Aufnahme, beendet der Druck sie wie ein Klick
+    if (aufnahme) { beenden("manuell"); return; }
+    starten(true);
+    if (aufnahme) halten = { quelle, beginn: Date.now() };
+  }
+
+  function haltenEnden(quelle, abgebrochen) {
+    if (!halten || halten.quelle !== quelle) return;
+    const dauer = Date.now() - halten.beginn;
+    halten = null;
+    if (!aufnahme || aufnahme.grund) return;
+    if (abgebrochen) { beenden("unterbrochen"); return; }
+    if (dauer < ZEITEN.halten) {
+      // Kurzer Druck = Antippen: Aufnahme läuft wie bisher weiter (Stille-Grenze, erneutes Tippen beendet)
+      aufnahme.ptt = false;
+      aufnahme.letzteSprache = Date.now();
+      if (zustand === "zuhoeren") zustandSetzen("zuhoeren", "Ich höre zu … Kurze Pausen sind möglich. Zum Beenden erneut tippen, Esc bricht ab.");
+      return;
+    }
+    beenden("losgelassen");
+  }
+
+  // Leertaste nur, wenn kein Eingabefeld, Auswahlfeld oder anderer Knopf den Fokus hat
+  function leertasteFrei(ziel) {
+    if (!ziel || ziel === document.body || ziel === document.documentElement) return true;
+    if (ziel === knopf) return true;
+    return !(ziel.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON|A|SUMMARY)$/.test(ziel.tagName) || ziel.getAttribute("role") === "tab");
+  }
+
+  knopf.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    try { knopf.setPointerCapture(e.pointerId); } catch (_) { /* ältere Browser */ }
+    haltenBeginnen("zeiger");
+  });
+  knopf.addEventListener("pointerup", () => haltenEnden("zeiger", false));
+  knopf.addEventListener("pointercancel", () => haltenEnden("zeiger", true));
+  knopf.addEventListener("contextmenu", (e) => e.preventDefault()); // langes Drücken auf dem Tablet
+  // Klick per Tastatur (Enter/Leertaste auf dem Knopf) oder Skript: wie bisher umschalten.
+  // Zeiger-Klicks (detail > 0) sind schon über pointerdown/pointerup behandelt.
+  knopf.addEventListener("click", (e) => { if (e.detail === 0 && !halten) starten(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.code !== "Space" || e.repeat || e.ctrlKey || e.altKey || e.metaKey || !leertasteFrei(e.target)) return;
+    e.preventDefault();
+    haltenBeginnen("taste");
+  });
+  document.addEventListener("keyup", (e) => {
+    if (e.code !== "Space" || !halten || halten.quelle !== "taste") return;
+    e.preventDefault();
+    haltenEnden("taste", false);
+  });
+  window.addEventListener("blur", () => { if (halten) haltenEnden(halten.quelle, true); });
   sendenKnopf.addEventListener("click", () => senden());
   document.getElementById("sprach-uebernehmen").addEventListener("click", uebernehmen);
   document.getElementById("sprach-verwerfen").addEventListener("click", verwerfen);
