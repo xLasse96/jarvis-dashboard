@@ -769,10 +769,10 @@
           <button class="knopf" id="senden" onclick="jarvisAntwort()">SENDEN</button>
         </div>
 
-        <!-- Spracheingabe: Ergebnis nur als bearbeitbarer Vorschlag, Versand erst nach „Senden“ -->
+        <!-- Spracheingabe: nach normalem Ende automatisch gesendet; nach Abbruch bearbeitbarer Vorschlag mit „Senden“ -->
         <p id="sprach-status" class="sprach-status" role="status" aria-live="polite"></p>
         <div id="sprach-vorschau" class="sprach-vorschau" hidden>
-          <label for="sprach-text">Erkannter Text – bitte prüfen und bei Bedarf korrigieren. Verschickt wird erst mit „Senden“ (Strg + Enter).</label>
+          <label for="sprach-text">Erkannter Text – wird nach dem Ende der Aufnahme automatisch gesendet. Nach Abbruch (Esc) bitte prüfen und mit „Senden“ (Strg + Enter) abschicken.</label>
           <textarea id="sprach-text" class="feld" rows="2"></textarea>
           <div class="sprach-knoepfe">
             <button type="button" class="knopf" id="sprach-senden">Senden</button>
@@ -1061,13 +1061,15 @@ function verbindungSpeichern() {
   if (window.analyseLaden) analyseLaden({ erzwingen: true });
 }
 
-async function jarvisAntwort() {
+// text: optional (Spracheingabe) – sonst der Inhalt des Eingabefelds. Getippter Text bleibt dabei unberührt.
+async function jarvisAntwort(text) {
   const eingabe = document.getElementById("befehl");
   const knopf = document.getElementById("senden");
-  const befehl = eingabe.value.trim();
+  const ausFeld = typeof text !== "string";
+  const befehl = (ausFeld ? eingabe.value : text).trim();
   if (!befehl || knopf.disabled) return;
 
-  eingabe.value = "";
+  if (ausFeld) eingabe.value = "";
   nachrichtAnzeigen(befehl, "nutzer");
 
   if (!verbindung.url || !verbindung.code) {
@@ -1802,8 +1804,8 @@ ansichtZeigen(location.hash.slice(1));
 </script>
 <script>
 // ---------- Sprachbedienung ----------
-// Sprache dient ausschließlich der Texteingabe für den Chat: Erkannter Text erscheint in einer bearbeitbaren
-// Vorschau und wird erst nach ausdrücklichem „Senden“ verschickt. Es gibt keine Sprachbefehle – keine Orders,
+// Sprache dient ausschließlich der Texteingabe für den Chat: Erkannter Text wird nach normalem Ende der Aufnahme
+// als Chat-Nachricht gesendet; nach Abbruch bleibt er zur Prüfung in der Vorschau. Es gibt keine Sprachbefehle – keine Orders,
 // kein Not-Aus, keine Einstellungen per Sprache. Das Mikrofon startet nur per Klick und nur für eine Äußerung.
 
 const sprache = {
@@ -2247,6 +2249,8 @@ function jarvisSprechen(text, beobachter) {
   // Bei jedem Klick neu nachsehen: Unterstützung kann sich nicht ändern, Tests ersetzen sie aber
   const Erkennung = () => window.SpeechRecognition || window.webkitSpeechRecognition;
   const ZEITEN = { stille: 5000, maximal: 60000, fortsetzungen: 5 };
+  // Normales Ende → automatisch senden. Abbruch (Esc, Vorlesen, Seite verlassen) oder Fehler → nur Vorschau.
+  const AUTOMATISCH_SENDEN = ["manuell", "stille", "maximal", "dienst"];
   let erkennung = null;   // laufende Sitzung des Erkennungsdienstes
   let aufnahme = null;    // eine ausdrücklich gestartete Aufnahme (kann mehrere Sitzungen umfassen)
   let zustand = "bereit";
@@ -2441,9 +2445,13 @@ function jarvisSprechen(text, beobachter) {
       vorlesen: "Aufnahme beendet, weil JARVIS vorliest.",
       verlassen: "Aufnahme beendet, weil die Seite verlassen wurde.",
     }[grund] || "Aufnahme beendet.";
-    if (text) {
+    if (text && AUTOMATISCH_SENDEN.includes(grund)) {
+      // Normales Ende: direkt senden. Läuft noch eine Antwort, bleibt der Text in der Vorschau (Meldung in senden()).
       vorschauZeigen(text, false);
-      zustandSetzen("bereit", ursache + " Erkannter Text – bitte prüfen und mit „Senden“ bestätigen.");
+      senden(ursache + " Erkannter Text wurde gesendet.");
+    } else if (text) {
+      vorschauZeigen(text, false);
+      zustandSetzen("bereit", ursache + " Erkannter Text – bitte prüfen und mit „Senden“ abschicken.");
       feld.focus();
     } else {
       vorschauSchliessen();
@@ -2470,18 +2478,18 @@ function jarvisSprechen(text, beobachter) {
     erkennung = sitzungStarten();
   }
 
-  // Ausdrückliche Bestätigung: Erst hier geht der Text als normale Chat-Nachricht hinaus
-  function senden() {
+  // Hier geht der Text als normale Chat-Nachricht hinaus (automatisch nach dem Ende oder per „Senden“).
+  // Die Vorschau wird vor dem Versand geleert – ein zweiter Aufruf findet keinen Text mehr (kein Doppelversand).
+  function senden(meldung) {
     const text = feld.value.trim();
     if (!text || aufnahme) return;
     if (document.getElementById("senden").disabled) {
-      zustandSetzen("bereit", "Bitte warten – JARVIS antwortet noch. Der Text bleibt erhalten.");
+      zustandSetzen("bereit", "Bitte warten – JARVIS antwortet noch. Der Text bleibt erhalten; danach mit „Senden“ abschicken.");
       return;
     }
-    document.getElementById("befehl").value = text;
     vorschauSchliessen();
-    zustandSetzen("bereit", "");
-    jarvisAntwort();
+    zustandSetzen("bereit", typeof meldung === "string" ? meldung : "");
+    jarvisAntwort(text);
   }
 
   function uebernehmen() {
@@ -2499,7 +2507,7 @@ function jarvisSprechen(text, beobachter) {
   }
 
   knopf.addEventListener("click", starten);
-  sendenKnopf.addEventListener("click", senden);
+  sendenKnopf.addEventListener("click", () => senden());
   document.getElementById("sprach-uebernehmen").addEventListener("click", uebernehmen);
   document.getElementById("sprach-verwerfen").addEventListener("click", verwerfen);
   feld.addEventListener("input", () => { sendenKnopf.disabled = feld.readOnly || !feld.value.trim(); });
