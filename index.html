@@ -1138,7 +1138,7 @@ async function jarvisAntwort(text) {
     const text = offlineAntwort(befehl);
     nachrichtAnzeigen("JARVIS: " + text, "jarvis");
     untertitelSetzen(befehl, text);
-    jarvisSprechen(text);
+    lokalVorlesen(text);
     return;
   }
 
@@ -1270,24 +1270,47 @@ const PAPER_ZAHLWOERTER = {
   vierhundert: 400, "fünfhundert": 500, tausend: 1000, eintausend: 1000,
 };
 
+// Kleinschreibung, Satzzeichen und Bindestriche entfernen und zusammengezogene Formen trennen, wie sie die
+// Spracherkennung liefert: „Paperpositionen“ → „paper positionen“, „Paper-Trading-Positionen“ → „paper trading positionen“,
+// „Papertradingkontostand“ → „paper trading kontostand“. Getrennt wird nur am Wortanfang – „Wertpapierpositionen“ bleibt
+// ein Wort und ist kein Paper-Befehl.
 function paperNormalisieren(text) {
-  return text.toLowerCase().replace(/[„“”"'!.;:]+/g, " ").replace(/\s+/g, " ").trim();
+  return text.toLowerCase()
+    .replace(/[„“”"'!.;:]+/g, " ")
+    .replace(/[-_/]+/g, " ")
+    .replace(/(^|\s)(paper|pepper)(trading)?(?=\S)/g, (m, vor, wort, trading) => vor + wort + " " + (trading ? "trading " : ""))
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-// Liefert { art: "kauf"|"verkauf"|"stand"|"positionen"|"unklar", … } oder null (kein Paper-Befehl)
+// Liefert { art: "kauf"|"verkauf"|"stand"|"positionen"|"beides"|"unklar"|"nachfrage"|"zuruecksetzen", … }
+// oder null (kein Paper-Befehl → normaler Chat)
 function paperBefehlErkennen(original) {
   const text = paperNormalisieren(original);
-  if (!/\b(paper|papier|simulation|simuliert|simulierte|spielgeld)\b/.test(text)) return null;
+  // Eindeutig: „Paper“, Simulation, Spielgeld. Ähnlich klingend (Erkennungsfehler): Papier, Pepper, „pay per“ → nur nachfragen
+  const eindeutig = /\b(paper|simulation|simuliert|simulierte|spielgeld)\b/.test(text);
+  const aehnlich = !eindeutig && /\b(papier|pepper|pay per|payper|peiper)\b/.test(text);
+  if (!eindeutig && !aehnlich) return null;
   const verkauf = /\b(verkauf\w*|sell)\b/.test(text);
   const kauf = /\b(kauf|kaufe|kaufen|kauft|buy)\b/.test(text);
-  const stand = /\b(kontostand|guthaben|stand|uebersicht|wie viel)\b|übersicht/.test(text);
-  const positionen = /\bpositionen?\b/.test(text);
+  const stand = /\b(kontostand|konto stand|konto|guthaben|stand|uebersicht|wie viel)\b|übersicht/.test(text);
+  const positionen = /\b(positionen?|bestand|bestände|depot)\b/.test(text);
+  const frage = /^(soll|sollte|sollten|würde|wuerde|würdest|ist|was|wie|warum|wann|lohnt|kann|könnte|meinst|erklär|erkläre)\b/.test(text);
+  if (aehnlich) {
+    // Nur nachfragen, wenn es nach einer Paper-Abfrage oder -Order klingt; sonst normaler Chat
+    if (kauf || verkauf || stand || positionen) {
+      return { art: "nachfrage", grund: "Meinten Sie Paper-Trading, also die Spielgeld-Simulation? Dann sagen Sie bitte zum Beispiel „Paper Positionen“, „Paper Kontostand“ oder „Paper kaufe Bitcoin für 100 Dollar“." };
+    }
+    return null;
+  }
   if (!kauf && !verkauf) {
     if (stand || positionen) return { art: stand && positionen ? "beides" : stand ? "stand" : "positionen" };
-    return null; // z. B. „Was ist Paper-Trading?“ → normale Frage an die KI
+    if (/\b(zurücksetzen|zuruecksetzen|reset)\b/.test(text)) return { art: "zuruecksetzen" };
+    if (frage || original.trim().endsWith("?")) return null; // z. B. „Was ist Paper-Trading?“ → normale Frage an die KI
+    return { art: "nachfrage", grund: "Was möchten Sie im Paper-Trading wissen oder tun? Möglich sind „Paper Kontostand“, „Paper Positionen“, „Paper kaufe …“ und „Paper verkaufe …“." };
   }
   // Fragen wie „Soll ich Paper Bitcoin kaufen?“ sind keine Befehle
-  if (/^(soll|sollte|sollten|würde|wuerde|würdest|ist|was|wie|warum|wann|lohnt|kann|könnte|meinst)\b/.test(text)) return null;
+  if (frage) return null;
   if (kauf && verkauf) return { art: "unklar", grund: "Kauf und Verkauf zugleich genannt" };
   const maerkte = PAPER_MAERKTE.filter((m) => m.muster.test(text));
   if (maerkte.length !== 1) return { art: "unklar", grund: maerkte.length ? "mehrere Märkte genannt" : "Markt fehlt (Bitcoin oder Ethereum)" };
@@ -1322,7 +1345,7 @@ function paperBestaetigungsArt(text) {
 function paperAntworten(text, art, erzwingen) {
   const element = nachrichtAnzeigen("JARVIS: " + text, "jarvis" + (art ? " " + art : ""));
   untertitelSetzen(null, text);
-  jarvisSprechen(text, erzwingen ? {} : undefined);
+  lokalVorlesen(text, erzwingen);
   return element;
 }
 
@@ -1442,6 +1465,14 @@ async function paperSprachbefehl(text) {
   if (!befehl) return false;
   if (!verbunden()) {
     paperAntworten("Paper-Trading braucht die Verbindung zum Worker. Es wurde nichts ausgeführt.");
+    return true;
+  }
+  if (befehl.art === "nachfrage") {
+    paperAntworten(befehl.grund + " Es wurde nichts ausgeführt.");
+    return true;
+  }
+  if (befehl.art === "zuruecksetzen") {
+    paperAntworten("Das Zurücksetzen der Paper-Simulation ist bewusst nicht per Sprache möglich. Bitte im Reiter Trading den Knopf „Simulation auf 10.000 USDT zurücksetzen“ verwenden. Es wurde nichts ausgeführt.");
     return true;
   }
   if (befehl.art === "unklar") {
@@ -2223,8 +2254,9 @@ ansichtZeigen(location.hash.slice(1));
 <script>
 // ---------- Sprachbedienung ----------
 // Sprache dient ausschließlich der Texteingabe für den Chat: Erkannter Text wird nach normalem Ende der Aufnahme
-// als Chat-Nachricht gesendet; nach Abbruch bleibt er zur Prüfung in der Vorschau. Es gibt keine Sprachbefehle – keine Orders,
-// kein Not-Aus, keine Einstellungen per Sprache. Das Mikrofon startet nur per Klick und nur für eine Äußerung.
+// als Chat-Nachricht gesendet; nach Abbruch bleibt er zur Prüfung in der Vorschau. Einzige Sprachbefehle sind die Paper-Befehle
+// (Spielgeld-Simulation, nur nach ausdrücklichem „Ja“, siehe paperSprachbefehl) – kein Not-Aus, keine Testnet-Orders,
+// keine Einstellungen per Sprache. Das Mikrofon startet nur per Klick, Druck oder gehaltener Leertaste.
 
 const sprache = {
   vorlesen: einstellungLesen("jarvis-vorlesen") !== "aus",
@@ -2239,6 +2271,26 @@ const VORLESE_TEIL_MAX = 180;
 function deutscheStimmen() {
   if (!("speechSynthesis" in window)) return [];
   return window.speechSynthesis.getVoices().filter((v) => (v.lang || "").toLowerCase().startsWith("de"));
+}
+
+// Browserstimme für die Live-Ausgabe: die gespeicherte Wahl, sonst automatisch die beste deutsche Stimme
+// (natürliche/Online-Stimmen vor lokalen, de-DE vor de-AT/de-CH). Früher wurde ohne gespeicherte Wahl gar keine
+// Stimme gesetzt – dann sprach die Standardstimme des Browsers (die „alte“ Stimme).
+function browserStimmeWaehlen() {
+  const stimmen = deutscheStimmen();
+  const gespeichert = sprache.stimme ? stimmen.find((v) => v.voiceURI === sprache.stimme) : null;
+  if (gespeichert) return { stimme: gespeichert, ersatz: false };
+  const punkte = (v) => (/natural|neural|online/i.test(v.name) ? 4 : 0) + (/google/i.test(v.name) ? 2 : 0)
+    + (v.localService === false ? 1 : 0) + ((v.lang || "").toLowerCase() === "de-de" ? 1 : 0);
+  const beste = stimmen.slice().sort((a, b) => punkte(b) - punkte(a))[0] || null;
+  return { stimme: beste, ersatz: Boolean(sprache.stimme) };
+}
+
+// Welche Stimme zuletzt gesprochen hat (Anzeige unter „Funktionen“)
+let stimmeZuletzt = "";
+function stimmeMelden(text) {
+  stimmeZuletzt = text;
+  if (window.vorlesenStatusAnzeigen) window.vorlesenStatusAnzeigen();
 }
 
 // Kern und Stopp-Knopf folgen dem tatsächlichen Zustand der Wiedergabe
@@ -2268,7 +2320,37 @@ function antwortVorlesen(daten) {
   if (!sprache.vorlesen || !daten) return;
   if (daten.tts_fehler) ttsHinweis("Google-Stimme nicht verfügbar (" + daten.tts_fehler + ") – es spricht die Browserstimme.");
   if (daten.audioContent) googleAudioAbspielen(daten.audioContent, daten.antwort);
-  else jarvisSprechen(daten.antwort);
+  else if (daten.tts_fehler) jarvisSprechen(daten.antwort);
+  else lokalVorlesen(daten.antwort); // Antwort ohne Audio und ohne Fehler (z. B. Ablehnung): Google-Stimme nachfordern
+}
+
+// Lokale Antworten (Paper-Befehle, Offline, Antworten ohne Audio) mit derselben Google-Stimme wie Chat-Antworten:
+// Audio über POST /sprechen, sonst Browserstimme mit sichtbarem Hinweis. Ein Worker ohne /sprechen (404) wird
+// gemerkt, damit nicht jede Antwort erneut fragt. erzwingen: auch bei „Vorlesen: aus“ (Paper-Rückfragen).
+let sprechenVerfuegbar = true;
+const SPRECHEN_MAX = 600;
+async function lokalVorlesen(text, erzwingen) {
+  if (!text || (!sprache.vorlesen && !erzwingen)) return;
+  const browser = () => jarvisSprechen(text, erzwingen ? {} : undefined);
+  const kurz = vorleseText(text);
+  if (!verbunden() || !sprechenVerfuegbar || kurz.length > SPRECHEN_MAX) { browser(); return; }
+  vorlesenStoppen(); // eine ältere Ansage verstummt sofort; eine neuere lokale Antwort überholt diese hier
+  const nummer = ansageNummer;
+  let daten = null;
+  let grund = null;
+  try {
+    daten = await workerAnfrage("/sprechen", { method: "POST", body: JSON.stringify({ text: kurz }) });
+  } catch (e) {
+    grund = e.message;
+    if (grund === "Unbekannter Endpunkt.") sprechenVerfuegbar = false;
+  }
+  if (nummer !== ansageNummer) return; // inzwischen neue Ansage oder Stopp
+  // Läuft inzwischen eine Aufnahme (z. B. Push-to-talk für „Ja“), nicht dazwischen sprechen
+  if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) return;
+  if (daten && daten.audioContent) { googleAudioAbspielen(daten.audioContent, text, erzwingen); return; }
+  if (daten && daten.tts_fehler) ttsHinweis("Google-Stimme nicht verfügbar (" + daten.tts_fehler + ") – es spricht die Browserstimme.");
+  else if (grund && sprechenVerfuegbar) ttsHinweis("Google-Stimme nicht abrufbar (" + grund + ") – es spricht die Browserstimme.");
+  browser();
 }
 
 function ttsHinweis(text) {
@@ -2286,7 +2368,7 @@ function audioTyp(base64) {
   return "audio/wav";
 }
 
-function googleAudioAbspielen(base64, ersatzText) {
+function googleAudioAbspielen(base64, ersatzText, erzwingen) {
   if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) window.spracheingabeBeenden("vorlesen");
   vorlesenStoppen();
   const nummer = ansageNummer;
@@ -2296,9 +2378,13 @@ function googleAudioAbspielen(base64, ersatzText) {
     if (nummer !== ansageNummer) return;
     aktuellesAudio = null;
     ttsHinweis("Google-Audio konnte nicht abgespielt werden (" + grund + ") – es spricht die Browserstimme.");
-    jarvisSprechen(ersatzText);
+    jarvisSprechen(ersatzText, erzwingen ? {} : undefined);
   };
-  audio.onplaying = () => { if (nummer === ansageNummer) vorlesenAnzeigen(true); };
+  audio.onplaying = () => {
+    if (nummer !== ansageNummer) return;
+    vorlesenAnzeigen(true);
+    stimmeMelden("Google-Stimme");
+  };
   audio.onended = () => {
     if (nummer !== ansageNummer) return;
     aktuellesAudio = null;
@@ -2368,9 +2454,21 @@ function jarvisSprechen(text, beobachter) {
   const lief = Boolean(synth.speaking || synth.pending);
   vorlesenStoppen();
   const nummer = ansageNummer;
-  const stimme = testStimme ? beobachter.stimme : deutscheStimmen().find((v) => v.voiceURI === sprache.stimme);
+  // Live-Ausgabe: Stimme erst beim ersten Teil wählen – Stimmen werden in Chrome/Edge oft erst nachträglich geladen
+  let stimme = testStimme ? beobachter.stimme : null;
   const standardSprache = (testStimme && beobachter.sprache) || "de-DE";
   let index = 0;
+  const stimmeFestlegen = () => {
+    if (testStimme) return;
+    const wahl = browserStimmeWaehlen();
+    stimme = wahl.stimme;
+    if (wahl.ersatz && !stimmeErsatzGemeldet) {
+      stimmeErsatzGemeldet = true;
+      ttsHinweis("Die gewählte Browserstimme ist auf diesem Gerät nicht verfügbar – es spricht "
+        + (stimme ? "„" + stimme.name + "“" : "die Standardstimme des Browsers") + ".");
+    }
+    stimmeMelden(stimme ? "Browserstimme: " + stimme.name : "Browser-Standardstimme");
+  };
 
   // Teile nacheinander sprechen: der nächste erst, wenn der vorige wirklich fertig ist
   const naechsterTeil = () => {
@@ -2381,6 +2479,7 @@ function jarvisSprechen(text, beobachter) {
       melden("fertig");
       return;
     }
+    if (index === 0) stimmeFestlegen();
     const nr = index;
     const ansage = new SpeechSynthesisUtterance(teile[index++]);
     ansage.lang = standardSprache;
@@ -2416,8 +2515,24 @@ function jarvisSprechen(text, beobachter) {
     if (synth.paused) synth.resume();
     synth.speak(ansage);
   };
+  // Noch keine Stimmen geladen: kurz auf „voiceschanged“ warten (höchstens STIMMEN_WARTEN_MS), dann trotzdem sprechen
+  if (!testStimme && !synth.getVoices().length && typeof synth.addEventListener === "function") {
+    let gestartet = false;
+    const los = () => {
+      if (gestartet) return;
+      gestartet = true;
+      if (typeof synth.removeEventListener === "function") synth.removeEventListener("voiceschanged", los);
+      clearTimeout(ansageTimer);
+      naechsterTeil();
+    };
+    synth.addEventListener("voiceschanged", los);
+    ansageTimer = setTimeout(los, STIMMEN_WARTEN_MS);
+    return;
+  }
   ansageTimer = setTimeout(naechsterTeil, lief ? 120 : 0);
 }
+let stimmeErsatzGemeldet = false;
+const STIMMEN_WARTEN_MS = 800;
 
 // Vorlesen ein/aus, Stopp und Stimmenwahl
 (function () {
@@ -2430,13 +2545,13 @@ function jarvisSprechen(text, beobachter) {
   function anzeigen() {
     schalter.setAttribute("aria-pressed", String(vorhanden && sprache.vorlesen));
     schalter.textContent = "Vorlesen: " + (vorhanden && sprache.vorlesen ? "an" : "aus");
-    status.textContent = !vorhanden ? "nicht unterstützt" : sprache.vorlesen ? "an (Browserstimme)" : "ausgeschaltet";
+    status.textContent = !vorhanden ? "nicht unterstützt" : sprache.vorlesen ? "an" + (stimmeZuletzt ? " (" + stimmeZuletzt + ")" : "") : "ausgeschaltet";
     status.className = vorhanden && sprache.vorlesen ? "ok" : "aus";
   }
 
   function stimmenFuellen() {
     const stimmen = deutscheStimmen();
-    const optionen = [new Option(stimmen.length ? "Standardstimme" : "Keine deutsche Stimme gefunden", "")];
+    const optionen = [new Option(stimmen.length ? "Automatisch (beste deutsche Stimme)" : "Keine deutsche Stimme gefunden", "")];
     for (const v of stimmen) optionen.push(new Option(v.name + " (" + v.lang + ")", v.voiceURI));
     wahl.replaceChildren(...optionen);
     wahl.value = stimmen.some((v) => v.voiceURI === sprache.stimme) ? sprache.stimme : "";
@@ -2451,6 +2566,7 @@ function jarvisSprechen(text, beobachter) {
   stopp.addEventListener("click", vorlesenStoppen);
   wahl.addEventListener("change", () => {
     sprache.stimme = wahl.value;
+    stimmeErsatzGemeldet = false;
     einstellungSchreiben("jarvis-stimme", wahl.value);
   });
 
@@ -2466,6 +2582,7 @@ function jarvisSprechen(text, beobachter) {
   anzeigen();
   // Für die lokalen Tests (Nachbildung der Sprachausgabe)
   window.sprachausgabeAktualisieren = () => { stimmenFuellen(); anzeigen(); };
+  window.vorlesenStatusAnzeigen = anzeigen;
 })();
 
 // Stimmtest: fester Text ohne KI-Anfrage. Vergleicht A (kurzer Satz, ein Stück), B (langer Text, ein Stück) und
