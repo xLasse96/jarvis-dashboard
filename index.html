@@ -1129,7 +1129,7 @@
           <label class="stimme-wahl">Ausgabe <select class="feld" id="sprache-ausgabe" aria-describedby="sprache-hinweis"></select></label>
           <span id="sprache-hinweis" class="sprach-hinweis" role="status"></span>
           <button type="button" class="schalter" id="stimme-testen" aria-controls="stimmtest" aria-expanded="false">Stimme testen</button>
-          <span id="sprach-hinweis" class="sprach-hinweis"></span>
+          <span id="sprach-hinweis" class="sprach-hinweis" aria-live="polite"></span>
         </div>
 
         <!-- Stimmtest: fester Testtext, keine KI-Anfrage. Misst Start, Dauer, Lücken und Fehler der echten Wiedergabe. -->
@@ -1148,7 +1148,7 @@
             <button type="button" class="knopf zweit" id="stimmtest-stopp">Stopp</button>
           </div>
           <h3 class="stimmtest-titel">Messwerte (neueste oben)</h3>
-          <ol id="stimmtest-protokoll" class="stimmtest-protokoll"><li>Noch kein Test.</li></ol>
+          <ol id="stimmtest-protokoll" class="stimmtest-protokoll" aria-live="polite" aria-relevant="additions"><li>Noch kein Test.</li></ol>
           <h3 class="stimmtest-titel">Verfügbare Stimmen (<span id="stimmen-anzahl">0</span>)</h3>
           <ul id="stimmen-liste" class="stimmen-liste"></ul>
         </section>
@@ -1386,7 +1386,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31a</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31e</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -1407,6 +1407,19 @@ setInterval(uhrAktualisieren, 1000);
 // Chatverlauf für die KI: abwechselnd user/assistant
 const verlauf = [];
 const MAX_VERLAUF = 20;
+// Grenzen des Workers für /chat (MAX_ZEICHEN_PRO_NACHRICHT / MAX_ZEICHEN_GESAMT im Worker) – nur gemeinsam ändern
+const CHAT_GRENZEN = { nachricht: 4000, gesamt: 40000 };
+
+// Auszug für /chat: die letzten Nachrichten, Beginn mit „user“. Ältere lange KI-Antworten (z. B. mit Quellenliste) werden für
+// den Versand auf die Worker-Grenze gekürzt, und bei zu viel Gesamttext fallen die ältesten Frage-Antwort-Paare weg –
+// sonst lehnte der Worker ab diesem Punkt jede weitere Frage ab. Der gespeicherte Verlauf bleibt unverändert.
+function chatAuszug(liste) {
+  let auszug = liste.slice(-MAX_VERLAUF).map((m) => (m.content.length > CHAT_GRENZEN.nachricht
+    ? { role: m.role, content: m.content.slice(0, CHAT_GRENZEN.nachricht - 2) + " …" } : m));
+  if (auszug[0].role !== "user") auszug = auszug.slice(1);
+  while (auszug.length > 1 && auszug.reduce((s, m) => s + m.content.length, 0) > CHAT_GRENZEN.gesamt) auszug = auszug.slice(2);
+  return auszug;
+}
 
 function einstellungLesen(name) {
   try { return localStorage.getItem(name) || ""; } catch (e) { return ""; }
@@ -1668,6 +1681,13 @@ async function jarvisAntwort(text) {
   const ausFeld = typeof text !== "string";
   const befehl = (ausFeld ? eingabe.value : text).trim();
   if (!befehl || knopf.disabled) return;
+  // Zu lang für den Worker: nicht senden (er würde ablehnen), Text bleibt zum Kürzen im Eingabefeld
+  if (befehl.length > CHAT_GRENZEN.nachricht) {
+    eingabe.value = befehl;
+    nachrichtAnzeigen("JARVIS: Die Nachricht ist zu lang (" + befehl.length.toLocaleString("de-DE") + " Zeichen, höchstens "
+      + CHAT_GRENZEN.nachricht.toLocaleString("de-DE") + "). Sie wurde nicht gesendet und steht noch im Eingabefeld – bitte kürzen.", "jarvis fehler");
+    return;
+  }
 
   if (ausFeld) eingabe.value = "";
   const nutzerNachricht = nachrichtAnzeigen(befehl, "nutzer");
@@ -1686,7 +1706,11 @@ async function jarvisAntwort(text) {
 
   // Profil: nur die für genau diese Anfrage ausgewählten Einträge; danach gilt wieder die Vorauswahl.
   // Der Verlauf speichert nur den Befehl – Profilangaben gehen nie unbemerkt mit späteren Anfragen mit.
-  const profilTeil = window.profilIntern ? window.profilIntern.fuerAnfrage() : null;
+  let profilTeil = window.profilIntern ? window.profilIntern.fuerAnfrage() : null;
+  if (profilTeil && (profilTeil.kontext + befehl).length > CHAT_GRENZEN.nachricht) {
+    nutzerNachricht.appendChild(Object.assign(document.createElement("small"), { className: "profil-hinweis", textContent: "Profil weggelassen – Nachricht samt Profil wäre länger als " + CHAT_GRENZEN.nachricht.toLocaleString("de-DE") + " Zeichen" }));
+    profilTeil = null;
+  }
   if (profilTeil) {
     nutzerNachricht.appendChild(Object.assign(document.createElement("small"), { className: "profil-hinweis", textContent: "mit Profil: " + profilTeil.titel.join(", ") }));
   }
@@ -1697,16 +1721,16 @@ async function jarvisAntwort(text) {
   const abbrechenKnopf = document.getElementById("abbrechen");
   abbrechenKnopf.onclick = () => abbruch.abort();
   abbrechenKnopf.hidden = false;
+  // Per Tastatur auf SENDEN: der Knopf sperrt sich jetzt – Fokus auf ABBRECHEN statt verloren (danach zurück ins Eingabefeld)
+  if (document.activeElement === knopf) abbrechenKnopf.focus();
   const kern = document.getElementById("kern");
   kern.classList.add("denkt");
   untertitelSetzen(befehl, "…");
   const platzhalter = nachrichtAnzeigen("JARVIS denkt nach …", "jarvis denkt");
 
   try {
-    // Nur die letzten Nachrichten senden; Anfang muss eine user-Nachricht sein
-    let auszug = verlauf.slice(-MAX_VERLAUF);
-    if (auszug[0].role !== "user") auszug = auszug.slice(1);
-    if (profilTeil) auszug = [...auszug.slice(0, -1), { role: "user", content: profilTeil.kontext + befehl }];
+    // Nur die letzten Nachrichten senden; Anfang muss eine user-Nachricht sein; Worker-Grenzen einhalten (chatAuszug)
+    const auszug = chatAuszug(profilTeil ? [...verlauf.slice(0, -1), { role: "user", content: profilTeil.kontext + befehl }] : verlauf);
 
     const daten = await workerAnfrage("/chat", {
       method: "POST",
@@ -3265,21 +3289,49 @@ window.addEventListener("jarvis-kerzen", (e) => { briefingKerzen = e.detail ? { 
 
 function briefingUhrzeit(ms) { return new Date(ms).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
 
+// Eigenes, kurzes Zeitlimit je Quelle: Das Briefing wartet auf die langsamste Quelle – mit dem allgemeinen Worker-Limit
+// (120 s) blieb es bei einer hängenden Quelle bis zu zwei Minuten stumm. Zeitüberschreitung = „nicht verfügbar“, ohne
+// Wiederholung, ohne zusätzliche Anfrage.
+const BRIEFING = { zeitlimitMs: 8000 };
+const briefingSekunden = (ms) => (ms / 1000).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " s";
+// Messprotokoll des letzten Briefings (ms ab Klick bzw. je Quelle) – zur Ursachensuche, lesbar über window.briefingMessungLesen()
+let briefingMessung = { quellen: {}, statusMs: null, datenMs: null, textMs: null, tonMs: null };
+const BRIEFING_QUELLEN_NAMEN = { "/status": "Worker", "/trading/status": "Handel", "/markt": "Testnet-Kurse", "/paper/status": "Paper-Trading" };
+
 async function briefingErstellen() {
   const knopf = document.getElementById("briefing-knopf");
   if (knopf.disabled) return null;
   knopf.disabled = true;
+  const start = performance.now();
+  briefingMessung = { quellen: {}, statusMs: null, datenMs: null, textMs: null, tonMs: null };
+  // Sofort sichtbar, dass etwas passiert
+  knopf.textContent = "Briefing wird erstellt …";
+  const zeitFeld = document.getElementById("briefing-zeit");
+  const bereichSofort = document.getElementById("briefing");
+  zeitFeld.textContent = "wird erstellt …";
+  bereichSofort.hidden = false;
+  bereichSofort.setAttribute("aria-busy", "true");
+  briefingMessung.statusMs = Math.round(performance.now() - start);
   const zeilen = [];
   const zeile = (bereich, inhalt, quelle, stand, fehlt) => zeilen.push({ bereich, inhalt, quelle, stand, fehlt: Boolean(fehlt) });
   try {
+    const signal = () => (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(BRIEFING.zeitlimitMs) : undefined);
+    // Die vier Quellen sind voneinander unabhängig und laufen parallel; je Quelle wird die Dauer gemessen (Messprotokoll)
     const anfragen = verbunden()
-      ? await Promise.allSettled(["/status", "/trading/status", "/markt", "/paper/status"].map((pfad) =>
-        workerAnfrage(pfad, { method: "GET" }).then((d) => ({ d, zeit: Date.now() }))))
+      ? await Promise.allSettled(["/status", "/trading/status", "/markt", "/paper/status"].map((pfad) => {
+        const t = performance.now();
+        const dauer = () => { briefingMessung.quellen[pfad] = Math.round(performance.now() - t); };
+        return workerAnfrage(pfad, { method: "GET", signal: signal() })
+          .then((d) => { dauer(); return { d, zeit: Date.now() }; }, (e) => { dauer(); throw e; });
+      }))
       : null;
     const ergebnis = (i) => (anfragen ? anfragen[i] : { status: "rejected", reason: new Error("keine Verbindung eingerichtet") });
     const nicht = (r) => "nicht verfügbar – " + (r.reason && r.reason.message ? r.reason.message : "unbekannter Fehler");
 
+    // Unvollständige Antworten nie als echte Werte zeigen (z. B. fehlendes Feld → „nicht eingerichtet“ oder null → „0 USDT“)
+    const unvollstaendig = () => ({ status: "rejected", reason: new Error("unvollständige Antwort") });
     let r = ergebnis(0);
+    if (r.status === "fulfilled" && (typeof r.value.d.ki_konfiguriert !== "boolean" || typeof r.value.d.kv_verbunden !== "boolean")) r = unvollstaendig();
     if (r.status === "fulfilled") {
       const s = r.value.d;
       zeile("Worker", "erreichbar · KI " + (s.ki_konfiguriert ? "eingerichtet" : "nicht eingerichtet") + " · Speicher " + (s.kv_verbunden ? "verbunden" : "fehlt"),
@@ -3298,13 +3350,19 @@ async function briefingErstellen() {
     } else zeile("Handel", nicht(r), "Worker /trading/status", null, true);
 
     r = ergebnis(2);
-    if (r.status === "fulfilled" && Array.isArray(r.value.d.kurse) && r.value.d.kurse.length) {
-      zeile("Testnet-Kurse", r.value.d.kurse.map((k) => k.symbol.replace(/USDT$/, "") + " " + zahl(k.preis, 2) + " USDT ("
-        + (k.aenderung_prozent >= 0 ? "+" : "") + zahl(k.aenderung_prozent, 2) + " %)").join(" · "),
+    // Nur Kurse mit echtem Preis; eine fehlende Veränderung wird weggelassen statt als „0 %“ gezeigt
+    const kurse = r.status === "fulfilled" && Array.isArray(r.value.d.kurse)
+      ? r.value.d.kurse.filter((k) => k && typeof k.symbol === "string" && typeof k.preis === "number" && Number.isFinite(k.preis)) : [];
+    if (kurse.length) {
+      zeile("Testnet-Kurse", kurse.map((k) => k.symbol.replace(/USDT$/, "") + " " + zahl(k.preis, 2) + " USDT"
+        + (typeof k.aenderung_prozent === "number" && Number.isFinite(k.aenderung_prozent) ? " (" + (k.aenderung_prozent >= 0 ? "+" : "") + zahl(k.aenderung_prozent, 2) + " %)" : "")).join(" · "),
         "Binance-Testnet über Worker /markt – kann vom echten Markt abweichen", r.value.zeit);
-    } else zeile("Testnet-Kurse", r.status === "fulfilled" ? "nicht verfügbar – keine Kurse geliefert" : nicht(r), "Worker /markt", null, true);
+    } else zeile("Testnet-Kurse", r.status === "fulfilled" ? "nicht verfügbar – keine gültigen Kurse geliefert" : nicht(r), "Worker /markt", null, true);
 
-    if (briefingKerzen && briefingKerzen.daten && Array.isArray(briefingKerzen.daten.kerzen) && briefingKerzen.daten.kerzen.length) {
+    const kerzenOk = briefingKerzen && briefingKerzen.daten && Array.isArray(briefingKerzen.daten.kerzen) && briefingKerzen.daten.kerzen.length
+      && ((briefingKerzen.daten.zusammenfassung && typeof briefingKerzen.daten.zusammenfassung.schlusskurs === "number")
+        || Number.isFinite((briefingKerzen.daten.kerzen[briefingKerzen.daten.kerzen.length - 1] || {}).c));
+    if (kerzenOk) {
       const k = briefingKerzen.daten;
       const z = k.zusammenfassung;
       const letzte = k.kerzen[k.kerzen.length - 1];
@@ -3316,10 +3374,11 @@ async function briefingErstellen() {
     } else zeile("Marktdaten", "nicht verfügbar – Analyse in dieser Sitzung noch nicht geladen (Reiter „Analyse“)", "Analyse", null, true);
 
     r = ergebnis(3);
+    if (r.status === "fulfilled" && r.value.d.simulation && !(typeof r.value.d.usdt === "number" && Number.isFinite(r.value.d.usdt) && Array.isArray(r.value.d.positionen))) r = unvollstaendig();
     if (r.status === "fulfilled" && r.value.d.simulation) {
       const s = r.value.d;
       zeile("Paper-Trading", zahl(s.usdt, 2) + " USDT Spielgeld frei · " + s.positionen.length + " Position(en)"
-        + (s.gesamtwert_usdt === null ? " · Gesamtwert nicht verfügbar (Kurse fehlen)" : " · Gesamtwert " + zahl(s.gesamtwert_usdt, 2) + " USDT"),
+        + (typeof s.gesamtwert_usdt === "number" && Number.isFinite(s.gesamtwert_usdt) ? " · Gesamtwert " + zahl(s.gesamtwert_usdt, 2) + " USDT" : " · Gesamtwert nicht verfügbar (Kurse fehlen)"),
         "Worker /paper/status (Simulation, Kurse Kraken)", r.value.zeit);
     } else zeile("Paper-Trading", r.status === "fulfilled" ? "nicht verfügbar – unerwartete Antwort" : nicht(r), "Worker /paper/status", null, true);
 
@@ -3332,7 +3391,11 @@ async function briefingErstellen() {
     }
   } finally {
     knopf.disabled = false;
+    knopf.textContent = "Briefing starten";
+    bereichSofort.removeAttribute("aria-busy");
   }
+  zeilen.datenMs = performance.now() - start; // Messwert für die Anzeige (Daten nach … s)
+  briefingMessung.datenMs = Math.round(zeilen.datenMs);
 
   const tabelle = document.getElementById("briefing-tabelle");
   tabelle.replaceChildren(...zeilen.map((z) => {
@@ -3345,7 +3408,12 @@ async function briefingErstellen() {
     tr.append(th, td);
     return tr;
   }));
-  document.getElementById("briefing-zeit").textContent = "erstellt " + briefingUhrzeit(Date.now());
+  // Anzeige: Gesamtdauer der Datenphase, langsamste Quelle (Ursache einer langen Wartezeit) und ob etwas fehlt
+  const langsamste = Object.entries(briefingMessung.quellen).sort((a, b) => b[1] - a[1])[0];
+  const fehlend = zeilen.filter((z) => z.fehlt).length;
+  document.getElementById("briefing-zeit").textContent = "erstellt " + briefingUhrzeit(Date.now()) + " · Daten nach " + briefingSekunden(zeilen.datenMs)
+    + (langsamste ? " (langsamste Quelle: " + BRIEFING_QUELLEN_NAMEN[langsamste[0]] + " " + briefingSekunden(langsamste[1]) + ")" : "")
+    + (fehlend ? " · unvollständig: " + fehlend + (fehlend === 1 ? " Bereich" : " Bereiche") + " nicht verfügbar" : "");
   const bereich = document.getElementById("briefing");
   bereich.hidden = false;
   if (typeof bereich.scrollIntoView === "function") bereich.scrollIntoView({ block: "nearest" });
@@ -3354,19 +3422,59 @@ async function briefingErstellen() {
 
 // Liest den Briefing-Inhalt genau einmal vor – über den gemeinsamen Weg aller lokalen Antworten (Google /sprechen, bei einem
 // Fehler Browserstimme mit Hinweis). lokalVorlesen beachtet „Vorlesen: aus“. Nicht während einer laufenden Aufnahme.
-function briefingVorlesen(zeilen) {
+// start: Zeitpunkt des Klicks (performance.now) – misst, wann die Stimme wirklich beginnt, und zeigt es an.
+function briefingVorlesen(zeilen, start) {
   if (!zeilen || typeof lokalVorlesen !== "function" || (window.spracheingabeLaeuft && window.spracheingabeLaeuft())) return;
-  lokalVorlesen("Briefing. " + zeilen.map((z) => z.bereich + ": " + z.inhalt).join(". ") + ".");
+  if (sprache.vorlesen && typeof start === "number") briefingStimmeMessen(start);
+  const text = "Briefing. " + zeilen.map((z) => z.bereich + ": " + z.inhalt).join(". ") + ".";
+  if (typeof start === "number") briefingMessung.textMs = Math.round(performance.now() - start);
+  // Unmittelbar weiter an den Vorleseweg – keine Wartezeit dazwischen
+  lokalVorlesen(text, false, { kurzerAnfang: true });
+}
+
+// Wartet einmalig auf den Beginn der Wiedergabe (Kern „spricht“ – Google-Audio wie Browserstimme) und ergänzt die Anzeige.
+function briefingStimmeMessen(start) {
+  const kern = document.getElementById("kern");
+  const feld = document.getElementById("briefing-zeit");
+  feld.textContent = feld.textContent.replace(/ · Stimme .*$/, "") + " · Stimme wird vorbereitet …";
+  const beobachter = new MutationObserver(() => {
+    if (!kern.classList.contains("spricht")) return;
+    beobachter.disconnect();
+    clearTimeout(uhr);
+    briefingMessung.tonMs = Math.round(performance.now() - start);
+    feld.textContent = feld.textContent.replace(/ · Stimme .*$/, "") + " · Stimme nach " + briefingSekunden(briefingMessung.tonMs);
+  });
+  beobachter.observe(kern, { attributes: true, attributeFilter: ["class"] });
+  // Kommt keine Wiedergabe (z. B. Vorlesen inzwischen abgeschaltet), Hinweis nach 60 s wieder entfernen
+  const uhr = setTimeout(() => { beobachter.disconnect(); feld.textContent = feld.textContent.replace(/ · Stimme wird vorbereitet …$/, ""); }, 60000);
 }
 
 // Knopf „Briefing starten“: erstellen und vorlesen (früher nur erstellt – vorgelesen wurde nur beim Sprachbefehl).
 // Ein zweiter Klick während des Erstellens liefert null und liest deshalb nichts ein zweites Mal vor.
+// Erstellen mit Fehlerschutz (Knopf und Sprachbefehl): Bei einem unerwarteten Fehler wird „wird erstellt …“ ersetzt und die
+// Tabelle des vorigen Briefings geleert – alte Werte dürfen nicht wie aktuelle aussehen. Rückgabe: Zeilen oder null.
+async function briefingErstellenSicher() {
+  try {
+    return await briefingErstellen();
+  } catch (e) {
+    const knopf = document.getElementById("briefing-knopf");
+    knopf.disabled = false;
+    knopf.textContent = "Briefing starten";
+    document.getElementById("briefing").removeAttribute("aria-busy");
+    document.getElementById("briefing-tabelle").replaceChildren();
+    document.getElementById("briefing-zeit").textContent = "Briefing konnte nicht erstellt werden: " + (e && e.message ? e.message : "unbekannter Fehler");
+    return null;
+  }
+}
+
 async function briefingStarten() {
-  const zeilen = await briefingErstellen();
-  briefingVorlesen(zeilen);
+  const start = performance.now();
+  const zeilen = await briefingErstellenSicher();
+  briefingVorlesen(zeilen, start);
   return zeilen;
 }
 document.getElementById("briefing-knopf").addEventListener("click", () => briefingStarten());
+window.briefingMessungLesen = () => JSON.parse(JSON.stringify(briefingMessung));
 
 skillRegistrieren({
   name: "briefing",
@@ -3375,11 +3483,16 @@ skillRegistrieren({
   beispiele: ["Briefing", "Lagebericht"],
   passt: (text) => /^((gib mir )?(ein |das |mein )?briefing( bitte)?|lagebericht|statusbericht)$/.test(befehlNormalisieren(text)),
   aktion: async () => {
-    const zeilen = await briefingErstellen();
-    if (!zeilen) return true;
+    const start = performance.now();
+    const laeuftSchon = document.getElementById("briefing-knopf").disabled;
+    const zeilen = await briefingErstellenSicher();
+    if (!zeilen) {
+      if (!laeuftSchon) lokalAntworten(document.getElementById("briefing-zeit").textContent, "fehler");
+      return true;
+    }
     const fehlend = zeilen.filter((z) => z.fehlt).length;
     nachrichtAnzeigen("JARVIS: Briefing erstellt – siehe Karte „System“ links." + (fehlend ? " " + fehlend + " Bereich(e) derzeit nicht verfügbar." : ""), "jarvis");
-    briefingVorlesen(zeilen); // gleicher Weg wie der Knopf
+    briefingVorlesen(zeilen, start); // gleicher Weg wie der Knopf
     return true;
   },
 });
@@ -5743,8 +5856,15 @@ function stimmeMelden(text) {
 // Kern und Stopp-Knopf folgen dem tatsächlichen Zustand der Wiedergabe
 function vorlesenAnzeigen(laeuft) {
   document.getElementById("kern").classList.toggle("spricht", laeuft);
-  document.getElementById("vorlesen-stopp").disabled = !laeuft;
+  const stopp = document.getElementById("vorlesen-stopp");
+  // Wer per Tastatur stoppt, verliert sonst den Fokus (der Knopf sperrt sich selbst) – Fokus bleibt in der Sprachleiste
+  if (!laeuft && document.activeElement === stopp) document.getElementById("vorlesen-schalter").focus();
+  stopp.disabled = !laeuft;
 }
+
+// Während Google eine Ansage noch erzeugt: „Vorlesen stoppen“ schon bedienbar (Kern zeigt noch kein Sprechen).
+// Ein Stopp erhöht die Ansagenummer – das später eintreffende Audio wird verworfen, ohne Ausweichen auf die Browserstimme.
+function vorlesenWartet() { document.getElementById("vorlesen-stopp").disabled = false; }
 
 function vorlesenStoppen() {
   ansageNummer++;
@@ -5820,11 +5940,13 @@ function googleTeilAbspielen(base64, nummer) {
 async function googleTeileVorlesen(teile, text, erzwingen) {
   vorlesenStoppen();
   const nummer = ansageNummer;
+  vorlesenWartet();
   let naechster = sprechenHolen(teile[0]);
   for (let i = 0; i < teile.length; i++) {
     const r = await naechster;
     if (i + 1 < teile.length) naechster = sprechenHolen(teile[i + 1]);
-    if (nummer !== ansageNummer || (window.spracheingabeLaeuft && window.spracheingabeLaeuft())) return;
+    if (nummer !== ansageNummer) return; // gestoppt oder von einer neueren Ansage überholt
+    if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) { vorlesenAnzeigen(false); return; }
     const rest = teile.slice(i).join(" ");
     if (!(r.daten && audioGueltig(r.daten.audioContent))) {
       if (r.grund === "Unbekannter Endpunkt.") sprechenFehltMelden();
@@ -5845,18 +5967,31 @@ async function googleTeileVorlesen(teile, text, erzwingen) {
   aktuellesAudio = null;
   vorlesenAnzeigen(false);
 }
-async function lokalVorlesen(text, erzwingen) {
+// Langer Text mit kurzem erstem Teil: Google erzeugt das Audio eines Teils am Stück, ein kurzer Anfang klingt also früher.
+// Nur wenn dadurch NICHT mehr Teile (= Google-Aufrufe) entstehen als bei der normalen Teilung; sonst normale Teilung.
+const SPRECHEN_ANFANG = { max: 220 };
+function teileMitKurzemAnfang(kurz) {
+  const normal = vorleseTeile(kurz, SPRECHEN.max);
+  const erster = vorleseTeile(kurz, SPRECHEN_ANFANG.max)[0];
+  if (!erster || !kurz.startsWith(erster) || erster.length >= kurz.length) return normal;
+  const rest = vorleseTeile(kurz.slice(erster.length).trim(), SPRECHEN.max);
+  return 1 + rest.length <= normal.length ? [erster, ...rest] : normal;
+}
+
+// optionen.kurzerAnfang: bei langen Texten zuerst einen kurzen Teil (siehe teileMitKurzemAnfang)
+async function lokalVorlesen(text, erzwingen, optionen = {}) {
   if (!text || (!sprache.vorlesen && !erzwingen)) return;
   const browser = () => jarvisSprechen(text, erzwingen ? {} : undefined);
   const kurz = vorleseText(text);
   if (sprache.quelle === "browser" || !verbunden() || !sprechenVerfuegbar || !kurz) { browser(); return; }
   if (kurz.length > SPRECHEN.max) {
-    const teile = vorleseTeile(kurz, SPRECHEN.max);
+    const teile = optionen.kurzerAnfang ? teileMitKurzemAnfang(kurz) : vorleseTeile(kurz, SPRECHEN.max);
     if (teile.length > SPRECHEN.maxTeile) { ttsHinweis("Text zu lang für die Google-Stimme (" + teile.length + " Teile) – es spricht die Browserstimme."); browser(); return; }
     return googleTeileVorlesen(teile, text, erzwingen);
   }
   vorlesenStoppen(); // eine ältere Ansage verstummt sofort; eine neuere lokale Antwort überholt diese hier
   const nummer = ansageNummer;
+  vorlesenWartet();
   let daten = null;
   let grund = null;
   try {
@@ -5870,11 +6005,12 @@ async function lokalVorlesen(text, erzwingen) {
   if (daten && audioGueltig(daten.audioContent) && window.kiNutzungErfassen) window.kiNutzungErfassen({ art: "sprechen", vorleseZeichen: kurz.length });
   if (nummer !== ansageNummer) return; // inzwischen neue Ansage oder Stopp
   // Läuft inzwischen eine Aufnahme (z. B. Push-to-talk für „Ja“), nicht dazwischen sprechen
-  if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) return;
+  if (window.spracheingabeLaeuft && window.spracheingabeLaeuft()) { vorlesenAnzeigen(false); return; }
   if (daten && audioGueltig(daten.audioContent)) { googleAudioAbspielen(daten.audioContent, text, erzwingen); return; }
   if (daten && daten.tts_fehler) ttsHinweis("Google-Stimme nicht verfügbar (" + daten.tts_fehler + ") – es spricht die Browserstimme.");
   else if (daten) ttsHinweis("Google-Stimme lieferte kein gültiges Audio – es spricht die Browserstimme.");
   else if (grund && sprechenVerfuegbar) ttsHinweis("Google-Stimme nicht abrufbar (" + grund + ") – es spricht die Browserstimme.");
+  vorlesenAnzeigen(false); // Wartezustand beenden; die Browserstimme setzt ihn beim Start selbst wieder
   browser();
 }
 
