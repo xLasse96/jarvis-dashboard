@@ -1386,7 +1386,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-30r</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-30s</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -2226,9 +2226,16 @@ function freigabeSetzen(name, risiko) {
 }
 freigabenLaden();
 
+// Lokale Antworten (Hilfe, Briefing, Skills, Rückfragen …) werden wie Paper-Antworten vorgelesen: Google über /sprechen,
+// sonst Browserstimme mit sichtbarem Hinweis – nur bei „Vorlesen: an“. Platzhalter („denkt nach …“) nicht, und nie während
+// einer laufenden Aufnahme (sonst würde die Ansage die Spracheingabe beenden). Paper-Rückfragen laufen unverändert über
+// paperAntworten (dort auch bei „Vorlesen: aus“).
 function lokalAntworten(text, art) {
   const element = nachrichtAnzeigen("JARVIS: " + text, "jarvis" + (art ? " " + art : ""));
   untertitelSetzen(null, text);
+  const platzhalter = Boolean(art && String(art).includes("denkt"));
+  const aufnahme = Boolean(window.spracheingabeLaeuft && window.spracheingabeLaeuft());
+  if (!platzhalter && !aufnahme && typeof lokalVorlesen === "function") lokalVorlesen(text);
   return element;
 }
 
@@ -3358,6 +3365,10 @@ skillRegistrieren({
     if (!zeilen) return true;
     const fehlend = zeilen.filter((z) => z.fehlt).length;
     nachrichtAnzeigen("JARVIS: Briefing erstellt – siehe Karte „System“ links." + (fehlend ? " " + fehlend + " Bereich(e) derzeit nicht verfügbar." : ""), "jarvis");
+    // Vorgelesen wird der Inhalt (wie alle lokalen Antworten: Google /sprechen, sonst Browserstimme; nur bei „Vorlesen: an“)
+    if (typeof lokalVorlesen === "function" && !(window.spracheingabeLaeuft && window.spracheingabeLaeuft())) {
+      lokalVorlesen("Briefing. " + zeilen.map((z) => z.bereich + ": " + z.inhalt).join(". ") + ".");
+    }
     return true;
   },
 });
@@ -5149,8 +5160,7 @@ function watchlistKurse(kurse, zeit, fehler) {
 function alarmMelden(a) {
   const text = "Kursalarm: " + a.symbol + " ist auf " + preisText(a.ausloesekurs)
     + (a.richtung === "ueber" ? " gestiegen (Schwelle ≥ " : " gefallen (Schwelle ≤ ") + preisText(a.preis) + "). Testnet-Kurs – es wurde nichts gehandelt.";
-  lokalAntworten(text);
-  if (typeof lokalVorlesen === "function") lokalVorlesen(text);
+  lokalAntworten(text); // liest selbst vor (Google /sprechen bzw. Browserstimme)
   try {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") new Notification("JARVIS – Kursalarm " + a.symbol, { body: text, tag: "jarvis-alarm-" + a.id });
   } catch (e) { /* mobil ohne Service Worker nicht möglich – Meldung im Chat genügt */ }
