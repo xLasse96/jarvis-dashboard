@@ -1386,7 +1386,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-30s</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31a</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -3352,7 +3352,21 @@ async function briefingErstellen() {
   return zeilen;
 }
 
-document.getElementById("briefing-knopf").addEventListener("click", () => briefingErstellen());
+// Liest den Briefing-Inhalt genau einmal vor – über den gemeinsamen Weg aller lokalen Antworten (Google /sprechen, bei einem
+// Fehler Browserstimme mit Hinweis). lokalVorlesen beachtet „Vorlesen: aus“. Nicht während einer laufenden Aufnahme.
+function briefingVorlesen(zeilen) {
+  if (!zeilen || typeof lokalVorlesen !== "function" || (window.spracheingabeLaeuft && window.spracheingabeLaeuft())) return;
+  lokalVorlesen("Briefing. " + zeilen.map((z) => z.bereich + ": " + z.inhalt).join(". ") + ".");
+}
+
+// Knopf „Briefing starten“: erstellen und vorlesen (früher nur erstellt – vorgelesen wurde nur beim Sprachbefehl).
+// Ein zweiter Klick während des Erstellens liefert null und liest deshalb nichts ein zweites Mal vor.
+async function briefingStarten() {
+  const zeilen = await briefingErstellen();
+  briefingVorlesen(zeilen);
+  return zeilen;
+}
+document.getElementById("briefing-knopf").addEventListener("click", () => briefingStarten());
 
 skillRegistrieren({
   name: "briefing",
@@ -3365,10 +3379,7 @@ skillRegistrieren({
     if (!zeilen) return true;
     const fehlend = zeilen.filter((z) => z.fehlt).length;
     nachrichtAnzeigen("JARVIS: Briefing erstellt – siehe Karte „System“ links." + (fehlend ? " " + fehlend + " Bereich(e) derzeit nicht verfügbar." : ""), "jarvis");
-    // Vorgelesen wird der Inhalt (wie alle lokalen Antworten: Google /sprechen, sonst Browserstimme; nur bei „Vorlesen: an“)
-    if (typeof lokalVorlesen === "function" && !(window.spracheingabeLaeuft && window.spracheingabeLaeuft())) {
-      lokalVorlesen("Briefing. " + zeilen.map((z) => z.bereich + ": " + z.inhalt).join(". ") + ".");
-    }
+    briefingVorlesen(zeilen); // gleicher Weg wie der Knopf
     return true;
   },
 });
