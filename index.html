@@ -663,6 +663,17 @@
       .verlauf-schalter, #faehigkeiten-liste select { min-height: 44px; }
       .verlauf-schalter input { width: 26px; height: 26px; }
     }
+    /* Paper-Bot-Karte (nur Simulation) */
+    .bot-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 8px 0; }
+    .bot-zeile label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--gedimmt); flex: 1 1 90px; min-width: 0; }
+    .bot-zeile .feld { width: 100%; min-width: 0; }
+    .bot-zeile .knopf { flex: 1 1 110px; }
+    .bot-konto { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 8px 0; font-size: 13px; }
+    .bot-konto dt { color: var(--gedimmt); }
+    .bot-konto dd { margin: 0; overflow-wrap: anywhere; }
+    #bot-journal { max-height: 260px; overflow-y: auto; font-size: 12px; }
+    #bot-status[data-art="fehler"] { color: var(--fehler); }
+    #bot-status[data-art="warn"] { color: var(--warn); }
     #verlauf-modus { flex: 1 1 100%; }
     .modus-karte { grid-area: modus; }
     #handelsmodus-kopf { margin: 0 0 8px; font-family: var(--mono); font-size: 16px; color: var(--text); }
@@ -1249,6 +1260,31 @@
       </div>
     </article>
 
+    <article class="karte paperbot-karte" aria-labelledby="paperbot-titel">
+      <h2 class="karte-titel" id="paperbot-titel">Paper-Bot <span class="zu">]</span><span class="zusatz">nur Simulation · virtuelles Guthaben</span></h2>
+      <div class="karte-inhalt">
+        <p id="bot-status" class="klein" role="status" aria-live="polite" style="margin-top: 0;">Noch nicht gestartet.</p>
+        <div class="bot-zeile">
+          <label>Markt <select class="feld" id="bot-symbol"><option value="BTCUSDT">BTCUSDT</option><option value="ETHUSDT">ETHUSDT</option></select></label>
+          <label>Kerzen <select class="feld" id="bot-intervall"><option value="15m">15 Minuten</option><option value="1h" selected>1 Stunde</option><option value="4h">4 Stunden</option></select></label>
+          <label>Stop-Verlust <select class="feld" id="bot-stop"><option value="">aus</option><option value="0.03">3 %</option><option value="0.05" selected>5 %</option><option value="0.1">10 %</option></select></label>
+        </div>
+        <div class="bot-zeile">
+          <button class="knopf" type="button" id="bot-start">Bot starten</button>
+          <button class="knopf zweit" type="button" id="bot-anhalten" disabled>Anhalten</button>
+          <button class="knopf zweit" type="button" id="bot-neu">Neu beginnen</button>
+        </div>
+        <dl id="bot-konto" class="bot-konto"></dl>
+        <p class="klein" style="margin-bottom: 4px;">Order-Journal (simuliert, neueste zuerst)</p>
+        <ul id="bot-journal" class="aufgaben-liste"><li>Noch keine simulierte Order.</li></ul>
+        <p class="klein">Strategie: EMA-Kreuzung 9/21 auf <b>abgeschlossenen</b> Kerzen von <code>/kerzen</code> (öffentliche
+          Marktdaten). Signal am Schluss einer Kerze, Ausführung frühestens zur Eröffnung der nächsten; Gebühr 0,1 %;
+          Startguthaben 10.000 USDT (virtuell). Läuft nur, solange diese Seite geöffnet ist – beim Öffnen werden verpasste
+          abgeschlossene Kerzen nachgeholt. Stand nur auf diesem Gerät. <b>Keine echte Order</b>: weder Testnet noch Echtgeld,
+          getrennt vom Paper-Konto im Reiter „Trading“.</p>
+      </div>
+    </article>
+
     <article class="karte protokoll-karte">
       <h2 class="karte-titel">Protokoll <span class="zu">]</span><span class="zusatz">letzte 20</span></h2>
       <div class="karte-inhalt">
@@ -1398,7 +1434,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31f</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31h</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -2820,19 +2856,23 @@ async function kurseLaden() {
   try {
     const daten = await workerAnfrage("/markt", { method: "GET" });
     letzteKurse = {};
-    tabelleFuellen("kurse", daten.kurse.map((k) => {
-      letzteKurse[k.symbol] = k.preis;
+    // Nur gültige Preise anzeigen – ein fehlender Preis würde sonst als „0 USDT“ wie ein aktueller Kurs erscheinen
+    const gueltig = Array.isArray(daten.kurse) ? daten.kurse.filter((k) => k && typeof k.symbol === "string" && Number(k.preis) > 0) : [];
+    if (!gueltig.length) throw new Error("Ungültige Antwort von /markt (keine gültigen Preise).");
+    tabelleFuellen("kurse", gueltig.map((k) => {
+      letzteKurse[k.symbol] = Number(k.preis);
       const klasse = "zahl " + (k.aenderung_prozent >= 0 ? "plus" : "minus");
       return [
         zelle(k.symbol),
         zelle(zahl(k.preis, 2) + " USDT", "zahl"),
-        zelle((k.aenderung_prozent >= 0 ? "+" : "") + zahl(k.aenderung_prozent, 2) + " %", klasse),
+        Number.isFinite(k.aenderung_prozent) ? zelle((k.aenderung_prozent >= 0 ? "+" : "") + zahl(k.aenderung_prozent, 2) + " %", klasse) : zelle("–", "zahl"),
       ];
     }));
     statusZeileSetzen("markt-status", "● Marktdaten: TESTNET VERBUNDEN", "#7affc4");
     knotenSetzen("knoten-markt", "ok", "Testnet verbunden");
     if (window.watchlistKurse) window.watchlistKurse(daten.kurse, Date.now());
   } catch (e) {
+    letzteKurse = {}; // keine alten Kurse mehr als Grundlage für „≈ … USDT“ in der Statuszeile
     if (window.watchlistKurse) window.watchlistKurse(null, Date.now(), e.message);
     tabelleFuellen("kurse", [[zelle("Kurse nicht abrufbar: " + e.message, "minus")]]);
     statusZeileSetzen("markt-status", "● Marktdaten: FEHLER", "#ff9b9b");
@@ -4917,6 +4957,7 @@ const DATEN_BEREICHE = [
   { id: "aufgaben", name: "Aufgaben", schluessel: ["jarvis-aufgaben"], json: true },
   { id: "routinen", name: "Routinen", schluessel: ["jarvis-routinen", "jarvis-routinen-beispiele"] },
   { id: "watchlist", name: "Watchlist & Kursalarme", schluessel: ["jarvis-watchlist"], json: true },
+  { id: "paperbot", name: "Paper-Bot (Simulation)", schluessel: ["jarvis-paper-bot"], json: true },
   { id: "verlauf", name: "Gesprächsverlauf & Angeheftetes", schluessel: ["jarvis-verlauf", "jarvis-verlauf-speichern", "jarvis-verlauf-angeheftet"] },
   { id: "protokolle", name: "Diagnose & KI-Nutzung", schluessel: ["jarvis-diagnose", "jarvis-ki-nutzung"] },
   { id: "einrichtung", name: "Einrichtungsfortschritt", schluessel: ["jarvis-einrichtung"] },
@@ -5392,6 +5433,246 @@ window.uebersichtIntern = { nutzung: kiNutzungLesen, nutzungFiltern: kiNutzungFi
 <!-- Marktanalyse: lokale Kopie von TradingView Lightweight Charts 5.2.1 (Apache-2.0, siehe vendor/LICENSE-lightweight-charts.txt).
      Attribution laut vendor/NOTICE-lightweight-charts.txt: TradingView Lightweight Charts™ Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/
      Das TradingView-Logo im Chart (attributionLogo, Standard) bleibt eingeschaltet – es erfüllt die verlangte Verlinkung. -->
+<script src="bot/backtest.js"></script>
+<script src="bot/paper-bot.js"></script>
+<script>
+// ---------- Paper-Bot (nur Simulation, virtuelles Guthaben) ----------
+// Rechenkern: bot/paper-bot.js (= module/paper-bot, kein Netzwerk). Diese Karte holt nur öffentliche Kerzen über
+// GET /kerzen und reicht ausschließlich ABGESCHLOSSENE Kerzen weiter (Eröffnung + Intervall ≤ jetzt). Der Bot führt ein
+// Signal frühestens zur Eröffnung der nächsten Kerze aus. Dieser Block ruft keine Order-, Paper-Konto- oder Not-Aus-
+// Endpunkte auf (per Test geprüft).
+const PAPERBOT = {
+  schluessel: "jarvis-paper-bot",
+  intervallMs: { "15m": 900000, "1h": 3600000, "4h": 14400000 },
+  symbole: ["BTCUSDT", "ETHUSDT"],
+  stopWerte: ["", "0.03", "0.05", "0.1"],
+  anzahl: 300,         // Kerzen je Abruf (Worker: 50–500)
+  mindestVorlauf: 30,   // so viele abgeschlossene Kerzen braucht die EMA 21 mindestens
+  abrufMs: 60000,       // Abfrage im laufenden Betrieb
+  parameter: { kurz: 9, lang: 21 },
+  maxOrders: 200,
+};
+let paperBot = null;      // Bot aus bot/paper-bot.js
+let paperBotMeta = null;  // { symbol, intervall, letzteT, luecken }
+let paperBotUhr = null;
+let paperBotAbruf = null; // laufender Abruf (kein zweiter gleichzeitig)
+let paperBotHinweis = { text: "", art: "" };
+
+function paperBotStatus(text, art = "") {
+  paperBotHinweis = { text, art };
+  const el = document.getElementById("bot-status");
+  el.textContent = text;
+  el.dataset.art = art;
+}
+
+function paperBotSpeichern() {
+  if (!paperBot) return;
+  try {
+    localStorage.setItem(PAPERBOT.schluessel, JSON.stringify({ version: 1, ...paperBotMeta, zustand: paperBot.alsJson() }));
+  } catch (e) {
+    paperBotStatus("Stand konnte nicht im Browser gespeichert werden (Speicher voll oder gesperrt) – er gilt nur für diese Sitzung.", "warn");
+  }
+}
+
+function paperBotLaden() {
+  let roh = null;
+  try { roh = localStorage.getItem(PAPERBOT.schluessel); } catch (e) { roh = null; }
+  if (!roh) return;
+  let d = null;
+  try { d = JSON.parse(roh); } catch (e) { d = null; }
+  const bot = d && d.version === 1 && PAPERBOT.symbole.includes(d.symbol) && PAPERBOT.intervallMs[d.intervall] && typeof d.zustand === "string"
+    ? window.PaperBot.ausJson(d.zustand) : { fehler: "unbekanntes Format" };
+  if (bot.fehler) {
+    // Nicht still löschen: der Nutzer entscheidet mit „Neu beginnen“
+    paperBotStatus("Gespeicherter Bot-Stand ist ungültig (" + bot.fehler + ") und wurde nicht geladen. „Neu beginnen“ löscht ihn.", "fehler");
+    return;
+  }
+  paperBot = bot;
+  paperBotMeta = { symbol: d.symbol, intervall: d.intervall, stop: PAPERBOT.stopWerte.includes(d.stop) ? d.stop : "",
+    letzteT: Number(d.letzteT) || 0, luecken: Number(d.luecken) || 0 };
+}
+
+// Aus einer /kerzen-Antwort die neuen, abgeschlossenen Kerzen (aufsteigend, ohne Doppelte) – mit Lückenzählung
+function paperBotNeueKerzen(liste, letzteT, intervall, jetzt) {
+  const dauer = PAPERBOT.intervallMs[intervall];
+  const gesehen = new Set();
+  const neu = (Array.isArray(liste) ? liste : [])
+    .filter((k) => k && [k.t, k.o, k.h, k.l, k.c].every(Number.isFinite) && k.t + dauer <= jetzt && k.t > letzteT)
+    .sort((a, b) => a.t - b.t)
+    .filter((k) => (gesehen.has(k.t) ? false : gesehen.add(k.t)));
+  let luecken = 0;
+  let vorher = letzteT;
+  for (const k of neu) {
+    if (vorher && k.t - vorher > dauer) luecken += Math.round((k.t - vorher) / dauer) - 1;
+    vorher = k.t;
+  }
+  return { neu, luecken };
+}
+
+async function paperBotKerzenHolen(symbol, intervall) {
+  const d = await workerAnfrage("/kerzen?symbol=" + encodeURIComponent(symbol) + "&intervall=" + encodeURIComponent(intervall) + "&anzahl=" + PAPERBOT.anzahl, { method: "GET" });
+  if (!d || !Array.isArray(d.kerzen) || (d.symbol && d.symbol !== symbol) || (d.intervall && d.intervall !== intervall)) {
+    throw new Error("Unvollständige Antwort von /kerzen.");
+  }
+  return d.kerzen;
+}
+
+// Neue abgeschlossene Kerzen abholen und dem Bot geben. Angehalten: Kerzen nur mitschreiben (Indikatoren), nie handeln.
+// Ergebnis: true = Antwort verarbeitet, false = nichts abrufbar
+function paperBotAbrufen() {
+  if (!paperBot || !paperBotMeta) return Promise.resolve(false);
+  if (paperBotAbruf) return paperBotAbruf;
+  paperBotAbruf = (async () => {
+    if (!verbunden()) { paperBotStatus("Keine Verbindung eingerichtet – der Bot wartet, es wird nichts ausgeführt.", "warn"); return false; }
+    try {
+      const kerzen = await paperBotKerzenHolen(paperBotMeta.symbol, paperBotMeta.intervall);
+      const { neu, luecken } = paperBotNeueKerzen(kerzen, paperBotMeta.letzteT, paperBotMeta.intervall, Date.now());
+      let orders = 0;
+      for (const k of neu) {
+        const r = paperBot.kerzeVerarbeiten(k);
+        if (!r.fehler) { orders += r.orders.length; paperBotMeta.letzteT = k.t; }
+      }
+      paperBotMeta.luecken += luecken;
+      paperBotSpeichern();
+      const dauer = PAPERBOT.intervallMs[paperBotMeta.intervall];
+      const spaet = Date.now() - (paperBotMeta.letzteT + dauer) > dauer; // die nächste Kerze wäre schon abgeschlossen
+      if (luecken) paperBotStatus("Lücke in den Kerzen: " + luecken + " fehlende Kerze(n) übersprungen – der Bot rechnet mit der nächsten vorhandenen Kerze weiter.", "warn");
+      else if (spaet) paperBotStatus("Kerzen verspätet: seit " + paperBotZeit(paperBotMeta.letzteT + dauer) + " keine neue abgeschlossene Kerze – der Bot wartet, nichts wird geschätzt.", "warn");
+      else paperBotStatus((neu.length ? neu.length + " neue abgeschlossene Kerze(n) verarbeitet" + (orders ? ", " + orders + " simulierte Order(s)" : "") : "Keine neue abgeschlossene Kerze")
+        + " · Abruf " + new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) + ".");
+      return true;
+    } catch (e) {
+      paperBotStatus("Kerzen nicht abrufbar: " + e.message + " – der Bot wartet, es wird nichts ausgeführt.", "fehler");
+      return false;
+    } finally {
+      paperBotAnzeigen(true);
+    }
+  })().finally(() => { paperBotAbruf = null; });
+  return paperBotAbruf;
+}
+
+function paperBotUhrSetzen() {
+  clearInterval(paperBotUhr);
+  paperBotUhr = paperBot && paperBot.stand().laeuft ? setInterval(paperBotAbrufen, PAPERBOT.abrufMs) : null;
+}
+
+async function paperBotStarten() {
+  const knopf = document.getElementById("bot-start");
+  if (knopf.disabled) return;
+  if (!verbunden()) { paperBotStatus("Bitte zuerst im Cockpit die Verbindung einrichten – der Bot braucht Kerzen von /kerzen.", "fehler"); return; }
+  // Per Tastatur gedrückt: der Knopf sperrt sich gleich selbst – Fokus danach auf den jetzt bedienbaren Knopf
+  const hatteFokus = document.activeElement === knopf;
+  knopf.disabled = true;
+  try {
+    if (!paperBot) {
+      const symbol = document.getElementById("bot-symbol").value;
+      const intervall = document.getElementById("bot-intervall").value;
+      const stop = document.getElementById("bot-stop").value;
+      if (!PAPERBOT.symbole.includes(symbol) || !PAPERBOT.intervallMs[intervall] || !PAPERBOT.stopWerte.includes(stop)) throw new Error("Ungültige Auswahl.");
+      const bot = window.PaperBot.erstellen({ strategie: "ema-kreuzung", parameter: PAPERBOT.parameter, stopVerlust: stop ? Number(stop) : null, maxOrders: PAPERBOT.maxOrders });
+      if (bot.fehler) throw new Error(bot.fehler);
+      paperBotStatus("Lade abgeschlossene Kerzen als Vorlauf …");
+      const { neu } = paperBotNeueKerzen(await paperBotKerzenHolen(symbol, intervall), 0, intervall, Date.now());
+      if (neu.length < PAPERBOT.mindestVorlauf) throw new Error("Zu wenige abgeschlossene Kerzen (" + neu.length + ", nötig " + PAPERBOT.mindestVorlauf + ").");
+      const v = bot.vorlaufLaden(neu);
+      if (v.fehler) throw new Error(v.fehler);
+      paperBot = bot;
+      paperBotMeta = { symbol, intervall, stop, letzteT: neu[neu.length - 1].t, luecken: 0 };
+    } else {
+      // Fortsetzen: Kerzen aus der Pause zuerst nur mitschreiben (kein nachträglicher Handel in der Pause).
+      // Scheitert das, bleibt der Bot angehalten – sonst würde er die Pause später nachträglich handeln.
+      if (!(await paperBotAbrufen())) throw new Error("Kerzen nicht abrufbar – der Bot bleibt angehalten.");
+    }
+    paperBot.starten();
+    paperBotSpeichern();
+    paperBotUhrSetzen();
+    paperBotStatus("Bot läuft – handelt ab der nächsten abgeschlossenen Kerze (" + paperBotMeta.symbol + ", " + paperBotMeta.intervall + ").");
+  } catch (e) {
+    paperBotStatus("Bot nicht gestartet: " + e.message, "fehler");
+  } finally {
+    paperBotAnzeigen(true);
+    if (hatteFokus) document.getElementById(knopf.disabled ? "bot-anhalten" : "bot-start").focus();
+  }
+}
+
+function paperBotAnhalten() {
+  if (!paperBot) return;
+  const hatteFokus = document.activeElement === document.getElementById("bot-anhalten");
+  paperBot.anhalten();
+  paperBotSpeichern();
+  paperBotUhrSetzen();
+  paperBotStatus("Bot angehalten. Eine noch geplante Order wurde verworfen; eine offene Position bleibt bestehen.");
+  paperBotAnzeigen(true);
+  if (hatteFokus) document.getElementById("bot-start").focus(); // „Anhalten“ ist jetzt gesperrt
+}
+
+function paperBotNeu() {
+  if (!paperBot && !paperBotHinweis.art) return;
+  if (!confirm("Paper-Bot neu beginnen? Virtuelles Guthaben, Position und Order-Journal dieses Geräts werden gelöscht.")) return;
+  clearInterval(paperBotUhr);
+  paperBotUhr = null;
+  paperBot = null;
+  paperBotMeta = null;
+  try { localStorage.removeItem(PAPERBOT.schluessel); } catch (e) { /* nur diese Sitzung */ }
+  paperBotStatus("Zurückgesetzt. Markt, Kerzen und Stop-Verlust wählen, dann „Bot starten“.");
+  paperBotAnzeigen(true);
+}
+
+function paperBotZeit(t) {
+  return new Date(t).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+const botZahl = (x, stellen = 2) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: stellen, maximumFractionDigits: stellen });
+
+function paperBotAnzeigen(statusBehalten) {
+  const s = paperBot ? paperBot.stand() : null;
+  const laeuft = Boolean(s && s.laeuft);
+  document.getElementById("bot-start").disabled = laeuft;
+  document.getElementById("bot-start").textContent = s ? (laeuft ? "Bot läuft" : "Fortsetzen") : "Bot starten";
+  document.getElementById("bot-anhalten").disabled = !laeuft;
+  // Markt, Kerzen und Stop gelten für eine ganze Simulation – ändern nur nach „Neu beginnen“
+  for (const id of ["bot-symbol", "bot-intervall", "bot-stop"]) document.getElementById(id).disabled = Boolean(s);
+  if (s && paperBotMeta) {
+    document.getElementById("bot-symbol").value = paperBotMeta.symbol;
+    document.getElementById("bot-intervall").value = paperBotMeta.intervall;
+    document.getElementById("bot-stop").value = paperBotMeta.stop;
+  }
+  const konto = document.getElementById("bot-konto");
+  konto.replaceChildren();
+  const zeile = (name, wert) => { const dt = document.createElement("dt"); dt.textContent = name; const dd = document.createElement("dd"); dd.textContent = wert; konto.append(dt, dd); };
+  if (s) {
+    const basis = paperBotMeta.symbol.replace(/USDT$/, "");
+    zeile("Zustand", (laeuft ? "läuft" : "angehalten") + (s.meldung && !laeuft ? " – " + s.meldung : ""));
+    zeile("Markt", paperBotMeta.symbol + " · " + paperBotMeta.intervall + "-Kerzen · EMA " + s.parameter.kurz + "/" + s.parameter.lang);
+    zeile("Virtuelle Kasse", botZahl(s.bargeld_usdt) + " USDT");
+    zeile("Position", s.position ? botZahl(s.position.menge, 6) + " " + basis + " zu " + botZahl(s.position.einstieg_preis) + " USDT · Wert "
+      + botZahl(s.position.wert_usdt) + " USDT (" + (s.position.ergebnis_usdt >= 0 ? "+" : "") + botZahl(s.position.ergebnis_usdt) + ")" : "keine");
+    zeile("Gesamtwert", botZahl(s.gesamtwert_usdt) + " USDT (" + (s.gewinn_prozent >= 0 ? "+" : "") + botZahl(s.gewinn_prozent) + " % seit Start mit " + botZahl(s.startkapital, 0) + " USDT)");
+    zeile("Gebühren / max. Rückgang", botZahl(s.gebuehren_usdt) + " USDT / " + botZahl(s.max_rueckgang_prozent) + " %");
+    zeile("Nächste Order", s.geplant ? (s.geplant.seite === "kauf" ? "Kauf" : "Verkauf") + " zur Eröffnung der nächsten Kerze (" + s.geplant.grund + ")" : "keine geplant");
+    zeile("Letzte Kerze", paperBotMeta.letzteT ? paperBotZeit(paperBotMeta.letzteT) + " (abgeschlossen) · " + s.kerzen_verarbeitet + " seit Start" + (paperBotMeta.luecken ? " · " + paperBotMeta.luecken + " fehlende übersprungen" : "") : "–");
+  }
+  const liste = document.getElementById("bot-journal");
+  liste.replaceChildren();
+  const journal = paperBot ? paperBot.journal().slice(-50).reverse() : [];
+  if (!journal.length) { const li = document.createElement("li"); li.textContent = "Noch keine simulierte Order."; liste.append(li); }
+  for (const o of journal) {
+    const li = document.createElement("li");
+    li.textContent = "#" + o.nr + " · " + paperBotZeit(o.zeit) + " · " + (o.seite === "kauf" ? "KAUF " : "VERKAUF ") + botZahl(o.menge, 6) + " "
+      + paperBotMeta.symbol.replace(/USDT$/, "") + " zu " + botZahl(o.preis) + " USDT · Betrag " + botZahl(o.betrag_usdt) + " · Gebühr " + botZahl(o.gebuehr_usdt)
+      + " · " + o.grund + " · simuliert";
+    liste.append(li);
+  }
+  if (!statusBehalten && s) paperBotStatus(laeuft ? "Bot läuft (gespeicherter Stand) – hole verpasste abgeschlossene Kerzen nach …" : "Bot angehalten (gespeicherter Stand). „Fortsetzen“ startet ihn wieder.");
+}
+
+document.getElementById("bot-start").addEventListener("click", paperBotStarten);
+document.getElementById("bot-anhalten").addEventListener("click", paperBotAnhalten);
+document.getElementById("bot-neu").addEventListener("click", paperBotNeu);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && paperBot && paperBot.stand().laeuft) paperBotAbrufen(); });
+paperBotLaden();
+paperBotAnzeigen(Boolean(paperBotHinweis.art));
+if (paperBot && paperBot.stand().laeuft) { paperBotUhrSetzen(); paperBotAbrufen(); }
+</script>
 <script src="vendor/lightweight-charts-5.2.1.standalone.production.js"></script>
 <script src="analyse.js"></script>
 <script>
