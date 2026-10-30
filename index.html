@@ -1320,7 +1320,7 @@
         <span style="--farbe:#7aa6b8">Darunter: Volumen · RSI 14 (30/70) · MACD 12/26/9</span>
       </div>
       <div id="analyse-chart" class="chart" role="img" aria-label="Kurschart mit EMA, Volumen, RSI und MACD"></div>
-      <p id="analyse-status" class="info"></p>
+      <p id="analyse-status" class="info" role="status" aria-live="polite"></p>
       <div class="analyse-zweispaltig">
         <p id="analyse-zusammenfassung" class="info"></p>
         <ul id="analyse-hinweise"></ul>
@@ -1328,10 +1328,11 @@
       <div class="ki-analyse">
         <div class="analyse-steuerung">
           <button class="knopf zweit" id="ki-analyse-knopf" type="button">KI-Analyse anfordern</button>
-          <span id="ki-analyse-zaehler" class="klein"></span>
+          <span id="ki-analyse-zaehler" class="klein" role="status" aria-live="polite"></span>
         </div>
         <p class="klein">Nur auf ausdrückliche Anfrage mit Bestätigung: kostenpflichtige Claude-Anfrage (geschätzt ca. 0,04 Cent),
-          höchstens 20 pro Tag. Erklärt die Kennzahlen – keine Anlageberatung, kein Handelssignal.</p>
+          höchstens 20 pro Tag (der Zähler beginnt um 0 Uhr UTC neu, in Deutschland um 1 Uhr bzw. im Sommer um 2 Uhr).
+          Auch eine fehlgeschlagene Claude-Anfrage zählt mit. Erklärt die Kennzahlen – keine Anlageberatung, kein Handelssignal.</p>
         <p id="ki-analyse-text" class="info" aria-live="polite"></p>
       </div>
     </div>
@@ -1434,7 +1435,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31i</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31j</span></footer>
 
 <script>
 function uhrAktualisieren() {

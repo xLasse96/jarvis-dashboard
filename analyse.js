@@ -369,8 +369,13 @@
     feld.textContent = "JARVIS analysiert die Kennzahlen …";
     try {
       const d = await workerAnfrage("/analyse", { method: "POST", body: JSON.stringify({ symbol, intervall, bestaetigt: true, kennzahlen }) });
+      if (!d || typeof d.analyse !== "string" || !d.analyse.trim()) throw new Error("Ungültige Antwort des Workers (keine Analyse enthalten).");
+      // Ergebnis immer dem angefragten Paar/Intervall zuordnen – die Auswahl kann sich währenddessen geändert haben
+      const jetzt = element("analyse-symbol").value + "|" + element("analyse-intervall").value;
+      const kopf = `KI-Analyse ${symbol} · ${intervall} (Kerze ${zeitpunkt(kennzahlen.zeit / 1000)})`
+        + (jetzt !== symbol + "|" + intervall ? " – gilt nicht für die aktuelle Auswahl " + jetzt.replace("|", " · ") : "");
       // Nur als Text einfügen, nie als HTML
-      feld.textContent = d.analyse + "\n\n" + d.hinweis;
+      feld.textContent = kopf + ":\n" + d.analyse + "\n\n" + (d.hinweis || "Keine Anlageberatung und kein Handelssignal.");
       zaehlerZeigen(d.heute, d.limit);
     } catch (e) {
       feld.textContent = "KI-Analyse nicht möglich: " + e.message;
