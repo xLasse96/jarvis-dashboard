@@ -31,7 +31,10 @@
     laedt: false,
     stufen: [], // Preislinien für Unterstützungen/Widerstände
     analyseStatusGeladen: false,
+    zusammenfassung: null, // Kennzahlen der angezeigten Auswahl (Quelle für die KI-Analyse)
   };
+  // Älter als das darf die Grundlage einer KI-Analyse nicht sein – sonst vorher neu laden
+  const KI_DATEN_MAX_ALTER_MS = 5 * 60000;
 
   function element(id) {
     return document.getElementById(id);
@@ -266,6 +269,7 @@
       window.dispatchEvent(new CustomEvent("jarvis-kerzen", { detail: daten }));
       zustand.schluessel = schluessel;
       zustand.geladenAm = Date.now();
+      zustand.zusammenfassung = daten.zusammenfassung || null;
       const ersatz = daten.quelle_name && daten.quelle_name !== "Binance" ? " (Ersatzquelle)" : "";
       statusSetzen(`${daten.symbol} · ${daten.intervall} · Quelle: ${daten.quelle_name || daten.quelle}${ersatz} · `
         + `${daten.kerzen.length} Kerzen · Stand ${new Date(daten.abgerufen).toLocaleTimeString("de-DE")}`, "#7affc4");
@@ -285,6 +289,7 @@
         seriendatenLeeren();
         window.dispatchEvent(new CustomEvent("jarvis-kerzen", { detail: null }));
         zustand.schluessel = "";
+        zustand.zusammenfassung = null;
         element("analyse-zusammenfassung").textContent = "";
         hinweiseAnzeigen([]);
       }
@@ -305,7 +310,14 @@
       : `Heute ${heute} von ${limit} KI-Analysen genutzt`) + (grund ? " · " + grund : "");
   }
 
-  // Der Produktions-Worker enthält keine KI-Analyse (/analyse antwortet mit 404): Knopf sperren statt Fehler zeigen
+  // Kennzahlen für POST /analyse – nur Zahlen der angezeigten /kerzen-Zusammenfassung (der Worker prüft sie streng)
+  function kiKennzahlen(z) {
+    return { zeit: z.zeit, schlusskurs: z.schlusskurs, ema20: z.ema20, ema50: z.ema50, ema200: z.ema200, rsi14: z.rsi14,
+      macd_linie: z.macd ? z.macd.linie : null, macd_signal: z.macd ? z.macd.signal : null, macd_histogramm: z.macd ? z.macd.histogramm : null,
+      volumen_verhaeltnis: z.volumen ? z.volumen.verhaeltnis : null };
+  }
+
+  // Worker ohne KI-Analyse (vor 2026-10-30e: /analyse antwortet mit 404): Knopf sperren statt Fehler zeigen
   function kiAnalyseFehlt() {
     element("ki-analyse-zaehler").textContent = "KI-Analyse ist im verbundenen Worker nicht enthalten.";
     element("ki-analyse-knopf").disabled = true;
@@ -335,6 +347,17 @@
     }
     const symbol = element("analyse-symbol").value;
     const intervall = element("analyse-intervall").value;
+    // Grundlage = Kennzahlen genau dieser Auswahl und höchstens 5 Minuten alt; sonst erst (kostenlos) neu laden
+    const aktuell = () => zustand.zusammenfassung && zustand.schluessel === symbol + "|" + intervall && Date.now() - zustand.geladenAm <= KI_DATEN_MAX_ALTER_MS;
+    if (!aktuell()) {
+      feld.textContent = "Lade aktuelle Marktdaten für die KI-Analyse …";
+      await analyseLaden({ erzwingen: true });
+      if (!aktuell()) {
+        feld.textContent = "KI-Analyse nicht angefordert: Keine aktuellen Kennzahlen für " + symbol + " · " + intervall + " (siehe Status oben).";
+        return;
+      }
+    }
+    const kennzahlen = kiKennzahlen(zustand.zusammenfassung);
     const bestaetigt = window.confirm(`KI-Analyse für ${symbol} · ${intervall} anfordern?\n\n`
       + "Das ist eine kostenpflichtige Claude-Anfrage (geschätzt ca. 0,04 Cent), höchstens 20 pro Tag.\n"
       + "Die Antwort ist eine Erklärung der Kennzahlen, kein Handelssignal.");
@@ -345,7 +368,7 @@
     knopf.disabled = true;
     feld.textContent = "JARVIS analysiert die Kennzahlen …";
     try {
-      const d = await workerAnfrage("/analyse", { method: "POST", body: JSON.stringify({ symbol, intervall, bestaetigt: true }) });
+      const d = await workerAnfrage("/analyse", { method: "POST", body: JSON.stringify({ symbol, intervall, bestaetigt: true, kennzahlen }) });
       // Nur als Text einfügen, nie als HTML
       feld.textContent = d.analyse + "\n\n" + d.hinweis;
       zaehlerZeigen(d.heute, d.limit);
