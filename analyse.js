@@ -233,7 +233,7 @@
   async function analyseLaden(optionen) {
     const erzwingen = Boolean(optionen && optionen.erzwingen);
     if (!verbunden()) {
-      statusSetzen("Bitte zuerst unten die Verbindung einrichten.");
+      statusSetzen("Bitte zuerst im Cockpit die Verbindung einrichten.");
       return;
     }
     const symbol = element("analyse-symbol").value;
@@ -275,7 +275,11 @@
       const zusatz = e.message === "Unbekannter Endpunkt."
         ? " Der veröffentlichte Worker kennt /kerzen noch nicht – bitte den neuen Worker-Code in Cloudflare übernehmen."
         : "";
-      statusSetzen("Marktdaten nicht abrufbar: " + e.message + zusatz, "#ff9b9b");
+      // Bleibt der bisherige Chart stehen (gleiche Auswahl), klar sagen, von wann er stammt
+      const alterStand = !neueAuswahl && zustand.geladenAm
+        ? " Angezeigt bleibt der letzte Stand von " + new Date(zustand.geladenAm).toLocaleTimeString("de-DE") + "."
+        : "";
+      statusSetzen("Marktdaten nicht abrufbar: " + e.message + zusatz + alterStand, "#ff9b9b");
       if (neueAuswahl) {
         // Nie Daten eines anderen Paares oder Intervalls unter der neuen Auswahl stehen lassen
         seriendatenLeeren();
