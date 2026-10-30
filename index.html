@@ -415,6 +415,12 @@
 
     /* Mikrofonknopf mit sichtbarem Zustand: bereit, zuhören, verarbeiten, Fehler */
     .mikro {
+      /* Gedrückt halten (Push-to-talk): kleine Fingerbewegung darf kein Scrollen starten – sonst bricht der Browser die
+         Zeiger-Eingabe ab (pointercancel) und damit die Aufnahme; langes Drücken markiert keinen Text */
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -651,6 +657,12 @@
     #routine-schrittliste li.uebersprungen, #routine-schrittliste li.abgebrochen { color: var(--gedimmt); }
     .verlauf-schalter { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
     .verlauf-schalter input { width: 20px; height: 20px; }
+    /* Touch: steht bewusst nach den Grundregeln oben (#faehigkeiten-liste select, .verlauf-schalter), sonst überschreiben
+       diese die Touch-Größen bei gleicher Gewichtung */
+    @media (pointer: coarse) {
+      .verlauf-schalter, #faehigkeiten-liste select { min-height: 44px; }
+      .verlauf-schalter input { width: 26px; height: 26px; }
+    }
     #verlauf-modus { flex: 1 1 100%; }
     .modus-karte { grid-area: modus; }
     #handelsmodus-kopf { margin: 0 0 8px; font-family: var(--mono); font-size: 16px; color: var(--text); }
@@ -1386,7 +1398,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31e</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-10-31f</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -1747,6 +1759,11 @@ async function jarvisAntwort(text) {
     platzhalter.className = "nachricht jarvis";
     platzhalter.textContent = "JARVIS: " + daten.antwort;
     untertitelSetzen(null, daten.antwort);
+    // Stand die Statuszeile wegen eines Verbindungsfehlers auf „Fehler“, ist der Worker jetzt nachweislich wieder erreichbar
+    if (kern.dataset.zustand === "fehler") {
+      if (daten.modell) kiStatusSetzen("VERBUNDEN (" + daten.modell + ")", "#7affc4", "verbunden");
+      else verbindungPruefen();
+    }
     antwortVorlesen(daten);
   } catch (e) {
     verlauf.pop(); // unbeantwortete Frage entfernen, damit der Verlauf abwechselnd bleibt
@@ -1758,6 +1775,8 @@ async function jarvisAntwort(text) {
       platzhalter.className = "nachricht fehler";
       platzhalter.textContent = "Verbindungsproblem: " + e.message;
       untertitelSetzen(null, "Verbindungsproblem – Details im Gesprächsverlauf.");
+      // Keine Antwort vom Worker (Netz, Zeitlimit, offline): die Statuszeile darf nicht weiter „VERBUNDEN“ zeigen
+      if (e.netzwerk) kiStatusSetzen(e.nichtGesendet ? "OFFLINE – nichts gesendet" : e.zeitlimit ? "ZEITÜBERSCHREITUNG – Worker antwortet nicht" : "WORKER NICHT ERREICHBAR", "#ff9b9b", "fehler");
     }
   } finally {
     abbrechenKnopf.hidden = true;
@@ -2536,6 +2555,8 @@ skillRegistrieren({
 // Der Helfer erkennt „Jarvis“ lokal (Windows-Spracherkennung); das Dashboard fragt nur „gab es eine Aktivierung?“.
 // Erst danach startet die normale Spracheingabe (Browser-Erkennungsdienst) – vorher verlässt kein Audio den PC.
 const helferWort = { an: false, letzte: null, uhr: null };
+// Abfrage jede Sekunde + Nachhall im Raum: so lange nach dem Vorlesen gilt ein „Jarvis“ noch als mögliche eigene Stimme
+const HELFER_NACHHALL_MS = 2500;
 function helferStatus(text) { document.getElementById("helfer-status").textContent = "PC-Helfer: " + text; }
 
 async function helferPruefen() {
@@ -2559,7 +2580,13 @@ async function aktivierungAbfragen() {
     helferWort.letzte = Math.max(seit, Number(d.letzte) || 0);
     // Nur wirklich neue Aktivierungen; beim Einschalten keine alten nachholen
     const neu = (Array.isArray(d.ereignisse) ? d.ereignisse : []).filter((e) => e && e.nr > seit);
-    if (!erstesMal && neu.length && window.spracheingabeStarten) {
+    // Während JARVIS vorliest (und kurz danach) kann der Helfer die eigene Stimme gehört haben („… JARVIS …“):
+    // dann keine Aufnahme starten – sonst bricht die Antwort ab und die Ausgabe würde zur Eingabe.
+    const eigeneStimme = document.getElementById("kern").classList.contains("spricht")
+      || Date.now() - vorlesenHoerbarBis < HELFER_NACHHALL_MS;
+    if (!erstesMal && neu.length && eigeneStimme) {
+      helferStatus("Aktivierungswort während des Vorlesens ignoriert (könnte JARVIS’ eigene Stimme sein) – zum Unterbrechen „Vorlesen stoppen“ oder das Mikrofon tippen");
+    } else if (!erstesMal && neu.length && window.spracheingabeStarten) {
       helferStatus("Aktivierungswort erkannt (" + new Date(neu[neu.length - 1].zeit).toLocaleTimeString("de-DE") + ") – ich höre zu");
       window.spracheingabeStarten();
     }
@@ -5853,9 +5880,14 @@ function stimmeMelden(text) {
   if (window.vorlesenStatusAnzeigen) window.vorlesenStatusAnzeigen();
 }
 
+// Zeitpunkt, zu dem JARVIS zuletzt hörbar vorgelesen hat (das Aktivierungswort ignoriert die eigene Stimme samt Nachhall)
+let vorlesenHoerbarBis = 0;
+
 // Kern und Stopp-Knopf folgen dem tatsächlichen Zustand der Wiedergabe
 function vorlesenAnzeigen(laeuft) {
-  document.getElementById("kern").classList.toggle("spricht", laeuft);
+  const kern = document.getElementById("kern");
+  if (laeuft || kern.classList.contains("spricht")) vorlesenHoerbarBis = Date.now();
+  kern.classList.toggle("spricht", laeuft);
   const stopp = document.getElementById("vorlesen-stopp");
   // Wer per Tastatur stoppt, verliert sonst den Fokus (der Knopf sperrt sich selbst) – Fokus bleibt in der Sprachleiste
   if (!laeuft && document.activeElement === stopp) document.getElementById("vorlesen-schalter").focus();
