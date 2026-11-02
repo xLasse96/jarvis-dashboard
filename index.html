@@ -581,6 +581,26 @@
     .legende { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8125rem; color: #9fc7d6; margin-bottom: 8px; }
     .legende span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--farbe); }
     .chart { width: 100%; height: 600px; }
+    /* Portfolio-Labor (ab 11-02u): Tabelle; in schmalen Karten jede Zeile als Block mit Beschriftung (kein seitlicher Überlauf) */
+    .pl-bereich { margin-top: 12px; min-width: 0; }
+    .pl-tabelle-huelle { container-type: inline-size; min-width: 0; }
+    .pl-tabelle { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .pl-tabelle caption { text-align: left; }
+    /* break-word statt anywhere: Spaltenbreiten richten sich nach ganzen Wörtern („Symbol“ bricht nicht mehr) */
+    .pl-tabelle th, .pl-tabelle td { padding: 4px 6px; border-bottom: 1px solid var(--linie); text-align: left; vertical-align: middle; overflow-wrap: break-word; }
+    .pl-gruppe { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+    .pl-tabelle .pl-gewicht { width: 6rem; max-width: 100%; }
+    .pl-tabelle button { min-height: 44px; min-width: 44px; }
+    .pl-balken { display: block; height: 0.75rem; min-width: 2px; max-width: 100%; background: var(--akzent); border-radius: 2px; }
+    .pl-balken-huelle { display: block; width: 8rem; max-width: 100%; background: rgba(0, 234, 255, 0.08); border-radius: 2px; }
+    @container (max-width: 40rem) {
+      /* Kopf ausblenden: jede Zelle trägt ihre Beschriftung sichtbar (td::before, wird auch vorgelesen). Ein nur visuell versteckter
+         Kopf ragte mit seinem Text bei großer Schrift über den Rand (Schrift-Abnahme 11-02u) */
+      .pl-tabelle thead { display: none; }
+      .pl-tabelle tr { display: block; border-bottom: 1px solid var(--linie); padding: 4px 0; }
+      .pl-tabelle td { display: block; border-bottom: 0; }
+      .pl-tabelle td::before { content: attr(data-beschriftung) ": "; color: var(--gedimmt); }
+    }
     /* Kurschart der Aktienanalyse (ab 11-02s) */
     .ablauf-chart-bereich { margin: 6px 0 10px; min-width: 0; }
     .ablauf-chart { width: 100%; height: max(320px, 16rem); }
@@ -1555,7 +1575,7 @@ KO=25</textarea></label>
           <input class="feld" id="ablauf-symbol" list="ablauf-symbole" placeholder="z. B. AAPL" maxlength="8" spellcheck="false" aria-describedby="ablauf-kopf">
           <datalist id="ablauf-symbole"></datalist>
           <label for="ablauf-quelle">Datenquelle:</label>
-          <select class="feld" id="ablauf-quelle">
+          <select class="feld" id="ablauf-quelle" aria-describedby="ablauf-quelle-hinweis">
             <option value="lokal">Lokale Testdaten (synthetisch, kein Netz)</option>
             <option value="worker">Worker: Alpaca IEX und SEC EDGAR</option>
           </select>
@@ -1566,6 +1586,9 @@ KO=25</textarea></label>
           <button class="knopf" id="ablauf-start" type="submit">Analysieren</button>
           <button class="knopf zweit" id="ablauf-abbrechen" type="button" hidden>Analyse abbrechen</button>
         </form>
+        <!-- ab 11-02t: was die gewählte Datenquelle ist; Hinweis, wenn das Symbolfeld nicht mehr zum angezeigten Ergebnis passt -->
+        <p id="ablauf-quelle-hinweis" class="klein"></p>
+        <p id="ablauf-eingabe-hinweis" class="klein wz-wichtig" role="status" hidden></p>
         <p id="ablauf-zeitraum-hinweis" class="klein">Zeitraum gilt für die Kursdaten und alle daraus berechneten Schritte (auch den Strategie-Vergleich). Ohne Angabe: alle verfügbaren Tageskerzen. Nur „von“: bis heute. Nachrichten, Meldungen, Alarme und Budget-Kurse bleiben ungefiltert.</p>
         <div class="order-zeile">
           <label for="ablauf-sprung">Ausreißerregel – max. Tagessprung %:</label>
@@ -1581,6 +1604,8 @@ KO=25</textarea></label>
         <figure id="ablauf-chart-bereich" class="ablauf-chart-bereich" hidden>
           <figcaption id="ablauf-chart-titel" class="klein"></figcaption>
           <div id="ablauf-chart" class="ablauf-chart" role="img" aria-label="Kurschart der Aktienanalyse" aria-describedby="ablauf-chart-titel ablauf-chart-text"></div>
+          <!-- ab 11-02t: Datum und OHLC der Kerze unter Maus/Finger (nicht angesagt, um Screenreader nicht zu überfluten) -->
+          <p id="ablauf-chart-ohlc" class="klein" aria-live="off"></p>
           <p id="ablauf-chart-text" class="klein"></p>
           <p class="klein">Chart-Bibliothek: TradingView Lightweight Charts™ – <a href="vendor/NOTICE-lightweight-charts.txt" target="_blank" rel="noopener">Lizenzhinweis (lokale Datei)</a>.</p>
         </figure>
@@ -1610,6 +1635,65 @@ KO=25</textarea></label>
         <div class="order-zeile">
           <button class="knopf zweit" type="button" id="profil-aktualisieren">Profil aktualisieren (gleiche Datenquelle)</button>
         </div>
+        <!-- Portfolio-Labor (ab 11-02u): hypothetische Musterportfolios, nur im Browserspeicher, keine Anfrage, keine Order -->
+        <section id="pl-bereich" class="pl-bereich" aria-labelledby="pl-titel">
+          <h3 class="stimmtest-titel" id="pl-titel">Portfolio-Labor (Musterrechnung, nur auf diesem Gerät)</h3>
+          <p class="klein" id="pl-erklaerung">Hypothetische Musterportfolios zum Durchrechnen: Zielbetrag = Budget × Zielgewicht. Nichts wird gesendet,
+            gekauft oder verkauft – auch kein Vorschlag hier wird je automatisch ausgeführt. Analysedaten je Symbol stammen aus „US-Aktie analysieren“
+            in dieser Sitzung; mit „Lokale Testdaten“ sind sie SYNTHETISCH (keine echten Kurse).</p>
+          <div class="order-zeile">
+            <label for="pl-auswahl">Musterportfolio:</label>
+            <select class="feld" id="pl-auswahl" aria-describedby="pl-status"></select>
+            <label for="pl-name">Name:</label>
+            <input class="feld" id="pl-name" maxlength="60" placeholder="z. B. Dividenden-Muster" spellcheck="false" aria-describedby="pl-status">
+            <button class="knopf zweit" type="button" id="pl-neu">Neu anlegen</button>
+            <button class="knopf zweit" type="button" id="pl-umbenennen">Umbenennen</button>
+          </div>
+          <div class="order-zeile">
+            <!-- Beschriftung, Feld und Knopf bleiben beim Umbruch zusammen (pl-gruppe) -->
+            <span class="pl-gruppe">
+              <label for="pl-budget">Hypothetisches Budget (USD):</label>
+              <input class="feld" type="number" id="pl-budget" min="1" max="10000000" step="0.01" placeholder="nicht festgelegt" aria-describedby="pl-status">
+            </span>
+            <span class="pl-gruppe">
+              <label for="pl-wl-symbol">Aus der Watchlist:</label>
+              <select class="feld" id="pl-wl-symbol"></select>
+              <button class="knopf zweit" type="button" id="pl-wl-hinzu" aria-label="Symbol aus der Watchlist hinzufügen">Hinzufügen</button>
+            </span>
+            <span class="pl-gruppe">
+              <label for="pl-symbol">Symbol von Hand:</label>
+              <input class="feld" id="pl-symbol" maxlength="8" placeholder="z. B. KO" spellcheck="false" aria-describedby="pl-status">
+              <button class="knopf zweit" type="button" id="pl-hinzu" aria-label="Symbol von Hand hinzufügen">Hinzufügen</button>
+            </span>
+          </div>
+          <p id="pl-status" class="info" role="status" aria-live="polite"></p>
+          <div class="pl-tabelle-huelle">
+            <table id="pl-tabelle" class="pl-tabelle" aria-describedby="pl-summe">
+              <caption class="klein" id="pl-tabelle-titel">Verteilung des Musterportfolios</caption>
+              <thead><tr><th scope="col">Symbol</th><th scope="col">Zielgewicht (%)</th><th scope="col">Anteil</th><th scope="col">Zielbetrag (USD)</th><th scope="col">Analysedaten (Quelle · Zeitraum)</th><th scope="col">Reihenfolge / Entfernen</th></tr></thead>
+              <tbody id="pl-zeilen"></tbody>
+            </table>
+          </div>
+          <p id="pl-summe" class="info"></p>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-gleich">Gleichmäßig verteilen</button>
+            <button class="knopf zweit" type="button" id="pl-normieren">Auf 100 % normieren</button>
+          </div>
+          <p id="pl-rechnung" class="info"></p>
+          <p id="pl-konzentration" class="info"></p>
+          <h4 class="stimmtest-titel" id="pl-vergleich-titel">Vergleich mit einem zweiten Musterportfolio</h4>
+          <div class="order-zeile">
+            <label for="pl-vergleich">Vergleichen mit:</label>
+            <select class="feld" id="pl-vergleich"></select>
+          </div>
+          <div id="pl-vergleich-ergebnis" class="info"></div>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-export">Alle Musterportfolios exportieren (JSON)</button>
+            <button class="knopf zweit" type="button" id="pl-import-knopf">Musterportfolios importieren (JSON)</button>
+            <input type="file" id="pl-import" accept="application/json,.json" hidden aria-label="Musterportfolios aus JSON-Datei importieren">
+            <button class="knopf zweit" type="button" id="pl-verwerfen" hidden>Beschädigten Speicher verwerfen</button>
+          </div>
+        </section>
         <h3 class="stimmtest-titel" id="ab-titel">US-Aktien-Briefing (nur Daten dieser Sitzung)</h3>
         <div class="order-zeile" role="group" aria-labelledby="ab-titel">
           <button class="knopf zweit" type="button" id="ab-briefing-kurz">Briefing kurz</button>
@@ -1931,7 +2015,7 @@ KO=25</textarea></label>
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-02s</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-02u</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -3621,12 +3705,15 @@ async function ablaufStarten(ev) {
     feldUngueltig("ablauf-von", Boolean(zr && zr.fehler));
     feldUngueltig("ablauf-bis", Boolean(zr && zr.fehler));
     if (zr && zr.fehler) {
+      // ab 11-02t: Schritte und Blockaden des vorigen Laufs nicht unter dem Fehler stehen lassen
+      ablaufErgebnisLeeren("Zeitraum ungültig – nichts analysiert.");
       ablaufEl("ablauf-kopf").textContent = "✖ " + zr.fehler + " Nichts wurde analysiert.";
       ablaufEl("profil-zusammenfassung").textContent = "Aktienprofil nicht erstellt: " + zr.fehler + " Kein Werkzeug wurde gestartet.";
       ablaufEl("profil-sektionen").replaceChildren();
       ablaufChartLeeren(zr.fehler + " Nichts wurde analysiert.");
       APROFIL.letztes = null;
       APROFIL.letzteDispatch = null;
+      ablaufEingabeHinweis();
       return;
     }
     const kx = window.AktienProfil.kontextNeu({ symbol: ablaufEl("ablauf-symbol").value, quelle: art, sitzung: { id: APROFIL.sitzung }, jetzt: optionen.jetzt, zeitraum: zr });
@@ -3641,6 +3728,7 @@ async function ablaufStarten(ev) {
       ablaufEl("profil-zusammenfassung").textContent = "Aktienprofil nicht erstellt: " + kx.fehler.join(" ") + " Kein Werkzeug wurde gestartet.";
       ablaufEl("profil-sektionen").replaceChildren();
       APROFIL.letztes = null;
+      ablaufEingabeHinweis();
       return;
     }
     const eingaben = await profilEingaben(kx.kontext, provider, optionen);
@@ -3651,7 +3739,7 @@ async function ablaufStarten(ev) {
     if (analyse && analyse.daten) {
       ablaufZeigen(analyse.daten);
       const einordnung = ablaufEinordnung(analyse.daten, eingaben._kerzen);
-      ablaufEinordnungZeigen(einordnung);
+      ablaufEinordnungZeigen(einordnung, analyse.daten.quelle);
       ablaufChartZeigen(analyse.daten, eingaben._kerzen, einordnung);
     } else {
       // ab 11-02r: ohne Analysedaten keine Reste des vorigen Laufs stehen lassen
@@ -3663,6 +3751,16 @@ async function ablaufStarten(ev) {
     ablaufEl("ablauf-kopf").textContent += kx.kontext.zeitraum
       ? `\nZeitraum: ${kx.kontext.zeitraum.von} bis ${kx.kontext.zeitraum.bis} (deine Vorgabe; Kursdaten und daraus berechnete Schritte)` + (nK ? "" : " – darin keine Tageskerzen")
       : nK ? "\nZeitraum: keiner angegeben – alle verfügbaren Tageskerzen verwendet" : "\nZeitraum: keiner angegeben";
+    // ab 11-02t: nur teilweise abgedeckter Zeitraum. Toleranz 4 Kalendertage (Wochenende plus ein Feiertag – an diesen Tagen gibt es
+    // keine Tageskerzen); was darüber hinaus fehlt, wird genannt statt still einen kürzeren Zeitraum zu zeigen
+    const hk = eingaben._kerzen && Array.isArray(eingaben._kerzen.kerzen) ? eingaben._kerzen.kerzen : null;
+    if (kx.kontext.zeitraum && nK && hk && hk.length === nK) {
+      const tagIso = (t) => new Date(t).toISOString().slice(0, 10);
+      const tageAbstand = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 86400000);
+      const erste = tagIso(hk[0].t), letzte = tagIso(hk[hk.length - 1].t), z = kx.kontext.zeitraum;
+      const luecken = [tageAbstand(z.von, erste) > 4 ? `Kerzen erst ab ${erste}` : "", tageAbstand(letzte, z.bis) > 4 ? `Kerzen nur bis ${letzte}` : ""].filter(Boolean);
+      if (luecken.length) ablaufEl("ablauf-kopf").textContent += `\nZeitraum nur teilweise abgedeckt: ${luecken.join(", ")} (gewünscht ${z.von} bis ${z.bis}) – alle Kennzahlen und der Chart beziehen sich nur auf ${erste} bis ${letzte}.`;
+    }
     APROFIL.letztes ={ kontext: kx.kontext, analyse: analyse && analyse.daten, kurse: eingaben.kurse, kerzen: eingaben._kerzen };
     APROFIL.letzteDispatch = d;
     // Für die Watchlist (nur diese Sitzung): letzter Analysestand je Symbol
@@ -3674,6 +3772,9 @@ async function ablaufStarten(ev) {
     slZuruecksetzen();
     slVorschau();
     profilZeigen(d);
+    ablaufEingabeHinweis();
+    // Portfolio-Labor (ab 11-02u): Spalte „Analysedaten“ zeigt den neuen Stand dieser Sitzung
+    if (typeof plZeigen === "function") plZeigen();
   } catch (e) {
     // Fehlertext ohne Schlüssel/Tokens und ohne Stacktrace (nur die erste Zeile, gekürzt)
     if (!ueberholt()) {
@@ -3682,6 +3783,7 @@ async function ablaufStarten(ev) {
       ablaufErgebnisLeeren("Kein Ergebnis – die Analyse wurde mit einem Fehler abgebrochen.");
       APROFIL.letztes = null;
       APROFIL.letzteDispatch = null;
+      ablaufEingabeHinweis();
     }
   } finally {
     if (!ueberholt()) {
@@ -3766,12 +3868,15 @@ function profilVorschlagZeigen(text) {
   const v = APROFIL.vorschlag;
   ablaufEl("profil-bestaetigen").disabled = !v;
   ablaufEl("profil-vorschlag-text").textContent = text !== undefined ? text : v
-    ? `SIMULATION · ${v.richtung === "kauf" ? "KAUF" : "VERKAUF"} ${v.symbol} · ${v.stueck} Stück · geschätzt ${v.betrag_geschaetzt.toLocaleString("de-DE", { minimumFractionDigits: 2 })} USD zur Preisannahme ${v.preisannahme} (letzter Schluss) · Datenalter ${Math.round(v.datenalter_ms / 3600000)} h · Risikoprüfung (Paper-Kern): ${v.risiko.bestanden ? "bestanden" : "nicht bestanden – " + v.risiko.gruende.join("; ")} · gültig bis ${new Date(v.gueltig_bis).toLocaleTimeString("de-DE")} · Kennung ${v.fingerabdruck}. Keine Order an einen Broker.`
+    ? `SIMULATION · ${v.richtung === "kauf" ? "KAUF" : "VERKAUF"} ${v.symbol} · ${v.stueck} Stück · geschätzt ${v.betrag_geschaetzt.toLocaleString("de-DE", { minimumFractionDigits: 2 })} USD zur Preisannahme ${v.preisannahme} (letzter Schluss) · Datenalter ${Math.round(v.datenalter_ms / 3600000)} h · Risikoprüfung (Paper-Kern): ${v.risiko.bestanden ? "bestanden" : "nicht bestanden – " + v.risiko.gruende.join("; ")} · Status: OFFEN, noch nicht bestätigt – gebucht wird erst nach „Genau diesen Vorschlag bestätigen“ · gültig bis ${new Date(v.gueltig_bis).toLocaleTimeString("de-DE")} (danach neu erstellen) · Kennung ${v.fingerabdruck}. Keine Order an einen Broker.`
     : "";
 }
 function profilVorschlagErstellen() {
   const L = APROFIL.letztes;
   if (!L || !L.analyse || !Number.isFinite(L.analyse.kurs)) { profilVorschlagZeigen("Erst eine Analyse mit gültigen Kursdaten – ohne Preis kein Vorschlag."); return; }
+  // ab 11-02t: kein Vorschlag für das zuletzt analysierte Symbol, wenn im Feld inzwischen ein anderes steht
+  const feld = String(ablaufEl("ablauf-symbol").value || "").trim().toUpperCase();
+  if (feld && feld !== L.kontext.symbol) { profilVorschlagZeigen(`Kein Vorschlag: Im Eingabefeld steht ${feld.slice(0, 12)}, die letzte Analyse gilt für ${L.kontext.symbol}. Erst ${feld.slice(0, 12)} analysieren.`); return; }
   if (L.analyse.frisch === false) { profilVorschlagZeigen("Kursdaten veraltet – kein Paper-Vorschlag."); return; }
   const al = ablaufAllowlist();
   if (al && !al.includes(L.kontext.symbol)) { profilVorschlagZeigen(`${L.kontext.symbol} steht nicht in der Allowlist – kein Vorschlag.`); return; }
@@ -3802,6 +3907,350 @@ function profilVorschlagBestaetigen() {
     profilVorschlagZeigen(`✔ ${r.hinweis} (trade_id ${r.trade_id})`);
   } finally { APROFIL.laeuft = false; }
 }
+// ---------- Portfolio-Labor (ab 11-02u): hypothetische Musterportfolios ----------
+// Nur Browserspeicher (Schlüssel jarvis-portfolio-labor), nie an Worker oder Broker. Rechnung: Zielbetrag = Budget × Zielgewicht.
+// Wiederverwendet: Watchlist (wlLaden), Analysen der Sitzung (APROFIL.analysen), AktienRebalance.zieleNormieren (Normieren),
+// AktienWorkflow.US_TICKER (Symbolprüfung). Kein Kurs wird geschätzt, keine Order, kein Paper-Eintrag.
+const PL_SCHLUESSEL = "jarvis-portfolio-labor";
+const PL_GRENZEN = { maxPortfolios: 20, maxPositionen: 20, maxBudget: 10000000, maxName: 60, maxImportZeichen: 200000 };
+const PL = { vergleich: "", loeschenBestaetigen: false };
+const plTicker = () => (window.AktienWorkflow && window.AktienWorkflow.US_TICKER) || /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
+const plUsd = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const plProzent = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+// Prüft einen vollständigen Datenstand (gespeichert oder importiert); Ergebnis { ok, fehler: [] }
+function plPruefen(d) {
+  const f = [];
+  if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false, fehler: ["kein JSON-Objekt"] };
+  if (d.art !== "jarvis-portfolio-labor") f.push("„art“ ist nicht „jarvis-portfolio-labor“");
+  if (d.version !== 1) f.push("unbekannte Version");
+  if (!Array.isArray(d.portfolios)) f.push("„portfolios“ fehlt");
+  else {
+    if (d.portfolios.length > PL_GRENZEN.maxPortfolios) f.push(`mehr als ${PL_GRENZEN.maxPortfolios} Portfolios`);
+    const ids = new Set();
+    d.portfolios.forEach((p, n) => {
+      const wo = `Portfolio ${n + 1}`;
+      if (!p || typeof p !== "object") { f.push(wo + ": kein Objekt"); return; }
+      if (typeof p.id !== "string" || !/^pl-[a-z0-9-]{1,40}$/.test(p.id) || ids.has(p.id)) f.push(wo + ": Kennung ungültig oder doppelt"); else ids.add(p.id);
+      if (typeof p.name !== "string" || !p.name.trim() || p.name.length > PL_GRENZEN.maxName) f.push(wo + `: Name fehlt oder länger als ${PL_GRENZEN.maxName} Zeichen`);
+      if (!(p.budget === null || (typeof p.budget === "number" && Number.isFinite(p.budget) && p.budget > 0 && p.budget <= PL_GRENZEN.maxBudget))) f.push(wo + ": Budget ungültig");
+      if (!Array.isArray(p.positionen) || p.positionen.length > PL_GRENZEN.maxPositionen) { f.push(wo + `: Positionen fehlen oder mehr als ${PL_GRENZEN.maxPositionen}`); return; }
+      const symbole = new Set();
+      p.positionen.forEach((x, k) => {
+        if (!x || typeof x.symbol !== "string" || !plTicker().test(x.symbol) || symbole.has(x.symbol)) f.push(`${wo}, Position ${k + 1}: Symbol ungültig oder doppelt`); else symbole.add(x.symbol);
+        if (!(typeof x.gewicht === "number" && Number.isFinite(x.gewicht) && x.gewicht >= 0 && x.gewicht <= 100)) f.push(`${wo}, Position ${k + 1}: Gewicht muss 0 bis 100 sein`);
+      });
+    });
+    if (d.aktiv !== null && d.aktiv !== undefined && !d.portfolios.some((p) => p && p.id === d.aktiv)) f.push("aktives Portfolio unbekannt");
+  }
+  return { ok: f.length === 0, fehler: f };
+}
+function plLaden() {
+  let roh;
+  try { roh = localStorage.getItem(PL_SCHLUESSEL); } catch (e) { return { daten: null, beschaedigt: true, grund: "Browserspeicher gesperrt" }; }
+  if (roh === null) return { daten: { art: "jarvis-portfolio-labor", version: 1, portfolios: [], aktiv: null }, beschaedigt: false };
+  let d;
+  try { d = JSON.parse(roh); } catch (e) { return { daten: null, beschaedigt: true, grund: "gespeicherter Inhalt ist kein gültiges JSON" }; }
+  const p = plPruefen(d);
+  return p.ok ? { daten: d, beschaedigt: false } : { daten: null, beschaedigt: true, grund: p.fehler.slice(0, 3).join("; ") };
+}
+function plSpeichern(d) {
+  const p = plPruefen(d);
+  if (!p.ok) return "nicht gespeichert: " + p.fehler.slice(0, 2).join("; ");
+  try { localStorage.setItem(PL_SCHLUESSEL, JSON.stringify(d)); return null; } catch (e) { return "Browserspeicher nicht beschreibbar – nichts gespeichert."; }
+}
+function plStatus(text, fehler) {
+  const s = ablaufEl("pl-status");
+  s.textContent = (fehler ? "✖ " : "") + text;
+  s.classList.toggle("wz-wichtig", Boolean(fehler));
+}
+// Eine Änderung am aktiven Portfolio: laden, ändern, prüfen, speichern, neu zeichnen (nie mit beschädigtem Speicher)
+function plAendern(aenderung, erfolg) {
+  const st = plLaden();
+  if (st.beschaedigt) { plStatus("Gespeicherte Musterportfolios sind beschädigt (" + st.grund + ") – nichts geändert.", true); plZeigen(); return false; }
+  const d = st.daten;
+  const p = d.portfolios.find((x) => x.id === d.aktiv) || null;
+  const fehler = aenderung(d, p);
+  if (fehler) { plStatus(fehler, true); return false; }
+  const s = plSpeichern(d);
+  if (s) { plStatus(s, true); return false; }
+  plZeigen();
+  if (erfolg) plStatus(typeof erfolg === "function" ? erfolg(d) : erfolg, false);
+  return true;
+}
+function plNeueKennung() { return "pl-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
+function plSymbolPruefen(roh, p) {
+  const s = String(roh || "").trim().toUpperCase();
+  if (!s) return { fehler: "Kein Symbol angegeben – bitte ein US-Aktiensymbol eintragen, z. B. KO." };
+  if (!plTicker().test(s)) return { fehler: `„${s.slice(0, 12)}“ ist kein gültiges US-Aktiensymbol (1–5 Buchstaben, optional Klasse wie BRK.B).` };
+  if (p.positionen.some((x) => x.symbol === s)) return { fehler: `${s} ist schon im Musterportfolio.` };
+  if (p.positionen.length >= PL_GRENZEN.maxPositionen) return { fehler: `Höchstens ${PL_GRENZEN.maxPositionen} Positionen je Musterportfolio.` };
+  return { symbol: s };
+}
+// Analysedaten dieser Sitzung je Symbol (nur Anzeige, nichts wird geladen)
+function plAnalyseText(symbol) {
+  const a = APROFIL.analysen && APROFIL.analysen[symbol];
+  if (!a) return { text: "keine Analyse in dieser Sitzung – unter „US-Aktie analysieren“ prüfen", fehlt: true };
+  const kx = a.dispatch && a.dispatch.kontext;
+  const an = a.dispatch && a.dispatch.ergebnisse ? a.dispatch.ergebnisse.find((x) => x.modul === "analyse") : null;
+  const n = an && an.daten && an.daten.kerzen_anzahl > 0 ? an.daten.kerzen_anzahl : 0;
+  const zr = kx && kx.zeitraum ? `${kx.zeitraum.von} bis ${kx.zeitraum.bis}` : "alle verfügbaren Tageskerzen";
+  return { text: `${a.quelle}${/synthetisch/i.test(a.quelle) ? " – SYNTHETISCH" : ""} · ${zr}${n ? ` · ${n} Tageskerzen` : " · keine Tageskerzen"}${a.frisch === false ? " · VERALTET" : ""}`, fehlt: !n };
+}
+// Zielbeträge: Cent-genau gerundet; Rundungsdifferenz und nicht verteilter Rest werden ausgewiesen
+function plRechnen(p) {
+  const summe = p.positionen.reduce((s, x) => s + x.gewicht, 0);
+  const budget = p.budget;
+  const zeilen = p.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht, betrag: budget ? Math.round(budget * x.gewicht) / 100 : null }));
+  const exakt = budget ? (budget * summe) / 100 : null;
+  const gerundet = budget ? zeilen.reduce((s, z) => s + z.betrag, 0) : null;
+  // „|| 0“: aus -0 wird 0 (sonst stünde „-0,00 USD“ da)
+  return { summe, budget, zeilen, exakt, gerundet, rundung: budget ? Math.round((gerundet - exakt) * 100) / 100 || 0 : null, rest: budget ? Math.round((budget - exakt) * 100) / 100 || 0 : null };
+}
+function plZeigen() {
+  const st = plLaden();
+  const auswahl = ablaufEl("pl-auswahl"), zeilen = ablaufEl("pl-zeilen");
+  ablaufEl("pl-verwerfen").hidden = !st.beschaedigt;
+  const aus = (ids, an) => ids.forEach((id) => { ablaufEl(id).disabled = !an; });
+  if (st.beschaedigt) {
+    auswahl.replaceChildren(); zeilen.replaceChildren();
+    for (const id of ["pl-summe", "pl-rechnung", "pl-konzentration", "pl-vergleich-ergebnis"]) ablaufEl(id).textContent = "";
+    aus(["pl-auswahl", "pl-name", "pl-neu", "pl-umbenennen", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-vergleich", "pl-export", "pl-import-knopf"], false);
+    plStatus("Gespeicherte Musterportfolios sind beschädigt (" + st.grund + ") – nichts überschrieben. „Beschädigten Speicher verwerfen“ löscht nur diesen Bereich.", true);
+    return;
+  }
+  const d = st.daten;
+  const p = d.portfolios.find((x) => x.id === d.aktiv) || null;
+  auswahl.replaceChildren(...(d.portfolios.length ? d.portfolios : [null]).map((x) => Object.assign(document.createElement("option"), x ? { value: x.id, textContent: x.name, selected: x.id === d.aktiv } : { value: "", textContent: "– noch keins –" })));
+  aus(["pl-auswahl", "pl-umbenennen", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-vergleich", "pl-export"], Boolean(p));
+  aus(["pl-name", "pl-neu", "pl-import-knopf"], true);
+  ablaufEl("pl-name").value = p ? p.name : "";
+  ablaufEl("pl-budget").value = p && p.budget !== null ? String(p.budget) : "";
+  plWlOptionen(p);
+  if (!p) {
+    zeilen.replaceChildren();
+    ablaufEl("pl-summe").textContent = "Noch kein Musterportfolio – Namen eintragen und „Neu anlegen“ (oder eine JSON-Datei importieren).";
+    for (const id of ["pl-rechnung", "pl-konzentration", "pl-vergleich-ergebnis"]) ablaufEl(id).textContent = "";
+    // Auswahlfeld nie leer: es nennt immer einen Wert (Barrierefreiheit)
+    ablaufEl("pl-vergleich").replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "– erst ein Musterportfolio anlegen –" }));
+    return;
+  }
+  const r = plRechnen(p);
+  zeilen.replaceChildren(...(p.positionen.length ? r.zeilen : [null]).map((z, i) => {
+    const tr = document.createElement("tr");
+    if (!z) { const td = Object.assign(document.createElement("td"), { colSpan: 6, textContent: "Noch keine Positionen – Symbol aus der Watchlist oder von Hand hinzufügen." }); tr.append(td); return tr; }
+    const zelle = (beschriftung, inhalt) => { const td = document.createElement("td"); td.dataset.beschriftung = beschriftung; if (typeof inhalt === "string") td.textContent = inhalt; else td.append(...inhalt); return td; };
+    const eingabe = Object.assign(document.createElement("input"), { className: "feld pl-gewicht", type: "number", min: "0", max: "100", step: "0.01", value: String(z.gewicht) });
+    eingabe.setAttribute("aria-label", `Zielgewicht ${z.symbol} in Prozent`);
+    eingabe.dataset.symbol = z.symbol;
+    const huelle = Object.assign(document.createElement("span"), { className: "pl-balken-huelle" });
+    huelle.setAttribute("aria-hidden", "true");
+    const balken = Object.assign(document.createElement("span"), { className: "pl-balken" });
+    balken.style.width = Math.max(0, Math.min(100, z.gewicht)) + "%";
+    huelle.append(balken);
+    const anteil = Object.assign(document.createElement("span"), { textContent: ` ${plProzent(z.gewicht)} %` });
+    const knopf = (text, aktion, label, aus) => { const b = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", textContent: text, disabled: Boolean(aus) }); b.dataset.plAktion = aktion; b.dataset.symbol = z.symbol; b.setAttribute("aria-label", label); return b; };
+    const info = plAnalyseText(z.symbol);
+    tr.dataset.symbol = z.symbol;
+    tr.append(zelle("Symbol", z.symbol), zelle("Zielgewicht (%)", [eingabe]), zelle("Anteil", [huelle, anteil]),
+      zelle("Zielbetrag (USD)", r.budget ? plUsd(z.betrag) : "nicht berechenbar – Budget fehlt"),
+      zelle("Analysedaten", (info.fehlt ? "⚠ " : "") + info.text),
+      zelle("Reihenfolge / Entfernen", [knopf("↑", "hoch", `${z.symbol} nach oben`, i === 0), knopf("↓", "runter", `${z.symbol} nach unten`, i === p.positionen.length - 1), knopf("Entfernen", "weg", `${z.symbol} aus dem Musterportfolio entfernen`)]));
+    return tr;
+  }));
+  const summeOk = Math.abs(r.summe - 100) < 0.005;
+  ablaufEl("pl-summe").textContent = !p.positionen.length ? "" : `Summe der Zielgewichte: ${plProzent(r.summe)} %` + (summeOk ? " ✔" : ` – ⚠ nicht 100 % (${r.summe < 100 ? "es bleiben " + plProzent(100 - r.summe) + " % unverteilt" : "um " + plProzent(r.summe - 100) + " % zu viel"}). „Auf 100 % normieren“ oder „Gleichmäßig verteilen“ hilft.`);
+  ablaufEl("pl-rechnung").textContent = !p.positionen.length ? "" : !r.budget ? "Zielbeträge: nicht berechenbar – kein Budget eingetragen."
+    : `Zielbeträge = ${plUsd(r.budget)} USD × Zielgewicht, je Position auf Cent gerundet. Summe der gerundeten Beträge ${plUsd(r.gerundet)} USD`
+      + ` (Rundungsdifferenz ${r.rundung >= 0 ? "+" : ""}${plUsd(r.rundung)} USD)` + (Math.abs(r.rest) >= 0.005 ? `; ${r.rest > 0 ? "nicht verteilt" : "über dem Budget"}: ${plUsd(Math.abs(r.rest))} USD (Gewichtssumme ${plProzent(r.summe)} %).` : ".");
+  plKonzentrationZeigen(p, r);
+  plVergleichZeigen(d, p);
+}
+function plWlOptionen(p) {
+  const w = typeof wlLaden === "function" ? wlLaden() : { eintraege: [] };
+  const frei = (w.eintraege || []).map((e) => e.symbol).filter((s) => !p || !p.positionen.some((x) => x.symbol === s));
+  ablaufEl("pl-wl-symbol").replaceChildren(...(frei.length ? frei : [null]).map((s) => Object.assign(document.createElement("option"), s ? { value: s, textContent: s } : { value: "", textContent: w.beschaedigt ? "Watchlist beschädigt" : "– keine weiteren Watchlist-Symbole –" })));
+  ablaufEl("pl-wl-hinzu").disabled = !p || !frei.length;
+}
+// Konzentration (beschreibend, keine Prognose, keine Empfehlung). 25 % = Deckel maxPositionPct der vorhandenen Budget-Regel
+function plKonzentrationZeigen(p, r) {
+  const feld = ablaufEl("pl-konzentration");
+  const mit = p.positionen.filter((x) => x.gewicht > 0);
+  if (!mit.length || !(r.summe > 0)) { feld.textContent = p.positionen.length ? "Konzentration: nicht berechenbar – alle Zielgewichte sind 0 %." : ""; return; }
+  const groesste = mit.reduce((a, b) => (b.gewicht > a.gewicht ? b : a));
+  const anteil = (100 * groesste.gewicht) / r.summe;
+  const deckel = window.AktienBudget ? window.AktienBudget.STANDARD.maxPositionPct : 25;
+  const hinweise = [];
+  if (anteil > 50) hinweise.push("mehr als die Hälfte steckt in einer einzigen Position");
+  else if (anteil > deckel) hinweise.push(`über dem ${deckel}-%-Deckel je Position der Budget-Regel dieses Projekts`);
+  if (mit.length <= 2) hinweise.push(`nur ${mit.length} Position(en) mit Gewicht`);
+  feld.textContent = `Größte Position: ${groesste.symbol} mit ${plProzent(anteil)} % der verteilten Gewichte (${mit.length} Positionen mit Gewicht). `
+    + (hinweise.length ? "Hinweis: " + hinweise.join("; ") + " – Schwankungen dieser Werte wirken entsprechend stark auf das Musterportfolio." : "Keine Position über dem Deckel von " + deckel + " %.")
+    + " Beschreibung der Eingaben, keine Prognose und keine Empfehlung.";
+}
+// Vergleich: aktives Portfolio (A) → gewähltes Vergleichsportfolio (B); unverbindlicher Änderungsvorschlag nur aus den Eingaben
+function plVergleichZeigen(d, p) {
+  const sel = ablaufEl("pl-vergleich"), aus = ablaufEl("pl-vergleich-ergebnis");
+  const andere = d.portfolios.filter((x) => x.id !== p.id);
+  if (!andere.some((x) => x.id === PL.vergleich)) PL.vergleich = "";
+  sel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: andere.length ? "– kein Vergleich –" : "– zweites Musterportfolio anlegen –" }),
+    ...andere.map((x) => Object.assign(document.createElement("option"), { value: x.id, textContent: x.name, selected: x.id === PL.vergleich })));
+  sel.disabled = !andere.length;
+  aus.replaceChildren();
+  const b = andere.find((x) => x.id === PL.vergleich);
+  if (!b) return;
+  const ra = plRechnen(p), rb = plRechnen(b);
+  const symbole = [...new Set([...p.positionen.map((x) => x.symbol), ...b.positionen.map((x) => x.symbol)])];
+  const kopf = Object.assign(document.createElement("p"), { textContent: `Von „${p.name}“ (A) zu „${b.name}“ (B). Annahmen: Zielbetrag = Budget × Zielgewicht, auf Cent gerundet; Budget A ${ra.budget ? plUsd(ra.budget) + " USD" : "fehlt"}, Budget B ${rb.budget ? plUsd(rb.budget) + " USD" : "fehlt"}; Gewichtssummen A ${plProzent(ra.summe)} %, B ${plProzent(rb.summe)} %. Grundlage sind nur deine Eingaben – keine Kurse, keine Analysedaten (auch keine synthetischen).` });
+  const liste = document.createElement("ul");
+  liste.setAttribute("aria-label", "Änderungen je Symbol von A nach B");
+  liste.append(...symbole.map((s) => {
+    const ga = (p.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht, gb = (b.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht;
+    const ba = ra.budget ? Math.round(ra.budget * ga) / 100 : null, bb = rb.budget ? Math.round(rb.budget * gb) / 100 : null;
+    const dpp = Math.round((gb - ga) * 100) / 100, dusd = ba !== null && bb !== null ? Math.round((bb - ba) * 100) / 100 : null;
+    const art = ga === 0 && gb > 0 ? "neu aufnehmen" : gb === 0 && ga > 0 ? "herausnehmen" : dusd === null ? (dpp > 0 ? "Gewicht erhöhen" : dpp < 0 ? "Gewicht senken" : "unverändert") : dusd > 0 ? "erhöhen" : dusd < 0 ? "verringern" : dpp !== 0 ? "Betrag unverändert" : "unverändert";
+    return Object.assign(document.createElement("li"), { textContent: `${s}: ${art} – Zielgewicht ${plProzent(ga)} % → ${plProzent(gb)} % (${dpp > 0 ? "+" : ""}${plProzent(dpp)} Prozentpunkte); `
+      + (dusd === null ? "USD-Änderung nicht berechenbar (Budget fehlt)" : `Zielbetrag ${plUsd(ba)} → ${plUsd(bb)} USD (${dusd > 0 ? "+" : ""}${plUsd(dusd)} USD)`) });
+  }));
+  const fuss = Object.assign(document.createElement("p"), { className: "wz-wichtig", textContent: "Unverbindlicher Vorschlag nur aus deinen hypothetischen Eingaben – keine Order, wird nie automatisch ausgeführt, nichts wird gesendet. Paper-Buchungen gibt es nur über den Paper-Vorschlag oben mit ausdrücklicher Bestätigung." });
+  aus.append(kopf, liste, fuss);
+}
+function plStarten() {
+  if (!ablaufEl("pl-bereich")) return;
+  ablaufEl("pl-neu").addEventListener("click", () => {
+    const name = String(ablaufEl("pl-name").value || "").trim();
+    const st = plLaden();
+    if (st.beschaedigt) { plZeigen(); return; }
+    // Steht im Feld noch der Name des aktiven Portfolios, bekommt das neue einen eigenen Standardnamen (keine Verwechslung)
+    const aktivName = (st.daten.portfolios.find((x) => x.id === st.daten.aktiv) || {}).name;
+    const vorschlag = name && name !== aktivName ? name : `Musterportfolio ${st.daten.portfolios.length + 1}`;
+    plAendern((d) => {
+      if (d.portfolios.length >= PL_GRENZEN.maxPortfolios) return `Höchstens ${PL_GRENZEN.maxPortfolios} Musterportfolios.`;
+      if (vorschlag.length > PL_GRENZEN.maxName) return `Name höchstens ${PL_GRENZEN.maxName} Zeichen.`;
+      const id = plNeueKennung();
+      d.portfolios.push({ id, name: vorschlag, budget: null, positionen: [] });
+      d.aktiv = id;
+      PL.vergleich = "";
+      return null;
+    }, `„${vorschlag}“ angelegt (leer, nur auf diesem Gerät).`);
+  });
+  ablaufEl("pl-umbenennen").addEventListener("click", () => {
+    const name = String(ablaufEl("pl-name").value || "").trim();
+    feldUngueltig("pl-name", !name);
+    if (!name) { plStatus("Bitte einen Namen eintragen (1 bis 60 Zeichen).", true); return; }
+    plAendern((d, p) => { if (!p) return "Kein Musterportfolio ausgewählt."; p.name = name; return null; }, `Umbenannt in „${name}“.`);
+  });
+  ablaufEl("pl-auswahl").addEventListener("change", () => {
+    const id = ablaufEl("pl-auswahl").value;
+    // Wechsel: alles wird aus dem gewählten Portfolio neu gezeichnet – keine Ergebnisse des vorigen bleiben stehen
+    plAendern((d) => { if (!d.portfolios.some((x) => x.id === id)) return "Unbekanntes Musterportfolio."; d.aktiv = id; if (PL.vergleich === id) PL.vergleich = ""; return null; }, (d) => `„${d.portfolios.find((x) => x.id === id).name}“ ausgewählt.`);
+  });
+  ablaufEl("pl-budget").addEventListener("change", () => {
+    const roh = String(ablaufEl("pl-budget").value).trim();
+    const wert = roh === "" ? null : Number(roh);
+    // Zahlenfeld: Buchstaben liefern einen leeren Wert mit validity.badInput – das ist „keine Zahl“, nicht „Budget entfernen“
+    const fehler = ablaufEl("pl-budget").validity && ablaufEl("pl-budget").validity.badInput ? "Budget ist keine Zahl." : roh === "" ? null : !Number.isFinite(wert) ? "Budget ist keine Zahl." : wert <= 0 ? "Budget muss größer als 0 USD sein." : wert > PL_GRENZEN.maxBudget ? `Budget über ${plUsd(PL_GRENZEN.maxBudget)} USD – für ein Musterportfolio nicht vorgesehen.` : null;
+    feldUngueltig("pl-budget", Boolean(fehler));
+    if (fehler) { plStatus(fehler + " Nichts geändert.", true); return; }
+    plAendern((d, p) => { if (!p) return "Kein Musterportfolio ausgewählt."; p.budget = wert === null ? null : Math.round(wert * 100) / 100; return null; }, wert === null ? "Budget entfernt – Zielbeträge werden nicht berechnet." : `Budget ${plUsd(wert)} USD übernommen (hypothetisch).`);
+  });
+  const hinzufuegen = (roh, quelle) => plAendern((d, p) => {
+    if (!p) return "Erst ein Musterportfolio anlegen.";
+    const s = plSymbolPruefen(roh, p);
+    if (s.fehler) { if (quelle === "hand") feldUngueltig("pl-symbol", true); return s.fehler + " Nichts geändert."; }
+    p.positionen.push({ symbol: s.symbol, gewicht: 0 });
+    return null;
+  }, `${String(roh).trim().toUpperCase()} hinzugefügt (Zielgewicht 0 % – bitte festlegen).`);
+  ablaufEl("pl-hinzu").addEventListener("click", () => { if (hinzufuegen(ablaufEl("pl-symbol").value, "hand")) { ablaufEl("pl-symbol").value = ""; feldUngueltig("pl-symbol", false); } });
+  ablaufEl("pl-symbol").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); ablaufEl("pl-hinzu").click(); } });
+  ablaufEl("pl-symbol").addEventListener("input", () => feldUngueltig("pl-symbol", false));
+  ablaufEl("pl-wl-hinzu").addEventListener("click", () => { const s = ablaufEl("pl-wl-symbol").value; if (s) hinzufuegen(s, "watchlist"); });
+  ablaufEl("pl-wl-symbol").addEventListener("focus", () => { const st = plLaden(); if (!st.beschaedigt) plWlOptionen(st.daten.portfolios.find((x) => x.id === st.daten.aktiv) || null); });
+  // Tabelle: Gewichte und Knöpfe per Ereignisdelegation
+  ablaufEl("pl-zeilen").addEventListener("change", (ev) => {
+    const f = ev.target.closest(".pl-gewicht");
+    if (!f) return;
+    const w = Number(String(f.value).trim().replace(",", "."));
+    if (String(f.value).trim() === "" || !Number.isFinite(w) || w < 0 || w > 100) { f.setAttribute("aria-invalid", "true"); plStatus(`Zielgewicht ${f.dataset.symbol}: bitte eine Zahl von 0 bis 100 eintragen. Nichts geändert.`, true); return; }
+    plAendern((d, p) => { const x = p && p.positionen.find((y) => y.symbol === f.dataset.symbol); if (!x) return "Position nicht gefunden."; x.gewicht = Math.round(w * 100) / 100; return null; }, `Zielgewicht ${f.dataset.symbol} = ${plProzent(w)} %.`);
+  });
+  ablaufEl("pl-zeilen").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-pl-aktion]");
+    if (!b) return;
+    const s = b.dataset.symbol, a = b.dataset.plAktion;
+    plAendern((d, p) => {
+      if (!p) return "Kein Musterportfolio ausgewählt.";
+      const i = p.positionen.findIndex((x) => x.symbol === s);
+      if (i < 0) return "Position nicht gefunden.";
+      if (a === "weg") p.positionen.splice(i, 1);
+      else { const j = a === "hoch" ? i - 1 : i + 1; if (j < 0 || j >= p.positionen.length) return null; [p.positionen[i], p.positionen[j]] = [p.positionen[j], p.positionen[i]]; }
+      return null;
+    }, a === "weg" ? `${s} entfernt.` : `${s} ${a === "hoch" ? "nach oben" : "nach unten"} verschoben.`);
+    // Fokus nachvollziehbar halten: auf denselben Knopf der Position bzw. auf das Symbolfeld
+    const ziel = a === "weg" ? ablaufEl("pl-symbol") : ablaufEl("pl-zeilen").querySelector(`button[data-pl-aktion="${a}"][data-symbol="${s}"]:not(:disabled)`) || ablaufEl("pl-zeilen").querySelector(`tr[data-symbol="${s}"] .pl-gewicht`);
+    if (ziel) ziel.focus();
+  });
+  ablaufEl("pl-gleich").addEventListener("click", () => plAendern((d, p) => {
+    if (!p || !p.positionen.length) return "Keine Positionen zum Verteilen.";
+    const n = p.positionen.length, basis = Math.floor(10000 / n) / 100, rest = Math.round((100 - basis * n) * 100);
+    p.positionen.forEach((x, i) => { x.gewicht = Math.round((basis + (i < rest ? 0.01 : 0)) * 100) / 100; });
+    PL.letzteErklaerung = `Gleichmäßig verteilt: je ${plProzent(basis)} %` + (rest ? ` (die ersten ${rest} Positionen +0,01 %, damit die Summe genau 100 % ergibt)` : "") + ".";
+    return null;
+  }, () => PL.letzteErklaerung));
+  ablaufEl("pl-normieren").addEventListener("click", () => plAendern((d, p) => {
+    if (!p || !p.positionen.length) return "Keine Positionen zum Normieren.";
+    const vorher = p.positionen.reduce((s, x) => s + x.gewicht, 0);
+    if (!(vorher > 0)) return "Alle Zielgewichte sind 0 % – Normieren nicht möglich (erst Gewichte eintragen oder gleichmäßig verteilen).";
+    const R = window.AktienRebalance;
+    if (!R) return "Rechenmodul aktien/rebalance.js nicht geladen.";
+    const n = R.zieleNormieren(p.positionen.filter((x) => x.gewicht > 0));
+    if (n.fehler) return n.fehler;
+    p.positionen.forEach((x) => { x.gewicht = n.gewichte[x.symbol] ? Math.round(n.gewichte[x.symbol] * 100) / 100 : 0; });
+    // Rundungsrest (höchstens wenige Hundertstel) der größten Position zuschlagen, damit die Summe genau 100 % ist
+    const summe = p.positionen.reduce((s, x) => s + x.gewicht, 0), rest = Math.round((100 - summe) * 100) / 100;
+    if (rest) { const g = p.positionen.reduce((a, b) => (b.gewicht > a.gewicht ? b : a)); g.gewicht = Math.round((g.gewicht + rest) * 100) / 100; }
+    PL.letzteErklaerung = `Auf 100 % normiert: Summe vorher ${plProzent(vorher)} %, jedes Gewicht × ${plProzent(100 / vorher)} (Verhältnisse bleiben gleich, 0 % bleibt 0 %)` + (rest ? `; Rundungsrest ${rest > 0 ? "+" : ""}${plProzent(rest)} % bei der größten Position.` : ".");
+    return null;
+  }, () => PL.letzteErklaerung));
+  ablaufEl("pl-vergleich").addEventListener("change", () => { PL.vergleich = ablaufEl("pl-vergleich").value; plZeigen(); });
+  ablaufEl("pl-export").addEventListener("click", () => {
+    const st = plLaden();
+    if (st.beschaedigt || !st.daten.portfolios.length) { plStatus("Nichts zu exportieren.", true); return; }
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(st.daten, null, 2)], { type: "application/json" })), download: "jarvis-portfolio-labor.json" });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    plStatus(`Export erstellt: ${st.daten.portfolios.length} Musterportfolio(s) – nur Namen, Budgets, Symbole und Gewichte, keine Zugangs- oder Kontodaten.`, false);
+  });
+  ablaufEl("pl-import-knopf").addEventListener("click", () => ablaufEl("pl-import").click());
+  ablaufEl("pl-import").addEventListener("change", (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (f) plImportieren(f);
+  });
+  ablaufEl("pl-verwerfen").addEventListener("click", () => {
+    if (!PL.loeschenBestaetigen) { PL.loeschenBestaetigen = true; ablaufEl("pl-verwerfen").textContent = "Wirklich verwerfen? Erneut klicken"; plStatus("Noch einmal klicken, um den beschädigten Speicher des Portfolio-Labors zu löschen – nichts anderes wird gelöscht.", true); return; }
+    PL.loeschenBestaetigen = false;
+    ablaufEl("pl-verwerfen").textContent = "Beschädigten Speicher verwerfen";
+    try { localStorage.removeItem(PL_SCHLUESSEL); } catch (e) { plStatus("Browserspeicher gesperrt – nichts gelöscht.", true); return; }
+    plZeigen();
+    plStatus("Beschädigter Speicher verworfen – das Portfolio-Labor ist leer.", false);
+  });
+  plZeigen();
+}
+// Import: Datei lesen (Ladezustand), prüfen; gültige Portfolios werden ZUSÄTZLICH angelegt (neue Kennungen), nie überschrieben
+async function plImportieren(datei) {
+  plStatus(`Datei „${String(datei.name).slice(0, 60)}“ wird gelesen …`, false);
+  if (datei.size > PL_GRENZEN.maxImportZeichen) { plStatus("Datei zu groß für ein Portfolio-Labor-Export (über 200 KB) – nichts importiert.", true); return; }
+  let d;
+  try { d = JSON.parse(await datei.text()); } catch (e) { plStatus("Datei ist kein gültiges JSON – nichts importiert.", true); return; }
+  const p = plPruefen(d);
+  if (!p.ok) { plStatus("Datei abgelehnt: " + p.fehler.slice(0, 3).join("; ") + (p.fehler.length > 3 ? ` (und ${p.fehler.length - 3} weitere)` : "") + " – nichts importiert.", true); return; }
+  plAendern((ziel) => {
+    if (ziel.portfolios.length + d.portfolios.length > PL_GRENZEN.maxPortfolios) return `Zu viele Musterportfolios: vorhanden ${ziel.portfolios.length}, in der Datei ${d.portfolios.length}, höchstens ${PL_GRENZEN.maxPortfolios} – nichts importiert.`;
+    for (const x of d.portfolios) ziel.portfolios.push({ id: plNeueKennung(), name: x.name.trim().slice(0, PL_GRENZEN.maxName), budget: x.budget, positionen: x.positionen.map((y) => ({ symbol: y.symbol, gewicht: y.gewicht })) });
+    if (!ziel.aktiv && ziel.portfolios.length) ziel.aktiv = ziel.portfolios[0].id;
+    return null;
+  }, `${d.portfolios.length} Musterportfolio(s) importiert (zusätzlich, nichts überschrieben).`);
+}
+document.addEventListener("DOMContentLoaded", plStarten);
 // ---------- Aktien-Watchlist (ab 11-02a, nur dieses Gerät) ----------
 // Eigene Liste für US-Aktien (die vorhandene WATCH-Liste ist eine Krypto-Kursliste und bleibt unverändert). Gespeichert werden nur
 // Symbol, Kennung, Erstellungszeit und optional Notiz/Anzeigename; nur Symbole aus der Allowlist des Workers. Beschädigt → unbekannt,
@@ -4423,13 +4872,16 @@ function ablaufZeigen(r) {
 // Zeichnet nur die Tageskerzen genau dieser Analyse (dieselben, die auch die Einordnung prüft) und die Unterstützungen/Widerstände
 // aus ablaufEinordnung – keine eigene Rechnung, keine Anfrage. Bibliothek: die lokale Lightweight Charts (wie Reiter „Analyse“).
 // Der Chart im Reiter „Analyse“ ist an dessen Auswahl und Worker-Daten gebunden und wird deshalb nicht wiederverwendet.
-const ABLAUF_CHART = { chart: null, serie: null, linien: [], minKerzen: 5, farben: { steigend: "#7affc4", fallend: "#ff6b6b", text: "#9fc7d6", raster: "#0c2a44", hintergrund: "#071a2d" } };
+// wasserzeichen (ab 11-02t): Text im Chart nur bei synthetischen Daten; ohlcStandard: Text ohne Kerze unter Maus/Finger
+const ABLAUF_CHART = { chart: null, serie: null, linien: [], wasserzeichen: null, ohlcStandard: "Zeige mit Maus oder Finger auf eine Kerze: hier erscheinen Datum, Eröffnung, Hoch, Tief und Schluss.", minKerzen: 5, farben: { steigend: "#7affc4", fallend: "#ff6b6b", text: "#9fc7d6", raster: "#0c2a44", hintergrund: "#071a2d" } };
 function ablaufChartLeeren(grund) {
   if (ABLAUF_CHART.serie) {
     for (const l of ABLAUF_CHART.linien) ABLAUF_CHART.serie.removePriceLine(l);
     ABLAUF_CHART.linien = [];
     ABLAUF_CHART.serie.setData([]);
   }
+  if (ABLAUF_CHART.wasserzeichen) { ABLAUF_CHART.wasserzeichen.detach(); ABLAUF_CHART.wasserzeichen = null; }
+  ablaufEl("ablauf-chart-ohlc").textContent = "";
   ablaufEl("ablauf-chart-bereich").hidden = true;
   ablaufEl("ablauf-chart-titel").textContent = "";
   ablaufEl("ablauf-chart-text").textContent = "";
@@ -4464,8 +4916,8 @@ function ablaufChartZeigen(r, haupt, e) {
     ABLAUF_CHART.chart = L.createChart(ablaufEl("ablauf-chart"), {
       autoSize: true,
       // Hinweis auf die Bibliothek als beschrifteter Link auf die lokale NOTICE-Datei unter dem Chart (Apache 2.0 §4(d); externe
-      // Verweise lässt die Upload-Prüfung nicht zu) statt
-      // als Logo-Link in der Grafik – ein fokussierbarer Link in role="img" wäre für Screenreader widersprüchlich
+      // Verweise lässt die Upload-Prüfung nicht zu) statt als Logo-Link in der Grafik – ein fokussierbarer Link in role="img"
+      // wäre für Screenreader widersprüchlich
       layout: { background: { type: L.ColorType.Solid, color: F.hintergrund }, textColor: F.text, fontSize: schrift, attributionLogo: false },
       grid: { vertLines: { color: F.raster }, horzLines: { color: F.raster } },
       rightPriceScale: { borderColor: F.raster },
@@ -4477,6 +4929,14 @@ function ablaufChartZeigen(r, haupt, e) {
     });
     // Kein hervorgehobenes Feld „letzter Kurs“ – es sähe aus wie ein aktueller Kurs (Tagesschlusskerzen, keine Echtzeit)
     ABLAUF_CHART.serie = ABLAUF_CHART.chart.addSeries(L.CandlestickSeries, { upColor: F.steigend, downColor: F.fallend, borderVisible: false, wickUpColor: F.steigend, wickDownColor: F.fallend, priceLineVisible: false, lastValueVisible: false });
+    // Datum und OHLC der Kerze unter Maus/Finger (ab 11-02t) – nur aus den gezeichneten Daten, nichts berechnet
+    ABLAUF_CHART.chart.subscribeCrosshairMove((p) => {
+      const d = p && p.time !== undefined && p.seriesData ? p.seriesData.get(ABLAUF_CHART.serie) : null;
+      const z2 = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      ablaufEl("ablauf-chart-ohlc").textContent = d && typeof p.time === "number" && [d.open, d.high, d.low, d.close].every(Number.isFinite)
+        ? `Kerze vom ${new Date(p.time * 1000).toISOString().slice(0, 10)}: Eröffnung ${z2(d.open)} · Hoch ${z2(d.high)} · Tief ${z2(d.low)} · Schluss ${z2(d.close)}`
+        : (ablaufEl("ablauf-chart-bereich").hidden ? "" : ABLAUF_CHART.ohlcStandard);
+    });
     // Die Breite kennt die Bibliothek erst nach dem Messen (autoSize): bei jeder Größenänderung den ganzen Bereich zeigen
     // Schmal (unter 480 px) verdecken lange Linienbeschriftungen die Kerzen: dann „U“/„W“, im Text darunter erklärt
     new ResizeObserver(() => {
@@ -4507,6 +4967,14 @@ function ablaufChartZeigen(r, haupt, e) {
   ABLAUF_CHART.chart.timeScale().fitContent();
   const tag = (t) => new Date(t).toISOString().slice(0, 10);
   const q = r.quelle || {};
+  // ab 11-02t: synthetische Daten dauerhaft im Chartbereich selbst kennzeichnen (Wasserzeichen der lokalen Bibliothek)
+  if (q.synthetisch && typeof L.createTextWatermark === "function") {
+    const farbe = "rgba(255, 204, 102, 0.22)";
+    const opt = { visible: true, horzAlign: "center", vertAlign: "center", lines: [{ text: "SYNTHETISCHE TESTDATEN", color: farbe, fontSize: Math.round(schrift * 1.6), fontFamily: "sans-serif", fontStyle: "bold" }, { text: "keine echten Kurse", color: farbe, fontSize: schrift, fontFamily: "sans-serif", fontStyle: "" }] };
+    if (ABLAUF_CHART.wasserzeichen) ABLAUF_CHART.wasserzeichen.applyOptions(opt);
+    else ABLAUF_CHART.wasserzeichen = L.createTextWatermark(ABLAUF_CHART.chart.panes()[0], opt);
+  } else if (ABLAUF_CHART.wasserzeichen) { ABLAUF_CHART.wasserzeichen.detach(); ABLAUF_CHART.wasserzeichen = null; }
+  ablaufEl("ablauf-chart-ohlc").textContent = ABLAUF_CHART.ohlcStandard;
   const zr = haupt.zeitraum;
   ablaufEl("ablauf-chart-titel").textContent = `${r.symbol} · ${tag(kerzen[0].t)} bis ${tag(kerzen[n - 1].t)} · ${n} Tageskerzen`
     + (zr ? ` (Zeitraum-Vorgabe ${zr.von} bis ${zr.bis})` : " (ohne Zeitraum: alle verfügbaren)")
@@ -4521,6 +4989,23 @@ function ablaufChartZeigen(r, haupt, e) {
   ablaufEl("ablauf-chart").setAttribute("aria-label", `Kurschart ${r.symbol}: ${n} Tageskerzen vom ${tag(kerzen[0].t)} bis ${tag(kerzen[n - 1].t)}${q.synthetisch ? ", synthetische Testdaten" : ""}`);
   ablaufEl("ablauf-chart-hinweis").hidden = true;
   ablaufEl("ablauf-chart-bereich").hidden = false;
+}
+// Was die gewählte Datenquelle ist (ab 11-02t) – direkt neben der Auswahl, damit synthetische Daten nie für echte Kurse gehalten werden
+function ablaufQuelleHinweis() {
+  const lokal = ablaufEl("ablauf-quelle").value !== "worker";
+  const symbole = window.AktienWorkflow ? window.AktienWorkflow.testProvider().symbole.join(", ") : "–";
+  ablaufEl("ablauf-quelle-hinweis").textContent = lokal
+    ? `Datenquelle „Lokale Testdaten“: künstlich erzeugte (synthetische) Tageskerzen – keine echten Kurse, keine Netzverbindung, nur zum Ausprobieren. Verfügbar für: ${symbole}.`
+    : "Datenquelle „Worker“: Tageskerzen von Alpaca IEX (nur eine Börse) über deine eingerichtete Worker-Verbindung; SEC-Zahlen nur mit SEC_USER_AGENT. Es wird dabei nichts gekauft oder verkauft.";
+}
+// Passt das Symbolfeld nicht mehr zum angezeigten Ergebnis (ab 11-02t), sichtbar sagen, wofür das Ergebnis gilt
+function ablaufEingabeHinweis() {
+  const L = APROFIL.letztes;
+  const feld = String(ablaufEl("ablauf-symbol").value || "").trim().toUpperCase().slice(0, 12);
+  const anders = Boolean(L && feld && feld !== L.kontext.symbol);
+  const h = ablaufEl("ablauf-eingabe-hinweis");
+  h.hidden = !anders;
+  h.textContent = anders ? `Achtung: Das angezeigte Ergebnis gilt für ${L.kontext.symbol}. Für ${feld} bitte „Analysieren“ – bis dahin wird für ${feld} nichts berechnet oder vorgeschlagen.` : "";
 }
 // Schritte, Blockaden und Profil leeren (ab 11-02r) – mit einem sichtbaren Grund statt leerer Felder
 function ablaufErgebnisLeeren(grund) {
@@ -4545,13 +5030,15 @@ function ablaufEinordnung(r, haupt) {
   const ind = T.indikatoren(kerzen);
   const e = E.berechnen({ kerzen, indikatoren: { ema50: ind.ema50, ema200: ind.ema200 }, zusammenfassung: { zeit: kerzen[i].t } });
   // Die Trendregel (wie worker/src) erlaubt eine Richtung ohne EMA 200 – das wird sichtbar gemacht, nicht verschwiegen
-  if (e.verfuegbar) e.ema200Fehlt = ind.ema200[i] === null;
+  if (e.verfuegbar) { e.ema200Fehlt = ind.ema200[i] === null; e.vonZeit = kerzen[0].t; }
   return e;
 }
-function ablaufEinordnungZeigen(e) {
+function ablaufEinordnungZeigen(e, quelle) {
   const li = document.createElement("li");
   li.dataset.schritt = "einordnung";
-  const titel = "Einordnung (lokal aus den Tageskerzen dieser Analyse berechnet, regelbasiert, keine KI)";
+  // ab 11-02t: Herkunft der Werte ausdrücklich (synthetisch) und „keine Prognose“
+  const titel = "Einordnung (lokal aus den Tageskerzen dieser Analyse berechnet, regelbasiert, keine KI)"
+    + (quelle && quelle.synthetisch ? " – Berechnung aus SYNTHETISCHEN TESTDATEN, keine echten Kurse, keine Prognose" : " – Beschreibung der Vergangenheit, keine Prognose");
   const erklaerung = window.AnalyseEinordnung ? " " + window.AnalyseEinordnung.ERKLAERUNG : "";
   if (!e.verfuegbar) {
     li.dataset.status = "nicht_verfuegbar";
@@ -4561,7 +5048,9 @@ function ablaufEinordnungZeigen(e) {
     const stufen = (l) => (l.length ? l.map((s) => `${z(s.preis)} (${s.beruehrungen}×, ${s.abstand_prozent > 0 ? "+" : ""}${z(s.abstand_prozent, 1)} %)`).join(" · ") : "keine in diesen Kerzen");
     const vollstaendig = !e.trend.grund && e.stufen && e.atr14;
     li.dataset.status = vollstaendig ? "ok" : "warnung";
-    li.textContent = `${vollstaendig ? "✔" : "⚠"} ${titel}, Grundlage ${e.kerzen} ${e.kerzen === 1 ? "Tageskerze" : "Tageskerzen"}, letzte bewertete vom ${new Date(e.zeit).toISOString().slice(0, 10)}${vollstaendig ? "" : " – UNVOLLSTÄNDIG"}: `
+    // Zeitraum, aus dem alle Werte dieser Zeile stammen (ab 11-02t): erste bis letzte bewertete Kerze
+    const zeitraum = Number.isFinite(e.vonZeit) ? ` vom ${new Date(e.vonZeit).toISOString().slice(0, 10)} bis ${new Date(e.zeit).toISOString().slice(0, 10)}` : "";
+    li.textContent = `${vollstaendig ? "✔" : "⚠"} ${titel}, Grundlage ${e.kerzen} ${e.kerzen === 1 ? "Tageskerze" : "Tageskerzen"}${zeitraum}, letzte bewertete vom ${new Date(e.zeit).toISOString().slice(0, 10)}${vollstaendig ? "" : " – UNVOLLSTÄNDIG"}: `
       + ["Trend: " + (e.trend.grund ? "nicht verfügbar – " + e.trend.grund : e.trend.text + (e.ema200Fehlt ? " (EMA 200 mangels Kerzen nicht berechenbar – Trend nur eingeschränkt beurteilbar)" : "")),
         "Unterstützungen: " + (e.stufen ? stufen(e.stufen.unterstuetzungen) : "nicht verfügbar – " + e.stufenGrund),
         "Widerstände: " + (e.stufen ? stufen(e.stufen.widerstaende) : "nicht verfügbar – " + e.stufenGrund),
@@ -4580,6 +5069,10 @@ if (window.AktienWorkflow) {
   ablaufEl("ablauf-form").addEventListener("submit", ablaufStarten);
   ablaufEl("ablauf-abbrechen").addEventListener("click", ablaufAbbrechen);
   for (const id of ["wl-symbol", "ablauf-symbol", "ablauf-von", "ablauf-bis", "sl-kapital", "sl-gebuehr", "sl-slippage", "sl-kurz", "sl-lang"]) ablaufEl(id).addEventListener("input", () => feldUngueltig(id, false));
+  // ab 11-02t: Hinweise zur Datenquelle und zum Symbolfeld
+  ablaufEl("ablauf-quelle").addEventListener("change", ablaufQuelleHinweis);
+  ablaufEl("ablauf-symbol").addEventListener("input", ablaufEingabeHinweis);
+  ablaufQuelleHinweis();
   ablaufEl("profil-vorschlag").addEventListener("click", profilVorschlagErstellen);
   ablaufEl("profil-bestaetigen").addEventListener("click", profilVorschlagBestaetigen);
   ablaufEl("profil-aktualisieren").addEventListener("click", () => ablaufStarten());
