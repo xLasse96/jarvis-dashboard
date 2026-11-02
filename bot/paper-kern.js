@@ -1,0 +1,271 @@
+// JARVIS Paper-Kern – vollständig lokale Handelssimulation mit getrenntem Portfolio, Orderzuständen, Fill-Simulator, Replay und Ledger
+// (ab Dashboard 2026-11-01a). KEINE Brokerverbindung: dieses Modul kennt weder Worker noch Börse, ruft kein Netz auf und fragt nie
+// einen Freigabecode ab. Jede Order ist eine Simulation (simuliert: true) – Kapital und Positionen sind Spielgeld, kein Konto.
+// Ergebnisse gelten nur für den gewählten Testdatensatz – keine Prognose, kein Renditeversprechen.
+//
+// Orderzustände (deterministisch, siehe UEBERGAENGE):
+//   erstellt → geprueft → gefuellt | abgelehnt | unklar;  erstellt → abgelehnt;  unklar → gefuellt | verworfen
+// Ausführung (Fill): Signal am Schluss von Kerze i, Ausführung zur Eröffnung von Kerze i+1 (kein Blick in die Zukunft);
+//   Kaufpreis = Eröffnung × (1 + Slippage), Verkaufspreis = Eröffnung × (1 − Slippage), Gebühr = Volumen × Gebühr.
+//   Gebühr und Slippage kommen nur aus den Annahmen des Laufs; fehlen sie, sind sie 0 und als „Testannahme“ gekennzeichnet.
+// Risiko je Order (alle Grenzen Pflicht, sonst wird jeder Kauf blockiert): Not-Aus, Orderwert, offene Positionen, Tagesverlust
+//   (UTC-Tag, Wert zu Tagesbeginn − aktueller Wert), Häufigkeit (gleitendes Fenster über simulierte Ausführungszeiten).
+// Ledger: jede Buchung mit eindeutiger, aus Datensatz/Symbol/Zeit/Seite abgeleiteter trade_id – erneutes Abspielen bucht nichts doppelt.
+// Braucht aktien/technik.js (AktienTechnik.ema) und daten/datenquellen.js (JarvisDaten.kerzenPruefen/ausreisserPruefen).
+(function (global) {
+  "use strict";
+
+  const HINWEIS = "SIMULATION mit Testdaten – kein Konto, keine Order, keine Prognose, kein Renditeversprechen.";
+  const ZUSTAENDE = ["erstellt", "geprueft", "gefuellt", "abgelehnt", "unklar", "verworfen"];
+  const UEBERGAENGE = { erstellt: ["geprueft", "abgelehnt"], geprueft: ["gefuellt", "abgelehnt", "unklar"], unklar: ["gefuellt", "verworfen"], gefuellt: [], abgelehnt: [], verworfen: [] };
+  const RESET_BESTAETIGUNG = "PAPER ZURÜCKSETZEN";
+  // Nur US-Aktien (ab 2026-11-01b): Symbole wie AAPL oder BRK.B; Krypto-Paare (z. B. BTCUSDT) werden abgelehnt
+  const MARKT = "US-Aktien (Simulation)";
+  const US_TICKER = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
+  const TAG = 86400000;
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const r6 = (x) => Math.round(x * 1e6) / 1e6;
+
+  function portfolioNeu({ startkapital, waehrung = "USD" } = {}) {
+    if (!(startkapital > 0)) throw new Error("Startkapital muss größer als 0 sein.");
+    return { art: "simulation", simuliert: true, markt: MARKT, waehrung, startkapital, bargeld: startkapital, positionen: {}, ledger: [], orders: [], ausfuehrungen: [], tagesstart: null, verlauf: [] };
+  }
+
+  function uebergang(order, nach) {
+    const erlaubt = UEBERGAENGE[order.zustand] || [];
+    if (!erlaubt.includes(nach)) throw new Error(`Zustandswechsel „${order.zustand}“ → „${nach}“ nicht erlaubt.`);
+    return { ...order, zustand: nach, verlauf: [...(order.verlauf || []), { von: order.zustand, nach }] };
+  }
+
+  function annahmenNormal(a) {
+    if (!a || (a.gebuehrPct === undefined && a.slippagePct === undefined)) return { gebuehrPct: 0, slippagePct: 0, quelle: "Testannahme (keine Werte angegeben: 0 % Gebühr, 0 % Slippage)", testannahme: true };
+    const g = Number(a.gebuehrPct), s = Number(a.slippagePct);
+    if (!(g >= 0 && g < 10) || !(s >= 0 && s < 10)) throw new Error("Gebühr und Slippage müssen zwischen 0 und 10 % liegen.");
+    return { gebuehrPct: g, slippagePct: s, quelle: a.quelle ? String(a.quelle) : "Testannahme", testannahme: !a.quelle || /test/i.test(String(a.quelle)) };
+  }
+
+  // FNV-1a (32 bit, zweimal mit verschiedenem Startwert) – deterministisch, ohne Abhängigkeit
+  function tradeId(datensatz, symbol, zeit, seite) {
+    const text = [datensatz, symbol, zeit, seite].join("|");
+    const fnv = (start) => { let h = start >>> 0; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16).padStart(8, "0"); };
+    return "sim-" + fnv(2166136261) + fnv(374761393);
+  }
+
+  function wert(p, kurse) {
+    let w = p.bargeld;
+    for (const [s, pos] of Object.entries(p.positionen)) w += pos.menge * (kurse[s] !== undefined ? kurse[s] : pos.einstand);
+    return w;
+  }
+
+  function limitsFehler(l) {
+    const f = [];
+    if (!l || typeof l !== "object") return ["Grenzen fehlen"];
+    if (typeof l.notaus !== "boolean") f.push("Not-Aus-Zustand fehlt");
+    if (!(l.maxOrderWert > 0)) f.push("maxOrderWert fehlt");
+    if (!(Number.isInteger(l.maxPositionen) && l.maxPositionen >= 1)) f.push("maxPositionen fehlt");
+    if (!(l.maxTagesverlust > 0)) f.push("maxTagesverlust fehlt");
+    if (!(l.frequenz && Number.isInteger(l.frequenz.max) && l.frequenz.max >= 1 && l.frequenz.fensterMs > 0)) f.push("Häufigkeitsgrenze fehlt");
+    return f;
+  }
+
+  // Risiko einer simulierten Order. kontext: { jetzt (UTC ms der Ausführung), kurs, kurse }
+  function risikoPruefen(p, order, limits, kontext) {
+    const gruende = limitsFehler(limits).map((x) => "Konfiguration: " + x);
+    if (gruende.length) return { bestanden: false, gruende };
+    if (limits.notaus) gruende.push("NOT-AUS aktiv (Simulation)");
+    const imFenster = p.ausfuehrungen.filter((t) => kontext.jetzt - t < limits.frequenz.fensterMs).length;
+    if (imFenster >= limits.frequenz.max) gruende.push(`Häufigkeitsgrenze: ${limits.frequenz.max} Orders in ${limits.frequenz.fensterMs / 1000} s`);
+    if (order.seite === "kauf") {
+      const volumen = order.wert;
+      if (!(volumen > 0)) gruende.push("Orderwert ungültig");
+      if (volumen > limits.maxOrderWert) gruende.push(`Orderwert ${r2(volumen)} über Höchstwert ${limits.maxOrderWert}`);
+      if (volumen > p.bargeld) gruende.push("nicht genug Spielgeld");
+      const offen = Object.keys(p.positionen).length + (p.positionen[order.symbol] ? 0 : 1);
+      if (offen > limits.maxPositionen) gruende.push(`höchstens ${limits.maxPositionen} offene Positionen`);
+      const tag = new Date(kontext.jetzt).toISOString().slice(0, 10);
+      const start = p.tagesstart && p.tagesstart.datum === tag ? p.tagesstart.wert : wert(p, kontext.kurse || {});
+      const verlust = start - wert(p, kontext.kurse || {});
+      if (verlust >= limits.maxTagesverlust) gruende.push(`Tagesverlust ${r2(verlust)} erreicht Grenze ${limits.maxTagesverlust}`);
+    } else if (!p.positionen[order.symbol]) gruende.push("keine simulierte Position zum Verkaufen");
+    return { bestanden: gruende.length === 0, gruende };
+  }
+
+  // Fill nur aus der übergebenen Kerze (aufgezeichnete/explizite Testdaten). unklar: true → Zustand „unklar“ (z. B. Testfall)
+  function fillSimulieren(order, kerze, annahmen, { unklar = false } = {}) {
+    if (unklar) return { zustand: "unklar" };
+    if (!kerze || !(kerze.o > 0)) return { zustand: "abgelehnt", grund: "keine Ausführungskerze in den Testdaten" };
+    const preis = order.seite === "kauf" ? kerze.o * (1 + annahmen.slippagePct / 100) : kerze.o * (1 - annahmen.slippagePct / 100);
+    return { zustand: "gefuellt", preis: r6(preis), zeit: kerze.t };
+  }
+
+  // Bucht einen Ledger-Eintrag genau einmal (trade_id). Rückgabe: true = gebucht, false = schon vorhanden (nichts geändert)
+  function buchen(p, eintrag) {
+    if (p.ledger.some((e) => e.trade_id === eintrag.trade_id)) return false;
+    if (eintrag.zustand === "gefuellt") {
+      if (eintrag.seite === "kauf") {
+        const pos = p.positionen[eintrag.symbol] || { menge: 0, einstand: 0 };
+        const menge = pos.menge + eintrag.menge;
+        p.positionen[eintrag.symbol] = { menge: r6(menge), einstand: r6((pos.menge * pos.einstand + eintrag.menge * eintrag.preis) / menge) };
+        p.bargeld = r2(p.bargeld - eintrag.volumen - eintrag.gebuehr);
+      } else {
+        const pos = p.positionen[eintrag.symbol];
+        eintrag.ergebnis = r2((eintrag.preis - pos.einstand) * eintrag.menge - eintrag.gebuehr);
+        p.bargeld = r2(p.bargeld + eintrag.volumen - eintrag.gebuehr);
+        delete p.positionen[eintrag.symbol];
+      }
+      p.ausfuehrungen.push(eintrag.zeit);
+    }
+    p.ledger.push(eintrag);
+    return true;
+  }
+
+  // Eine simulierte Order vollständig: erstellt → geprueft (Risiko) → Fill → Ledger
+  function orderAusfuehren(p, { datensatz, symbol, seite, wertKauf, signalZeit, kerze, annahmen, limits, kurse, unklar = false }) {
+    const zeit = kerze ? kerze.t : signalZeit;
+    const id = tradeId(datensatz, symbol, zeit, seite);
+    if (p.ledger.some((e) => e.trade_id === id)) return { doppelt: true, trade_id: id };
+    let order = { trade_id: id, symbol, seite, wert: seite === "kauf" ? wertKauf : null, zustand: "erstellt", verlauf: [] };
+    if (kerze) {
+      const tag = new Date(kerze.t).toISOString().slice(0, 10);
+      if (!p.tagesstart || p.tagesstart.datum !== tag) p.tagesstart = { datum: tag, wert: wert(p, kurse) };
+    }
+    const risiko = risikoPruefen(p, order, limits, { jetzt: zeit, kurse });
+    order = uebergang(order, risiko.bestanden ? "geprueft" : "abgelehnt");
+    const basis = { trade_id: id, datensatz, symbol, seite, wert: order.wert, signal_zeit: signalZeit, zeit, simuliert: true, annahmen, risiko };
+    if (!risiko.bestanden) { buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0 }); return { order, risiko }; }
+    const fill = fillSimulieren(order, kerze, annahmen, { unklar });
+    order = uebergang(order, fill.zustand);
+    if (fill.zustand !== "gefuellt") { buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0, grund: fill.grund || "Ausführung unklar" }); return { order, risiko }; }
+    const menge = seite === "kauf" ? r6(wertKauf / fill.preis) : p.positionen[symbol].menge;
+    const volumen = r2(menge * fill.preis);
+    buchen(p, { ...basis, zustand: "gefuellt", verlauf: order.verlauf, menge, preis: fill.preis, volumen, gebuehr: r2(volumen * annahmen.gebuehrPct / 100) });
+    return { order, risiko };
+  }
+
+  // Klärung einer unklaren simulierten Order (nur ausdrücklich): gefunden → gefuellt (mit Kerze), sonst verworfen
+  function unklarKlaeren(p, tradeIdWert, { gefunden, kerze } = {}) {
+    const e = p.ledger.find((x) => x.trade_id === tradeIdWert);
+    if (!e || e.zustand !== "unklar") throw new Error("Keine unklare Order mit dieser trade_id.");
+    const o = uebergang({ zustand: "unklar", verlauf: e.verlauf }, gefunden ? "gefuellt" : "verworfen");
+    if (!gefunden) { e.zustand = o.zustand; e.verlauf = o.verlauf; return e; }
+    const fill = fillSimulieren({ seite: e.seite }, kerze, e.annahmen);
+    if (fill.zustand !== "gefuellt") throw new Error("Für „gefunden“ ist eine Ausführungskerze nötig.");
+    const i = p.ledger.indexOf(e);
+    p.ledger.splice(i, 1);
+    if (e.seite === "verkauf" && !p.positionen[e.symbol]) throw new Error("Keine simulierte Position mehr für diesen Verkauf.");
+    const menge = e.seite === "kauf" ? r6(e.wert / fill.preis) : p.positionen[e.symbol].menge;
+    buchen(p, { ...e, zustand: "gefuellt", verlauf: o.verlauf, preis: fill.preis, menge, volumen: r2(menge * fill.preis), gebuehr: r2(menge * fill.preis * e.annahmen.gebuehrPct / 100) });
+    return p.ledger.find((x) => x.trade_id === tradeIdWert);
+  }
+
+  // Deterministischer, synthetischer Testdatensatz (kein Marktbezug): Tageskerzen ab 2026-01-05, nur Handelstage Mo–Fr.
+  function testdatensatz({ name = "Synthetisch A", symbol = "TEST", tage = 260, start = 100, saat = 42 } = {}) {
+    let x = saat >>> 0;
+    const zufall = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x / 4294967296; };
+    const kerzen = [];
+    let t = Date.UTC(2026, 0, 5), kurs = start;
+    while (kerzen.length < tage) {
+      const wt = new Date(t).getUTCDay();
+      if (wt !== 0 && wt !== 6) {
+        const welle = Math.sin(kerzen.length / 18) * 0.012;
+        const o = kurs;
+        const c = Math.max(1, o * (1 + welle + (zufall() - 0.5) * 0.02));
+        const h = Math.max(o, c) * (1 + zufall() * 0.006), l = Math.min(o, c) * (1 - zufall() * 0.006);
+        kerzen.push({ t, o: r2(o), h: r2(h), l: r2(l), c: r2(c), v: 1000 + Math.floor(zufall() * 500) });
+        kurs = c;
+      }
+      t += TAG;
+    }
+    return { name, symbol, intervall: "1d", kalender: "boerse", quelle: "synthetisch erzeugt (Saat " + saat + ") – keine echten Marktdaten", synthetisch: true, kerzen };
+  }
+
+  // Replay: verarbeitet die Kerzen des Datensatzes streng der Reihe nach. optionen:
+  //   strategie { art: "ema-kreuzung", kurz, lang }, orderWert, annahmen, limits, ausreisser (Pflicht, siehe JarvisDaten),
+  //   notausAb (UTC ms: ab dann Not-Aus in der Simulation), unklarBei (Liste von Kerzenindizes, deren Fill „unklar“ ist)
+  function replay(datensatz, optionen = {}, portfolio = null) {
+    const D = global.JarvisDaten, T = global.AktienTechnik;
+    if (!D || !T) return { fehler: "datenquellen.js oder technik.js nicht geladen." };
+    const geprueft = D.kerzenPruefen(datensatz && datensatz.kerzen, { intervall: datensatz && datensatz.intervall, kalender: datensatz && datensatz.kalender });
+    if (!geprueft.ok) return { fehler: "Datenqualität: " + geprueft.fehler.text, code: geprueft.fehler.code };
+    const aus = D.ausreisserPruefen(geprueft.kerzen, optionen.ausreisser);
+    if (!aus.ok) return { fehler: "Datenqualität: " + aus.fehler.text, code: aus.fehler.code };
+    if (!US_TICKER.test(String(datensatz.symbol || ""))) return { fehler: `Nur US-Aktiensymbole (z. B. AAPL, BRK.B) – „${String(datensatz.symbol || "").slice(0, 12)}“ abgelehnt.` };
+    const s = optionen.strategie || {};
+    if (s.art !== "ema-kreuzung" || !(Number.isInteger(s.kurz) && Number.isInteger(s.lang) && s.kurz >= 2 && s.lang > s.kurz)) return { fehler: "Strategie: ema-kreuzung mit kurz < lang nötig." };
+    if (!(optionen.orderWert > 0)) return { fehler: "Orderwert je Kauf fehlt." };
+    let annahmen;
+    try { annahmen = annahmenNormal(optionen.annahmen); } catch (e) { return { fehler: e.message }; }
+    const kerzen = geprueft.kerzen;
+    const p = portfolio || portfolioNeu({ startkapital: optionen.startkapital || 10000 });
+    const schluss = kerzen.map((k) => k.c);
+    const ek = T.ema(schluss, s.kurz), el = T.ema(schluss, s.lang);
+    const unklarBei = new Set(optionen.unklarBei || []);
+    let doppelt = 0;
+    p.abgespielt = p.abgespielt || {};
+    const abgespieltBis = Number.isFinite(p.abgespielt[datensatz.name]) ? p.abgespielt[datensatz.name] : -Infinity;
+    const verlauf = [];
+    for (let i = 0; i < kerzen.length; i++) {
+      const kurse = { [datensatz.symbol]: kerzen[i].c };
+      verlauf.push({ t: kerzen[i].t, wert: r2(wert(p, kurse)) });
+      if (i + 1 >= kerzen.length || ek[i] === null || el[i] === null || ek[i - 1] == null || el[i - 1] == null) continue;
+      const hoch = ek[i - 1] <= el[i - 1] && ek[i] > el[i], runter = ek[i - 1] >= el[i - 1] && ek[i] < el[i];
+      if (!hoch && !runter) continue;
+      const naechste = kerzen[i + 1];
+      // Erneutes Abspielen: Kerzen bis zum schon abgespielten Stand werden nie wieder ausgeführt (der heutige Positionsstand würde
+      // sonst alte Signale anders entscheiden); schon gebuchte Orders werden nur gezählt.
+      if (naechste.t <= abgespieltBis) { if (p.ledger.some((e) => e.trade_id === tradeId(datensatz.name, datensatz.symbol, naechste.t, hoch ? "kauf" : "verkauf"))) doppelt++; continue; }
+      if (!hoch && !p.positionen[datensatz.symbol]) continue;
+      const limits = { ...optionen.limits, notaus: optionen.limits && typeof optionen.limits.notaus === "boolean" ? optionen.limits.notaus || (Number.isFinite(optionen.notausAb) && naechste.t >= optionen.notausAb) : undefined };
+      const r = orderAusfuehren(p, { datensatz: datensatz.name, symbol: datensatz.symbol, seite: hoch ? "kauf" : "verkauf", wertKauf: optionen.orderWert, signalZeit: kerzen[i].t + D.INTERVALLE["1d"], kerze: naechste, annahmen, limits, kurse: { [datensatz.symbol]: naechste.o }, unklar: unklarBei.has(i + 1) });
+      if (r.doppelt) doppelt++;
+    }
+    // Wertverlauf fortschreiben (nur Kerzen nach dem bisherigen Stand), damit der größte Rückgang auch bei schrittweisem Abspielen stimmt
+    p.verlauf = (Array.isArray(p.verlauf) ? p.verlauf : []).concat(verlauf.filter((v) => v.t > abgespieltBis));
+    p.abgespielt[datensatz.name] = Math.max(abgespieltBis, kerzen[kerzen.length - 1].t);
+    return { portfolio: p, bericht: bericht(p, datensatz, kerzen, annahmen), doppelt, annahmen };
+  }
+
+  function bericht(p, datensatz, kerzen, annahmen) {
+    const verkaeufe = p.ledger.filter((e) => e.zustand === "gefuellt" && e.seite === "verkauf");
+    const letzter = kerzen && kerzen.length ? kerzen[kerzen.length - 1].c : null;
+    const endwert = r2(wert(p, letzter ? { [datensatz.symbol]: letzter } : {}));
+    let hoch = -Infinity, maxRueckgang = 0;
+    for (const v of p.verlauf || []) { hoch = Math.max(hoch, v.wert); if (hoch > 0) maxRueckgang = Math.max(maxRueckgang, (hoch - v.wert) / hoch * 100); }
+    return {
+      simulation: true,
+      markt: MARKT,
+      symbol: datensatz.symbol,
+      hinweis: HINWEIS,
+      datensatz: datensatz.name, quelle: datensatz.quelle, synthetisch: datensatz.synthetisch === true,
+      zeitraum: kerzen && kerzen.length ? { von: new Date(kerzen[0].t).toISOString().slice(0, 10), bis: new Date(kerzen[kerzen.length - 1].t).toISOString().slice(0, 10) } : null,
+      annahmen,
+      orders: p.ledger.length,
+      ausgefuehrt: p.ledger.filter((e) => e.zustand === "gefuellt").length,
+      blockiert: p.ledger.filter((e) => e.zustand === "abgelehnt").length,
+      unklar: p.ledger.filter((e) => e.zustand === "unklar").length,
+      trades: verkaeufe.length,
+      gewinner: verkaeufe.filter((e) => e.ergebnis > 0).length,
+      verlierer: verkaeufe.filter((e) => e.ergebnis <= 0).length,
+      realisiert: r2(verkaeufe.reduce((s, e) => s + e.ergebnis, 0)),
+      startkapital: p.startkapital, endwert, veraenderung: r2(endwert - p.startkapital),
+      max_rueckgang_pct: Math.round(maxRueckgang * 100) / 100,
+    };
+  }
+
+  // Sicherer Reset: nur mit genau dieser Bestätigung; berührt nur das übergebene Simulations-Portfolio.
+  function zuruecksetzen(p, bestaetigung) {
+    if (bestaetigung !== RESET_BESTAETIGUNG) throw new Error(`Reset nicht bestätigt – erwartet wird genau „${RESET_BESTAETIGUNG}“.`);
+    if (!p || p.art !== "simulation") throw new Error("Nur ein Simulations-Portfolio kann zurückgesetzt werden.");
+    return portfolioNeu({ startkapital: p.startkapital, waehrung: p.waehrung });
+  }
+
+  function ledgerFiltern(p, { symbol, seite, zustand } = {}) {
+    return p.ledger.filter((e) => (!symbol || e.symbol === symbol) && (!seite || e.seite === seite) && (!zustand || e.zustand === zustand));
+  }
+
+  global.PaperKern = {
+    HINWEIS, ZUSTAENDE, UEBERGAENGE, RESET_BESTAETIGUNG, MARKT, US_TICKER,
+    portfolioNeu, uebergang, annahmenNormal, tradeId, risikoPruefen, fillSimulieren, buchen, orderAusfuehren, unklarKlaeren,
+    testdatensatz, replay, bericht, zuruecksetzen, ledgerFiltern, wert,
+  };
+})(typeof window !== "undefined" ? window : globalThis);
