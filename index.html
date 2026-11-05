@@ -589,6 +589,17 @@
     /* break-word statt anywhere: Spaltenbreiten richten sich nach ganzen Wörtern („Symbol“ bricht nicht mehr) */
     .pl-tabelle th, .pl-tabelle td { padding: 4px 6px; border-bottom: 1px solid var(--linie); text-align: left; vertical-align: middle; overflow-wrap: break-word; }
     .pl-gruppe { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+    /* Szenarien (ab 11-02v) */
+    .pl-notiz-gruppe { flex: 1 1 100%; }
+    .pl-notiz-gruppe textarea { flex: 1 1 18rem; min-width: 0; max-width: 100%; }
+    .pl-sz-liste { list-style: none; padding: 0; margin: 8px 0; }
+    .pl-sz-liste li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linie); }
+    .pl-sz-liste li > div { flex: 1 1 100%; overflow-wrap: break-word; min-width: 0; }
+    .pl-sz-liste li[aria-current="true"] { border-left: 3px solid var(--akzent); padding-left: 8px; }
+    .pl-sz-liste li[aria-current="true"] > div { font-weight: 600; }
+    .pl-sz-liste button { min-height: 44px; }
+    .pl-sz-vorschau { border: 1px solid var(--warn); border-radius: 4px; padding: 8px; }
+    #pl-sz-vergleich ul, .pl-sz-vorschau ul { padding-left: 18px; overflow-wrap: break-word; }
     .pl-tabelle .pl-gewicht { width: 6rem; max-width: 100%; }
     .pl-tabelle button { min-height: 44px; min-width: 44px; }
     .pl-balken { display: block; height: 0.75rem; min-width: 2px; max-width: 100%; background: var(--akzent); border-radius: 2px; }
@@ -1111,6 +1122,7 @@
         <label for="zugangscode">Zugangscode</label>
         <input class="feld" type="password" id="zugangscode" placeholder="Ihr JARVIS-Zugangscode" autocomplete="current-password">
         <button class="knopf" onclick="verbindungSpeichern()">Speichern und prüfen</button>
+        <p id="verbindung-meldung" class="klein" role="status"></p>
         <h3 class="stimmtest-titel">PC-Helfer (optional, nur dieser PC)</h3>
         <p class="klein" style="margin-top: 0;">Für Aktivierungswort „Jarvis“ und erlaubte PC-Funktionen: <code>pc-helfer\jarvis-helfer.ps1</code>
           starten und den dort angezeigten Kopplungscode eintragen. Der Helfer ist nur unter 127.0.0.1 erreichbar.</p>
@@ -1180,6 +1192,7 @@
         <div class="order-zeile">
           <button class="knopf zweit" id="freigaben-standard" type="button">Alle auf Standard</button>
         </div>
+        <p id="freigaben-meldung" class="klein" role="status"></p>
         <h3 class="stimmtest-titel">Änderungsverlauf</h3>
         <ul id="freigaben-verlauf" class="diagnose-liste"></ul>
       </div>
@@ -1204,7 +1217,8 @@
     <details class="karte einstellungen" id="daten-karte">
       <summary class="karte-titel">Daten auf diesem Gerät <span class="zu">]</span><span class="zusatz" id="daten-gesamt"></span></summary>
       <div class="karte-inhalt">
-        <p class="klein" style="margin-top: 0;">Alles liegt nur im Browserspeicher dieses Geräts – nichts wird automatisch übertragen.
+        <p class="klein" style="margin-top: 0;">Alles liegt nur im Browserspeicher dieses Browsers – nichts wird automatisch übertragen oder abgeglichen.
+          Auch auf demselben Gerät haben die geöffnete Datei und die Website getrennte Speicher; Daten wechseln nur über Sicherung und Wiederherstellen.
           Sicherungen enthalten <b>nie</b> Zugangscode oder Kopplungscode; Schlüssel und Tokens werden vorher entfernt.</p>
         <table id="daten-tabelle" class="uebersicht-tabelle"></table>
         <h3 class="stimmtest-titel">Sicherung</h3>
@@ -1215,8 +1229,10 @@
         </div>
         <p id="daten-meldung" class="info" role="status"></p>
         <button class="knopf zweit" id="daten-neu-laden" type="button" hidden>Seite jetzt neu laden</button>
-        <p class="klein">„Nur Einstellungen“: Worker-Adresse (ohne Code), Stimme &amp; Sprache, Freigaben, Aktivierungswort-Schalter –
+        <p class="klein">„Nur Einstellungen“: Worker-Adresse (ohne Code), Stimme &amp; Sprache, Freigaben, Aktivierungswort-Schalter, Smart-Home-Modus –
           auf dem anderen Gerät „Wiederherstellen“, Vorschau prüfen, Zugangscode dort einmal von Hand eintragen.</p>
+        <p class="klein">Nicht in diesen Sicherungen: die Musterportfolios des Portfolio-Labors (Reiter Trading) – dort
+          „Alle Musterportfolios exportieren“ und auf dem anderen Gerät „Musterportfolios importieren“.</p>
       </div>
     </details>
   </div>
@@ -1648,7 +1664,11 @@ KO=25</textarea></label>
             <input class="feld" id="pl-name" maxlength="60" placeholder="z. B. Dividenden-Muster" spellcheck="false" aria-describedby="pl-status">
             <button class="knopf zweit" type="button" id="pl-neu">Neu anlegen</button>
             <button class="knopf zweit" type="button" id="pl-umbenennen">Umbenennen</button>
+            <!-- ab 11-02v: archivieren (Szenarien bleiben) bzw. endgültig löschen mit Rückfrage -->
+            <button class="knopf zweit" type="button" id="pl-archivieren">Archivieren</button>
+            <button class="knopf zweit" type="button" id="pl-loeschen">Endgültig löschen …</button>
           </div>
+          <p id="pl-meta" class="klein"></p>
           <div class="order-zeile">
             <!-- Beschriftung, Feld und Knopf bleiben beim Umbruch zusammen (pl-gruppe) -->
             <span class="pl-gruppe">
@@ -1666,6 +1686,12 @@ KO=25</textarea></label>
               <button class="knopf zweit" type="button" id="pl-hinzu" aria-label="Symbol von Hand hinzufügen">Hinzufügen</button>
             </span>
           </div>
+          <div class="order-zeile">
+            <span class="pl-gruppe pl-notiz-gruppe">
+              <label for="pl-notiz">Notiz zum Musterportfolio (höchstens 500 Zeichen):</label>
+              <textarea class="feld" id="pl-notiz" rows="2" maxlength="500" spellcheck="true" aria-describedby="pl-status"></textarea>
+            </span>
+          </div>
           <p id="pl-status" class="info" role="status" aria-live="polite"></p>
           <div class="pl-tabelle-huelle">
             <table id="pl-tabelle" class="pl-tabelle" aria-describedby="pl-summe">
@@ -1681,6 +1707,32 @@ KO=25</textarea></label>
           </div>
           <p id="pl-rechnung" class="info"></p>
           <p id="pl-konzentration" class="info"></p>
+          <!-- Szenarien (ab 11-02v): unveränderliche Schnappschüsse dieses Musterportfolios, nur im Browserspeicher -->
+          <h4 class="stimmtest-titel" id="pl-sz-titel">Szenarien dieses Musterportfolios</h4>
+          <p class="klein" id="pl-sz-erklaerung">Ein Szenario hält Budget, Symbole, Reihenfolge, Gewichte und Notiz als unveränderlichen Schnappschuss fest – nur der Name
+            lässt sich ändern. „Als neues Szenario speichern“ legt immer ein neues an und überschreibt nichts; „In Portfolioeingaben laden …“
+            ändert nach einer Vorschau nur die aktuellen Eingaben. Alles bleibt in diesem Browser – nichts geht an Worker, Broker oder Börsen.</p>
+          <div class="order-zeile">
+            <span class="pl-gruppe">
+              <label for="pl-sz-name">Szenarioname:</label>
+              <input class="feld" id="pl-sz-name" maxlength="60" placeholder="z. B. Vorsichtig" spellcheck="false" aria-describedby="pl-sz-status">
+              <button class="knopf zweit" type="button" id="pl-sz-speichern">Als neues Szenario speichern</button>
+            </span>
+            <button class="knopf zweit" type="button" id="pl-sz-rueckgaengig" hidden>Löschen rückgängig</button>
+          </div>
+          <p id="pl-sz-status" class="info" role="status" aria-live="polite" tabindex="-1"></p>
+          <ul id="pl-sz-liste" class="pl-sz-liste" aria-labelledby="pl-sz-titel"></ul>
+          <div id="pl-sz-vorschau" class="info pl-sz-vorschau" role="region" aria-label="Vorschau vor dem Laden eines Szenarios" hidden></div>
+          <h4 class="stimmtest-titel" id="pl-sz-vergleich-titel">Zwei Szenarien vergleichen</h4>
+          <div class="order-zeile">
+            <span class="pl-gruppe"><label for="pl-sz-a">Szenario A:</label><select class="feld" id="pl-sz-a"></select></span>
+            <span class="pl-gruppe"><label for="pl-sz-b">Szenario B:</label><select class="feld" id="pl-sz-b"></select></span>
+          </div>
+          <div id="pl-sz-vergleich" class="info"></div>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-sz-import-knopf">Szenario in dieses Portfolio importieren (JSON)</button>
+            <input type="file" id="pl-sz-import" accept="application/json,.json" hidden aria-label="Szenario aus JSON-Datei importieren">
+          </div>
           <h4 class="stimmtest-titel" id="pl-vergleich-titel">Vergleich mit einem zweiten Musterportfolio</h4>
           <div class="order-zeile">
             <label for="pl-vergleich">Vergleichen mit:</label>
@@ -1689,6 +1741,7 @@ KO=25</textarea></label>
           <div id="pl-vergleich-ergebnis" class="info"></div>
           <div class="order-zeile">
             <button class="knopf zweit" type="button" id="pl-export">Alle Musterportfolios exportieren (JSON)</button>
+            <button class="knopf zweit" type="button" id="pl-export-v1">Für Stand 02u exportieren (ohne Szenarien)</button>
             <button class="knopf zweit" type="button" id="pl-import-knopf">Musterportfolios importieren (JSON)</button>
             <input type="file" id="pl-import" accept="application/json,.json" hidden aria-label="Musterportfolios aus JSON-Datei importieren">
             <button class="knopf zweit" type="button" id="pl-verwerfen" hidden>Beschädigten Speicher verwerfen</button>
@@ -2015,7 +2068,7 @@ KO=25</textarea></label>
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-02u</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-05b</span></footer>
 
 <script>
 function uhrAktualisieren() {
@@ -2036,6 +2089,8 @@ setInterval(uhrAktualisieren, 1000);
 // Chatverlauf für die KI: abwechselnd user/assistant
 const verlauf = [];
 const MAX_VERLAUF = 20;
+// ab 11-04k: zählt jede Nutzereingabe im Chat – eine verspätete Recherche-Antwort darf Untertitel und Vorlesen einer neueren nicht überschreiben
+let eingabeNr = 0;
 // Grenzen des Workers für /chat (MAX_ZEICHEN_PRO_NACHRICHT / MAX_ZEICHEN_GESAMT im Worker) – nur gemeinsam ändern
 const CHAT_GRENZEN = { nachricht: 4000, gesamt: 40000 };
 
@@ -2050,12 +2105,24 @@ function chatAuszug(liste) {
   return auszug;
 }
 
+// KI-Kontext nur für den ausgehenden Request bereinigen (ab 11-03e): alte Verlaufsreste (gespeichert nur mit dem älteren
+// verlaufBereinigen), die aktuelle Eingabe und der Profilteil gehen ohne Schlüssel/Tokens an /chat. Erzeugt neue Objekte –
+// `verlauf` und der gespeicherte Verlauf bleiben unverändert. Unerwartete Form → Fehler, es wird dann nichts gesendet.
+function kiKontextFuerVersand(nachrichten) {
+  if (!Array.isArray(nachrichten) || !nachrichten.length) throw new Error("Gesprächskontext ungültig – nichts gesendet.");
+  return nachrichten.map((m) => {
+    if (!m || (m.role !== "user" && m.role !== "assistant") || typeof m.content !== "string") throw new Error("Gesprächskontext ungültig – nichts gesendet.");
+    return { role: m.role, content: geheimnisMuster(m.content, { zuweisungen: true }) };
+  });
+}
+
 function einstellungLesen(name) {
   try { return localStorage.getItem(name) || ""; } catch (e) { return ""; }
 }
 
+// false: Browserspeicher gesperrt/voll (z. B. privater Modus) – der Wert gilt nur für diese Sitzung (ab 11-04b auswertbar)
 function einstellungSchreiben(name, wert) {
-  try { localStorage.setItem(name, wert); } catch (e) { /* privater Modus: nur für diese Sitzung */ }
+  try { localStorage.setItem(name, wert); return true; } catch (e) { return false; }
 }
 
 const verbindung = {
@@ -2094,6 +2161,9 @@ function kiStatusSetzen(text, farbe, zustand) {
 function lageAktualisieren() {
   const setze = (id, text) => { const e = document.getElementById(id); if (e && e.textContent !== "● " + text) e.textContent = "● " + text; };
   const zustand = document.getElementById("kern").dataset.zustand;
+  // ab 11-02x: Beim Seitenstart läuft dies schon (über verbindungPruefen → kiStatusSetzen), bevor der Skriptblock mit verbunden()
+  // geladen ist – vorher brach das mit „verbunden is not defined“ ab, und die Statusprüfung beim Start fand nie statt.
+  const verbunden = () => Boolean(verbindung.url && verbindung.code);
   setze("lage-kurse", !verbunden() ? "Kursdaten US-Aktien: keine Live-Quelle verbunden – Analyse nur mit lokalen Testdaten (synthetisch)"
     : zustand === "fehler" ? "Kursdaten US-Aktien: Worker nicht erreichbar – keine Kursdaten"
     : zustand === "verbunden" || zustand === "warnung" ? "Kursdaten US-Aktien: über den Worker nur auf Abruf in der Analyse – hier werden keine Kurse angezeigt"
@@ -2213,7 +2283,8 @@ async function workerAnfrage(pfad, optionen = {}, versuch = 1) {
   let daten = null;
   try { daten = JSON.parse(await antwort.text()); } catch (e) { /* leere oder ungültige Antwort */ }
   if (!antwort.ok) {
-    const fehler = Object.assign(new Error((daten && daten.fehler) || "Fehler " + antwort.status), { status: antwort.status, daten });
+    // ab 11-03c: Fehlertext des Workers ohne Schlüssel/Tokens (er wird an vielen Stellen direkt angezeigt)
+    const fehler = Object.assign(new Error(geheimnisMuster((daten && daten.fehler) || "Fehler " + antwort.status).slice(0, 500)), { status: antwort.status, daten });
     diagnoseErfassen({ quelle: "worker", methode, pfad, art: "http", status: antwort.status, meldung: fehler.message });
     throw fehler;
   }
@@ -2241,18 +2312,29 @@ window.addEventListener("online", () => netzHinweis("Wieder online.", 4000));
 // Fehlerprotokoll: nur technische Angaben (Zeit, Quelle, Methode, Pfad ohne Parameter, Art, Status, gekürzte Meldung),
 // keine Inhalte von Anfragen, keine Nutzertexte. Codes, Schlüssel und Tokens werden vor dem Speichern entfernt.
 const DIAGNOSE = { schluessel: "jarvis-diagnose", max: 30 };
-function diagnoseBereinigen(text) {
-  let s = String(text || "");
+// Gemeinsame Geheimnis-Muster (ab 11-03c) für alle Fehlertexte von außen (workerAnfrage, helferAnfrage, wzRoh), für
+// geheimnisseEntfernen und für das Diagnoseprotokoll: gespeicherte Codes dieses Browsers, API-Schlüssel (auch in Großschrift),
+// Bearer, JWT, private Schlüssel und Zuweisungen wie api_key=… / ?token=… / client_secret: …. Steht hier (früher Skriptblock),
+// weil workerAnfrage schon beim Seitenstart läuft. Normale Texte (Symbole, Kurse, Zeitstempel, Hashes, Fehlercodes) bleiben gleich.
+// zuweisungen: false für gespeicherte JSON-Werte (Sicherung) – die Zuweisungsregel könnte dort gültiges JSON zerstören
+function geheimnisMuster(text, { zuweisungen = true } = {}) {
+  let s = String(text == null ? "" : text);
   for (const geheim of [verbindung.code, einstellungLesen("jarvis-zugangscode"), einstellungLesen("jarvis-helfer-code")]) {
     if (geheim && geheim.length >= 4) s = s.split(geheim).join("[entfernt]");
   }
-  return s
-    .replace(/sk-ant-[A-Za-z0-9_\-]{6,}|\bsk-[A-Za-z0-9]{16,}/g, "[entfernt]")
+  s = s
+    .replace(/sk-ant-[A-Za-z0-9_\-]{6,}/gi, "[entfernt]").replace(/\bsk-[A-Za-z0-9_\-]{16,}/gi, "[entfernt]")
     .replace(/\bAIza[0-9A-Za-z_\-]{20,}/g, "[entfernt]")
-    .replace(/\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{10,}/g, "[entfernt]")
+    .replace(/\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{10,}/gi, "[entfernt]")
     .replace(/Bearer\s+[A-Za-z0-9._\-]{6,}/gi, "Bearer [entfernt]")
     .replace(/eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]*/g, "[entfernt]")
-    .replace(/((?:zugang|code|token|key|schlüssel|passwort|password|secret)\w*["']?\s*[:=]\s*["']?)[^\s"',;]+/gi, "$1[entfernt]")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g, "[entfernt]");
+  return zuweisungen ? s.replace(/((?:api[_-]?key|access[_-]?token|client[_-]?secret|token|secret|passwor[dt]|zugangscode)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, "$1[entfernt]") : s;
+}
+function diagnoseBereinigen(text) {
+  return geheimnisMuster(text)
+    // zusätzlich nur im Protokoll: weitere Zuweisungen (reine Zahlen wie „Fehlercode: 429“ bleiben lesbar) und lange Zufallsfolgen
+    .replace(/((?:zugang|code|token|key|schlüssel|passwort|password|secret)\w*["']?\s*[:=]\s*["']?)(?!\d+\b)[^\s"',;]+/gi, "$1[entfernt]")
     .replace(/[A-Za-z0-9+/_\-]{32,}/g, (t) => (/\d/.test(t) && /[A-Za-z]/.test(t) ? "[entfernt]" : t))
     .slice(0, 200);
 }
@@ -2341,8 +2423,10 @@ async function verbindungPruefen() {
 function verbindungSpeichern() {
   verbindung.url = document.getElementById("worker-url").value.trim();
   verbindung.code = document.getElementById("zugangscode").value;
-  einstellungSchreiben("jarvis-worker-url", verbindung.url);
-  einstellungSchreiben("jarvis-zugangscode", verbindung.code);
+  // ab 11-04e: beide Schreibvorgänge versucht und ausgewertet (vorher „VERBUNDEN“ ohne Hinweis, obwohl nichts gespeichert war)
+  const gespeichert = [einstellungSchreiben("jarvis-worker-url", verbindung.url), einstellungSchreiben("jarvis-zugangscode", verbindung.code)].every(Boolean);
+  document.getElementById("verbindung-meldung").textContent = gespeichert ? ""
+    : "Nicht gespeichert: Browserspeicher gesperrt oder voll – Adresse und Zugangscode gelten nur für diese Sitzung; nach dem Neuladen gilt wieder der vorherige Stand.";
   verbindungPruefen();
   tradingLaden();
   if (window.analyseLaden) analyseLaden({ erzwingen: true });
@@ -2365,6 +2449,7 @@ async function jarvisAntwort(text) {
 
   if (ausFeld) eingabe.value = "";
   const nutzerNachricht = nachrichtAnzeigen(befehl, "nutzer");
+  eingabeNr++;
 
   // Lokale Skills (Hilfe, Paper-Befehle, …) haben Vorrang; passt keiner, geht der Text wie bisher an die KI.
   // Paper-Orders nur über /paper/order und erst nach ausdrücklichem „Ja“ – nie an eine Börse.
@@ -2404,7 +2489,7 @@ async function jarvisAntwort(text) {
 
   try {
     // Nur die letzten Nachrichten senden; Anfang muss eine user-Nachricht sein; Worker-Grenzen einhalten (chatAuszug)
-    const auszug = chatAuszug(profilTeil ? [...verlauf.slice(0, -1), { role: "user", content: profilTeil.kontext + befehl }] : verlauf);
+    const auszug = kiKontextFuerVersand(chatAuszug(profilTeil ? [...verlauf.slice(0, -1), { role: "user", content: profilTeil.kontext + befehl }] : verlauf));
 
     const daten = await workerAnfrage("/chat", {
       method: "POST",
@@ -2472,13 +2557,18 @@ function verlaufBereinigen(text) {
     .replace(/eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]+/g, "[entfernt]");
 }
 
-// Sichtbare Nachrichten ohne „denkt nach“-Platzhalter und ohne Knopfbeschriftungen (z. B. Paper-Rückfrage)
+// Anzeige und Export gespeicherter Nachrichten (ab 11-03d): mit den Mustern aus geheimnisMuster (auch Zuweisungen wie api_key=…).
+// Der gespeicherte Text selbst bleibt unverändert (siehe dataset.roh), damit Laden nichts still überschreibt.
+const verlaufAnzeigeText = (text) => geheimnisMuster(text, { zuweisungen: true });
+
+// Sichtbare Nachrichten ohne „denkt nach“-Platzhalter und ohne Knopfbeschriftungen (z. B. Paper-Rückfrage).
+// Wiederhergestellte Nachrichten tragen ihren gespeicherten Originaltext in dataset.roh – er wird unverändert zurückgespeichert.
 function verlaufNachrichten() {
   return [...document.querySelectorAll("#chatverlauf .nachricht")]
     .filter((el) => !el.classList.contains("denkt"))
     .map((el) => ({
       art: el.classList.contains("nutzer") ? "nutzer" : el.classList.contains("fehler") ? "fehler" : "jarvis",
-      text: verlaufBereinigen([...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("")),
+      text: el.dataset.roh !== undefined ? el.dataset.roh : verlaufBereinigen([...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join("")),
       zeit: el.dataset.zeit || "",
     }))
     .filter((n) => n.text.trim());
@@ -2502,7 +2592,9 @@ function verlaufWiederherstellen() {
   if (!daten || !Array.isArray(daten.nachrichten)) return 0;
   for (const n of daten.nachrichten) {
     if (n && typeof n.text === "string" && ["nutzer", "jarvis", "fehler"].includes(n.art)) {
-      const el = nachrichtAnzeigen(n.text, n.art);
+      const anzeige = verlaufAnzeigeText(n.text);
+      const el = nachrichtAnzeigen(anzeige, n.art);
+      if (anzeige !== n.text) el.dataset.roh = n.text;
       const zeit = typeof n.zeit === "string" && !isNaN(Date.parse(n.zeit)) ? n.zeit : daten.gespeichert;
       if (zeit) el.dataset.zeit = zeit;
     }
@@ -2536,7 +2628,7 @@ function verlaufLoeschen() {
 function verlaufExportieren() {
   const jetzt = new Date();
   const zeilen = ["JARVIS – Gesprächsverlauf, exportiert am " + jetzt.toLocaleString("de-DE"), ""];
-  for (const n of verlaufNachrichten()) zeilen.push((n.art === "nutzer" ? "[Sie] " : n.art === "fehler" ? "[Fehler] " : "") + n.text);
+  for (const n of verlaufNachrichten()) zeilen.push((n.art === "nutzer" ? "[Sie] " : n.art === "fehler" ? "[Fehler] " : "") + verlaufAnzeigeText(n.text));
   const datei = new Blob([zeilen.join("\n") + "\n"], { type: "text/plain;charset=utf-8" });
   const link = document.createElement("a");
   link.href = URL.createObjectURL(datei);
@@ -2922,7 +3014,8 @@ function freigabenLaden() {
     freigaben.verlauf = roh.verlauf.filter((v) => v && typeof v.skill === "string" && RISIKO_STUFE[v.von] !== undefined && RISIKO_STUFE[v.nach] !== undefined && !isNaN(Date.parse(v.zeit))).slice(-FREIGABEN.maxVerlauf);
   }
 }
-function freigabenSpeichern() { try { localStorage.setItem(FREIGABEN.schluessel, JSON.stringify(freigaben)); } catch (e) { /* nur diese Sitzung */ } }
+// Liefert false, wenn der Browserspeicher gesperrt oder voll ist: dann gilt die Änderung nur für diese Sitzung (ab 11-04a gemeldet)
+function freigabenSpeichern() { try { localStorage.setItem(FREIGABEN.schluessel, JSON.stringify(freigaben)); return true; } catch (e) { return false; } }
 // Wirksame Freigabe: eine gespeicherte Abweichung gilt nur, wenn sie strenger ist als der Standard
 function skillRisiko(skill) {
   const a = freigaben.abweichungen[skill.name];
@@ -2938,8 +3031,12 @@ function freigabeSetzen(name, risiko) {
   if (von === risiko) return { ok: true, unveraendert: true };
   if (risiko === skill.risiko) delete freigaben.abweichungen[name]; else freigaben.abweichungen[name] = risiko;
   freigaben.verlauf = [...freigaben.verlauf, { zeit: new Date().toISOString(), skill: name, von, nach: risiko }].slice(-FREIGABEN.maxVerlauf);
-  freigabenSpeichern();
-  return { ok: true };
+  return { ok: true, gespeichert: freigabenSpeichern() };
+}
+// ab 11-04a: scheitert das Speichern, sagt die Karte das (vorher stiller Erfolg; nach dem Neuladen galt wieder der gespeicherte Stand)
+function freigabenMeldung(gespeichert) {
+  const m = document.getElementById("freigaben-meldung");
+  if (m) m.textContent = gespeichert === false ? "Nicht gespeichert: Browserspeicher gesperrt oder voll – die Änderung gilt nur bis zum Neuladen, danach wieder der gespeicherte Stand." : "";
 }
 freigabenLaden();
 
@@ -3147,7 +3244,7 @@ async function helferAnfrage(pfad, optionen = {}) {
   let daten = null;
   try { daten = JSON.parse(await antwort.text()); } catch (e) { /* keine JSON-Antwort */ }
   if (!antwort.ok && !pfad.startsWith("/ereignisse")) diagnoseErfassen({ quelle: "helfer", methode: optionen.method, pfad, art: "http", status: antwort.status, meldung: (daten && daten.fehler) || "" });
-  if (!antwort.ok) throw new Error((daten && daten.fehler) || "PC-Helfer: Fehler " + antwort.status);
+  if (!antwort.ok) throw new Error(geheimnisMuster((daten && daten.fehler) || "PC-Helfer: Fehler " + antwort.status).slice(0, 500));
   if (!daten) throw new Error("PC-Helfer: ungültige Antwort.");
   return daten;
 }
@@ -3543,7 +3640,8 @@ function simLaden() {
   try { const roh = JSON.parse(localStorage.getItem(SIM.schluessel) || "null"); if (roh && roh.art === "simulation" && roh.simuliert === true && Array.isArray(roh.ledger)) return roh; } catch (e) { /* kein Speicher */ }
   return null;
 }
-function simSpeichern() { try { localStorage.setItem(SIM.schluessel, JSON.stringify(SIM.portfolio)); } catch (e) { /* nur diese Sitzung */ } }
+// false: Browserspeicher gesperrt/voll – der Stand gilt nur für diese Sitzung (ab 11-04b beim Zurücksetzen gemeldet)
+function simSpeichern() { try { localStorage.setItem(SIM.schluessel, JSON.stringify(SIM.portfolio)); return true; } catch (e) { return false; } }
 function simStoppen(grund) {
   clearInterval(SIM.uhr);
   SIM.uhr = null;
@@ -3579,8 +3677,8 @@ function simZuruecksetzen() {
   if (SIM.uhr) simStoppen();
   if (!confirm("Simulations-Portfolio zurücksetzen?\n\nBetrifft nur die lokale Simulation (Spielkapital, Positionen, Ledger). Worker, Alpaca-Konto, Einstellungen und Codes bleiben unberührt.")) return;
   SIM.portfolio = PaperKern.zuruecksetzen(SIM.portfolio || PaperKern.portfolioNeu({ startkapital: SIM.startkapital }), PaperKern.RESET_BESTAETIGUNG);
-  simSpeichern();
-  simEl("sim-ergebnis").textContent = "Simulations-Portfolio zurückgesetzt: " + simUsd(SIM.portfolio.bargeld) + ".";
+  simEl("sim-ergebnis").textContent = simSpeichern() ? "Simulations-Portfolio zurückgesetzt: " + simUsd(SIM.portfolio.bargeld) + "."
+    : "Zurücksetzen nur für diese Sitzung: Browserspeicher gesperrt oder voll – nach dem Neuladen gilt wieder der gespeicherte Simulationsstand.";
   simEl("sim-detail").textContent = "";
   simLedgerZeigen();
 }
@@ -3627,12 +3725,15 @@ simEl("sim-filter-zustand").addEventListener("change", simLedgerZeigen);
 // Verbindet vorhandene Werkzeuge über AktienWorkflow. Datenquelle „lokal“: synthetische Testdaten ohne Netz; „worker“: die vorhandenen
 // Lese-Routen (/aktien/kerzen, /aktien/status, SEC nur mit SEC_USER_AGENT). Nie eine Order, kein Freigabecode.
 // lauf: Nummer des aktuellen Laufs – ein abgebrochener oder überholter Lauf darf sein spätes Ergebnis nicht mehr anzeigen
-const ABLAUF = { laeuft: false, zeitlimitMs: 15000, lauf: 0 };
-// Laufende Analyse abbrechen (ab 11-02b): Oberfläche sofort frei; Datenabrufe enden spätestens nach ihrem Zeitlimit, ihr Ergebnis wird verworfen
+// abbruch (ab 11-02x): AbortController des laufenden Laufs – „Abbrechen“ beendet auch die Worker-Anfragen dieses Laufs
+const ABLAUF = { laeuft: false, zeitlimitMs: 15000, lauf: 0, abbruch: null };
+// Laufende Analyse abbrechen (ab 11-02b): Oberfläche sofort frei; Worker-Anfragen des Laufs werden abgebrochen (ab 11-02x), ein
+// dennoch spät eintreffendes Ergebnis wird verworfen und nicht in den Kerzen-Cache geschrieben
 function ablaufAbbrechen() {
   if (!ABLAUF.laeuft) return false;
   ABLAUF.lauf++;
   ABLAUF.laeuft = false;
+  if (ABLAUF.abbruch) { ABLAUF.abbruch.abort(); ABLAUF.abbruch = null; }
   const knopf = ablaufEl("ablauf-start");
   knopf.disabled = false;
   knopf.removeAttribute("aria-busy");
@@ -3646,27 +3747,50 @@ const ablaufEl = (id) => document.getElementById(id);
 function ablaufSitzungsMeldungen() {
   return { f13: WZ.letzte13F ? [WZ.letzte13F] : [], kongress: WZ.letzteKongress || [], form4: null };
 }
-function ablaufProvider(art) {
+// Fehlertexte des Workers ohne Schlüssel/Tokens weitergeben (ab 11-03b): Sie erscheinen sonst ungefiltert als Schrittmeldung des
+// Ablaufs (über JarvisDaten.abrufen), nicht nur im catch von ablaufStarten. Fehlermerkmale (abgebrochen, netzwerk …) bleiben erhalten.
+async function ohneGeheimnis(f) {
+  try { return await f(); } catch (e) {
+    const text = geheimnisseEntfernen(String((e && e.message) || e).split("\n")[0], { fehlertext: true }).slice(0, 300);
+    throw Object.assign(new Error(text), e && typeof e === "object" ? { abgebrochen: e.abgebrochen, netzwerk: e.netzwerk, zeitlimit: e.zeitlimit, status: e.status } : {});
+  }
+}
+// abbruch (ab 11-02x): AbortController des Laufs; die Worker-Anfragen dieses Providers enden mit „Analyse abbrechen“
+function ablaufProvider(art, abbruch = null) {
   if (art !== "worker") return { ...window.AktienWorkflow.testProvider({ jetzt: Date.now() }), async meldungen() { return ablaufSitzungsMeldungen(); } };
+  const secFakten = async (symbol) => {
+    const st = await wzStatus({ abbruch });
+    if (!st.sec_konfiguriert) throw new Error("SEC nicht eingerichtet (Worker-Variable SEC_USER_AGENT fehlt)");
+    const c = await wzSecCik(symbol, { abbruch });
+    return workerAnfrage(`/aktien/quelle?art=sec-fakten&cik=${c.cik}`, { method: "GET", abbruch });
+  };
+  // Form 4 nur als Liste aus SEC „submissions“ des Emittenten (vorhandene Route, nur mit SEC_USER_AGENT); dazu Sitzungsergebnisse
+  const meldungen = async (symbol) => {
+    const basis = ablaufSitzungsMeldungen();
+    const st = await wzStatus({ abbruch });
+    if (!st.sec_konfiguriert) return basis;
+    const c = await wzSecCik(symbol, { abbruch });
+    return { ...basis, form4: { submissions: await workerAnfrage(`/aktien/quelle?art=sec-meldungen&cik=${c.cik}`, { method: "GET", abbruch }), cik: String(Number(c.cik)) } };
+  };
   return {
     name: "Worker (Alpaca IEX)", beschreibung: "Tageskerzen über /aktien/kerzen, Börsenuhr über /aktien/status, SEC companyfacts nur mit SEC_USER_AGENT", synthetisch: false, arten: ["kerzen"],
-    async kerzen({ symbol }) { return (await wzKerzen(symbol, 300)).kerzen; },
-    async uhr() { return (await wzStatus()).uhr || null; },
-    async secFakten(symbol) {
-      const st = await wzStatus();
-      if (!st.sec_konfiguriert) throw new Error("SEC nicht eingerichtet (Worker-Variable SEC_USER_AGENT fehlt)");
-      const c = await wzSecCik(symbol);
-      return workerAnfrage(`/aktien/quelle?art=sec-fakten&cik=${c.cik}`, { method: "GET" });
-    },
-    // Form 4 nur als Liste aus SEC „submissions“ des Emittenten (vorhandene Route, nur mit SEC_USER_AGENT); dazu Sitzungsergebnisse
-    async meldungen(symbol) {
-      const basis = ablaufSitzungsMeldungen();
-      const st = await wzStatus();
-      if (!st.sec_konfiguriert) return basis;
-      const c = await wzSecCik(symbol);
-      return { ...basis, form4: { submissions: await workerAnfrage(`/aktien/quelle?art=sec-meldungen&cik=${c.cik}`, { method: "GET" }), cik: String(Number(c.cik)) } };
-    },
+    kerzen: ({ symbol }) => ohneGeheimnis(async () => (await wzKerzen(symbol, 300, { abbruch })).kerzen),
+    uhr: () => ohneGeheimnis(async () => (await wzStatus({ abbruch })).uhr || null),
+    secFakten: (symbol) => ohneGeheimnis(() => secFakten(symbol)),
+    meldungen: (symbol) => ohneGeheimnis(() => meldungen(symbol)),
   };
+}
+// Ein Analyselauf lädt jede Kerzenreihe genau einmal (ab 11-02x): Chart, Einordnung und Strategie-Vergleich (profilEingaben) sowie
+// Scanner, Entry-Timer, Exit-Planer und Simulation (AktienWorkflow über den Dispatcher) erhalten dieselbe Antwort. Vorher fragten
+// beide Wege getrennt – lief der 5-Minuten-Cache dazwischen ab, rechneten sie mit zwei verschiedenen Datenständen.
+// Nur für diesen Lauf gemerkt (kein zusätzlicher Cache); ein Fehler gilt für beide Wege gleich.
+function ablaufEinmalKerzen(provider) {
+  const geladen = new Map();
+  return { ...provider, kerzen(anfrage) {
+    const schluessel = String(anfrage && anfrage.symbol) + "|" + String(anfrage && anfrage.intervall);
+    if (!geladen.has(schluessel)) geladen.set(schluessel, Promise.resolve().then(() => provider.kerzen(anfrage)));
+    return geladen.get(schluessel);
+  } };
 }
 // Fehlerstatus für Hilfstechnik (ab 11-02k): aria-invalid nur bei einem gemeldeten Fehler; neue Eingabe setzt ihn zurück (siehe Listener)
 function feldUngueltig(id, ungueltig) {
@@ -3688,14 +3812,17 @@ async function ablaufStarten(ev) {
   ABLAUF.laeuft = true;
   const meinLauf = ++ABLAUF.lauf;
   const ueberholt = () => meinLauf !== ABLAUF.lauf;
+  const abbruch = typeof AbortController === "function" ? new AbortController() : null;
+  ABLAUF.abbruch = abbruch;
   const knopf = ablaufEl("ablauf-start");
   knopf.disabled = true;
   knopf.setAttribute("aria-busy", "true");
   ablaufEl("ablauf-abbrechen").hidden = false;
   ablaufEl("ablauf-kopf").textContent = "Analysiere … (Abbrechen jederzeit möglich)";
   try {
-    if (art === "worker") { try { const st = await wzStatus(); if (st && st.grenzen) AKTIEN.grenzen = st.grenzen; } catch (e) { /* Allowlist bleibt unbekannt */ } }
-    const provider = ablaufProvider(art);
+    if (art === "worker") { try { const st = await wzStatus({ abbruch }); if (st && st.grenzen) AKTIEN.grenzen = st.grenzen; } catch (e) { /* Allowlist bleibt unbekannt */ } }
+    if (ueberholt()) return;
+    const provider = ablaufEinmalKerzen(ablaufProvider(art, abbruch));
     const optionen = { jetzt: Date.now(), zeitlimitMs: ABLAUF.zeitlimitMs, allowlist: ablaufAllowlist(), ausreisser,
       simulation: { strategie: SIM.strategie, orderWert: SIM.orderWert, annahmen: SIM.annahmen, limits: SIM.limits, startkapital: SIM.startkapital, ausreisser: SIM.ausreisser } };
     // Aktienprofil (ab 11-01d): Kontext zuerst prüfen; gültig → alle Werkzeuge über den Dispatcher, sonst nur die Eingabe-Blockade
@@ -3778,7 +3905,7 @@ async function ablaufStarten(ev) {
   } catch (e) {
     // Fehlertext ohne Schlüssel/Tokens und ohne Stacktrace (nur die erste Zeile, gekürzt)
     if (!ueberholt()) {
-      ablaufEl("ablauf-kopf").textContent = "✖ Analyse abgebrochen: " + (e && e.message ? geheimnisseEntfernen(String(e.message).split("\n")[0]).slice(0, 200) : "unbekannter Fehler") + " – nichts wurde gesendet.";
+      ablaufEl("ablauf-kopf").textContent = "✖ Analyse abgebrochen: " + (e && e.message ? geheimnisseEntfernen(String(e.message).split("\n")[0], { fehlertext: true }).slice(0, 200) : "unbekannter Fehler") + " – nichts wurde gesendet.";
       // ab 11-02r: Ergebnisse des vorigen Laufs nicht als aktuell stehen lassen
       ablaufErgebnisLeeren("Kein Ergebnis – die Analyse wurde mit einem Fehler abgebrochen.");
       APROFIL.letztes = null;
@@ -3788,6 +3915,7 @@ async function ablaufStarten(ev) {
   } finally {
     if (!ueberholt()) {
       ABLAUF.laeuft = false;
+      ABLAUF.abbruch = null;
       knopf.disabled = false;
       knopf.removeAttribute("aria-busy");
       ablaufEl("ablauf-abbrechen").hidden = true;
@@ -3826,7 +3954,8 @@ async function profilEingaben(k, provider, optionen) {
   return {
     provider, zeitlimitMs: optionen.zeitlimitMs, allowlist: optionen.allowlist, ausreisser: optionen.ausreisser, simulation: optionen.simulation,
     nachrichten: news, meldungen,
-    alarme: { regeln: al.regeln, zustand: al.zustand, beschaedigt: Boolean(al.beschaedigt), daten: { kurse: kursSym ? { [k.symbol]: { preis: kursSym.preis, alter_min: Math.round((k.jetzt - kursSym.zeit) / 60000) } } : {}, quelle: provider.name } },
+    // kuenstlich (ab 11-04i): Kurszeit lokaler Testdaten ist ein künstliches Datum – alarme.js nennt dann kein scheinbares Alter
+    alarme: { regeln: al.regeln, zustand: al.zustand, beschaedigt: Boolean(al.beschaedigt), daten: { kurse: kursSym ? { [k.symbol]: { preis: kursSym.preis, alter_min: Math.round((k.jetzt - kursSym.zeit) / 60000), kuenstlich: Boolean(provider.synthetisch) } } : {}, quelle: provider.name } },
     budget: Number(ablaufEl("profil-budget").value) > 0 || (ziele && ziele.length) ? { betrag: Number(ablaufEl("profil-budget").value), ziele: ziele || [] } : null,
     rebalance: ziele && ziele.length ? { ziele } : null,
     grenzen, portfolio: port, kurse, _kerzen: hauptKerzen,
@@ -3834,7 +3963,10 @@ async function profilEingaben(k, provider, optionen) {
 }
 function profilZeigen(d) {
   const zeichen = { ok: "✔", warnung: "⚠", blockiert: "✖", nicht_verfuegbar: "–", fehler: "✖", veraltet: "⏱", unbekannt: "?" };
-  const alter = (ms) => (ms === null ? "Datenalter unbekannt" : ms < 3600000 ? `${Math.round(ms / 60000)} min alt` : ms < 2 * 86400000 ? `${Math.round(ms / 3600000)} h alt` : `${Math.round(ms / 86400000)} Tage alt`);
+  // ab 11-03f: Bei lokalen (synthetischen) Testdaten ist das Datum künstlich – kein scheinbares Datenalter wie „17 h alt“ zeigen
+  const synthetisch = Boolean(d.kontext && d.kontext.quelle === "lokal");
+  const alter = (ms) => (ms === null ? "Datenalter unbekannt" : synthetisch ? "künstliches Datum (synthetische Testdaten) – kein echtes Datenalter"
+    : ms < 3600000 ? `${Math.round(ms / 60000)} min alt` : ms < 2 * 86400000 ? `${Math.round(ms / 3600000)} h alt` : `${Math.round(ms / 86400000)} Tage alt`);
   // Einheitliche Statusbegriffe (ab 11-02a): bereit, teilweise verfügbar, veraltet, blockiert, nicht verfügbar
   const S = window.AktienAssistent ? window.AktienAssistent.STATUS_TEXT : {};
   ablaufEl("profil-zusammenfassung").textContent = "Profil: " + (d.zusammenfassung.vollstaendig ? "bereit" : "teilweise verfügbar") + " – " + d.zusammenfassung.text + " Keine Empfehlung, keine Prognose, keine Order.";
@@ -3867,8 +3999,13 @@ function profilZeigen(d) {
 function profilVorschlagZeigen(text) {
   const v = APROFIL.vorschlag;
   ablaufEl("profil-bestaetigen").disabled = !v;
+  // ab 11-04h: wie profilZeigen (ab 11-03f) – bei lokalen (synthetischen) Testdaten kein scheinbares Datenalter
+  const synthetisch = Boolean(APROFIL.letztes && APROFIL.letztes.kontext && APROFIL.letztes.kontext.quelle === "lokal");
+  // ab 11-05b: Kostenannahmen vor der Bestätigung (Werte aus AktienProfil.vorschlagSchaetzen = späterer Paper-Kern-Aufruf)
+  const s = v && APROFIL.vorschlagSchaetzung, usd = (x) => x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const kosten = s ? ` · Schätzung der lokalen Simulation (Testannahmen: Slippage ${s.annahmen.slippagePct.toLocaleString("de-DE")} %, Gebühr ${s.annahmen.gebuehrPct.toLocaleString("de-DE")} %): Ausführung zu ca. ${s.preis.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} USD, ${s.menge.toLocaleString("de-DE", { maximumFractionDigits: 6 })} Stück, Volumen ${usd(s.volumen)} USD ${v.richtung === "kauf" ? "+" : "−"} Gebühr ${usd(s.gebuehr)} USD = ${v.richtung === "kauf" ? "Belastung" : "Gutschrift"} ${usd(s.betrag)} USD (Spielgeld)` : "";
   ablaufEl("profil-vorschlag-text").textContent = text !== undefined ? text : v
-    ? `SIMULATION · ${v.richtung === "kauf" ? "KAUF" : "VERKAUF"} ${v.symbol} · ${v.stueck} Stück · geschätzt ${v.betrag_geschaetzt.toLocaleString("de-DE", { minimumFractionDigits: 2 })} USD zur Preisannahme ${v.preisannahme} (letzter Schluss) · Datenalter ${Math.round(v.datenalter_ms / 3600000)} h · Risikoprüfung (Paper-Kern): ${v.risiko.bestanden ? "bestanden" : "nicht bestanden – " + v.risiko.gruende.join("; ")} · Status: OFFEN, noch nicht bestätigt – gebucht wird erst nach „Genau diesen Vorschlag bestätigen“ · gültig bis ${new Date(v.gueltig_bis).toLocaleTimeString("de-DE")} (danach neu erstellen) · Kennung ${v.fingerabdruck}. Keine Order an einen Broker.`
+    ? `SIMULATION · ${v.richtung === "kauf" ? "KAUF" : "VERKAUF"} ${v.symbol} · ${v.stueck} Stück · geschätzt ${v.betrag_geschaetzt.toLocaleString("de-DE", { minimumFractionDigits: 2 })} USD zur Preisannahme ${v.preisannahme} (letzter Schluss) · ${synthetisch ? "künstliches Datum (synthetische Testdaten) – kein echtes Datenalter" : `Datenalter ${Math.round(v.datenalter_ms / 3600000)} h`} · Risikoprüfung (Paper-Kern): ${v.risiko.bestanden ? "bestanden" : "nicht bestanden – " + v.risiko.gruende.join("; ")}${kosten} · Status: OFFEN, noch nicht bestätigt – gebucht wird erst nach „Genau diesen Vorschlag bestätigen“ · gültig bis ${new Date(v.gueltig_bis).toLocaleTimeString("de-DE")} (danach neu erstellen) · Kennung ${v.fingerabdruck}. Keine Order an einen Broker.`
     : "";
 }
 function profilVorschlagErstellen() {
@@ -3883,11 +4020,16 @@ function profilVorschlagErstellen() {
   const port = SIM.portfolio || window.PaperKern.portfolioNeu({ startkapital: SIM.startkapital });
   const richtung = ablaufEl("profil-richtung").value, betrag = Number(ablaufEl("profil-betrag").value);
   const pos = port.positionen[L.kontext.symbol];
-  const wert = richtung === "kauf" ? betrag : pos ? Math.round(pos.menge * L.analyse.kurs * 100) / 100 : 0;
+  // ab 11-04h: Kauf mit dem Wert prüfen, der gebucht und bei der Bestätigung erneut geprüft wird (betrag_geschaetzt, gleiche Rundung
+  // wie AktienProfil.vorschlagErstellen) – vorher wurde der eingegebene Betrag geprüft (bei hohem Kurs „bestanden“ über dem Höchstwert)
+  const stueckKauf = Math.round((Math.round(betrag * 100) / 100 / L.analyse.kurs) * 1e6) / 1e6;
+  const wert = richtung === "kauf" ? Math.round(stueckKauf * L.analyse.kurs * 100) / 100 : pos ? Math.round(pos.menge * L.analyse.kurs * 100) / 100 : 0;
   const risiko = window.PaperKern.risikoPruefen(port, { seite: richtung, symbol: L.kontext.symbol, wert }, SIM.limits, { jetzt: Date.now(), kurse: { [L.kontext.symbol]: L.analyse.kurs } });
   const r = window.AktienProfil.vorschlagErstellen({ ...L.kontext, jetzt: Date.now() }, { richtung, betrag, stueck: pos ? pos.menge : 0, preisannahme: L.analyse.kurs, datenzeit: L.analyse.datenzeit, risiko });
   if (r.fehler) { APROFIL.vorschlag = null; profilVorschlagZeigen("Kein Vorschlag: " + r.fehler); return; }
   APROFIL.vorschlag = r.vorschlag;
+  // ab 11-05b: Schätzung der Buchung aus demselben Paper-Kern-Aufruf wie bei der Bestätigung (Kopie des Portfolios)
+  APROFIL.vorschlagSchaetzung = window.AktienProfil.vorschlagSchaetzen(r.vorschlag, { jetzt: Date.now(), portfolio: port, limits: SIM.limits, annahmen: SIM.annahmen });
   profilVorschlagZeigen();
 }
 function profilVorschlagBestaetigen() {
@@ -3902,82 +4044,161 @@ function profilVorschlagBestaetigen() {
     const r = window.AktienProfil.vorschlagBestaetigen(v, { fingerabdruck: v.fingerabdruck, jetzt: Date.now(), portfolio: SIM.portfolio, limits: SIM.limits, notaus, annahmen: SIM.annahmen });
     APROFIL.vorschlag = null;
     if (r.fehler) { profilVorschlagZeigen("✖ Nicht gebucht: " + r.fehler); return; }
-    simSpeichern();
+    // ab 11-04d: Speichern ausgewertet – vorher „✔ … gebucht“, auch wenn die Simulationsbuchung nach dem Neuladen fehlte
+    const gespeichert = simSpeichern();
     simLedgerZeigen();
-    profilVorschlagZeigen(`✔ ${r.hinweis} (trade_id ${r.trade_id})`);
+    profilVorschlagZeigen(gespeichert ? `✔ ${r.hinweis} (trade_id ${r.trade_id})`
+      : `Gebucht nur für diese Sitzung: ${r.hinweis} (trade_id ${r.trade_id}) – Browserspeicher gesperrt oder voll; nach dem Neuladen fehlt diese Simulationsbuchung.`);
   } finally { APROFIL.laeuft = false; }
 }
-// ---------- Portfolio-Labor (ab 11-02u): hypothetische Musterportfolios ----------
+// ---------- Portfolio-Labor (ab 11-02u; Szenarien, Archiv und Datenmodell Version 2 ab 11-02v): hypothetische Musterportfolios ----------
 // Nur Browserspeicher (Schlüssel jarvis-portfolio-labor), nie an Worker oder Broker. Rechnung: Zielbetrag = Budget × Zielgewicht.
 // Wiederverwendet: Watchlist (wlLaden), Analysen der Sitzung (APROFIL.analysen), AktienRebalance.zieleNormieren (Normieren),
 // AktienWorkflow.US_TICKER (Symbolprüfung). Kein Kurs wird geschätzt, keine Order, kein Paper-Eintrag.
+// Datenmodell Version 2 (ab 11-02v):
+//   { art: "jarvis-portfolio-labor", version: 2, aktiv, portfolios: [Portfolio], papierkorb: [{ portfolio, szenario, geloescht }] }
+//   Portfolio: { id "pl-…", name, budget | null, positionen: [{ symbol, gewicht }], notiz, archiviert, erstellt, geaendert,
+//                szenarien: [{ id "sz-…", name, erstellt, schnappschuss: { budget, positionen, notiz } }] }
+//   Zeitpunkte als ISO-Text; null nur bei aus Version 1 übernommenen Einträgen („unbekannt (vor 02v)“).
+//   Ein Szenario ist ein unveränderlicher Schnappschuss – nur sein Name lässt sich ändern. Version-1-Daten werden beim Laden
+//   verlustfrei übernommen (und erst mit der nächsten Änderung als Version 2 gespeichert).
 const PL_SCHLUESSEL = "jarvis-portfolio-labor";
-const PL_GRENZEN = { maxPortfolios: 20, maxPositionen: 20, maxBudget: 10000000, maxName: 60, maxImportZeichen: 200000 };
-const PL = { vergleich: "", loeschenBestaetigen: false };
+const PL_GRENZEN = { maxPortfolios: 20, maxPositionen: 20, maxBudget: 10000000, maxName: 60, maxNotiz: 500, maxSzenarien: 50, maxPapierkorb: 10, maxImportZeichen: 200000, maxSpeicherZeichen: 1500000 };
+// Sitzungszustand der Ansicht (nie gespeichert); wird beim Wechsel des Portfolios zurückgesetzt
+const PL = { vergleich: "", loeschenBestaetigen: false, portfolioLoeschen: "", szAuswahl: "", szA: "", szB: "", szLoeschen: "", szLaden: "", aktivBeiAnzeige: "" };
 const plTicker = () => (window.AktienWorkflow && window.AktienWorkflow.US_TICKER) || /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
 const plUsd = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const plProzent = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-// Prüft einen vollständigen Datenstand (gespeichert oder importiert); Ergebnis { ok, fehler: [] }
+const plJetzt = () => new Date().toISOString();
+const plZeit = (iso) => (iso ? new Date(iso).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "unbekannt (vor 02v)");
+const plIsoOk = (s) => typeof s === "string" && s.length <= 40 && Number.isFinite(Date.parse(s));
+const plBudgetOk = (b) => b === null || (typeof b === "number" && Number.isFinite(b) && b > 0 && b <= PL_GRENZEN.maxBudget);
+const plNameKey = (s) => String(s).trim().toLocaleLowerCase("de-DE");
+function plPositionenPruefen(liste, wo, f) {
+  if (!Array.isArray(liste) || liste.length > PL_GRENZEN.maxPositionen) { f.push(wo + `: Positionen fehlen oder mehr als ${PL_GRENZEN.maxPositionen}`); return; }
+  const symbole = new Set();
+  liste.forEach((x, k) => {
+    if (!x || typeof x.symbol !== "string" || !plTicker().test(x.symbol) || symbole.has(x.symbol)) f.push(`${wo}, Position ${k + 1}: Symbol ungültig oder doppelt`); else symbole.add(x.symbol);
+    if (!x || !(typeof x.gewicht === "number" && Number.isFinite(x.gewicht) && x.gewicht >= 0 && x.gewicht <= 100)) f.push(`${wo}, Position ${k + 1}: Gewicht muss 0 bis 100 sein`);
+  });
+}
+function plNotizOk(n) { return typeof n === "string" && n.length <= PL_GRENZEN.maxNotiz; }
+// Ein Szenario (gespeichert, im Papierkorb oder importiert); szIds sammelt Kennungen gegen Doppelte
+function plSzenarioPruefen(s, wo, f, szIds) {
+  if (!s || typeof s !== "object" || Array.isArray(s)) { f.push(wo + ": kein Objekt"); return; }
+  if (typeof s.id !== "string" || !/^sz-[a-z0-9-]{1,40}$/.test(s.id) || (szIds && szIds.has(s.id))) f.push(wo + ": Kennung ungültig oder doppelt"); else if (szIds) szIds.add(s.id);
+  if (typeof s.name !== "string" || !s.name.trim() || s.name.length > PL_GRENZEN.maxName) f.push(wo + `: Name fehlt oder länger als ${PL_GRENZEN.maxName} Zeichen`);
+  if (!plIsoOk(s.erstellt)) f.push(wo + ": Erstellungszeit ungültig");
+  const sn = s.schnappschuss;
+  if (!sn || typeof sn !== "object" || Array.isArray(sn)) { f.push(wo + ": Schnappschuss fehlt"); return; }
+  if (!plBudgetOk(sn.budget)) f.push(wo + ": Budget ungültig");
+  if (!plNotizOk(sn.notiz)) f.push(wo + `: Notiz fehlt oder länger als ${PL_GRENZEN.maxNotiz} Zeichen`);
+  plPositionenPruefen(sn.positionen, wo, f);
+}
+// Prüft einen vollständigen Datenstand (gespeichert oder importiert), Version 1 oder 2; Ergebnis { ok, fehler: [] }
 function plPruefen(d) {
   const f = [];
   if (!d || typeof d !== "object" || Array.isArray(d)) return { ok: false, fehler: ["kein JSON-Objekt"] };
   if (d.art !== "jarvis-portfolio-labor") f.push("„art“ ist nicht „jarvis-portfolio-labor“");
-  if (d.version !== 1) f.push("unbekannte Version");
+  if (d.version !== 1 && d.version !== 2) f.push("unbekannte Version");
+  const v2 = d.version === 2;
   if (!Array.isArray(d.portfolios)) f.push("„portfolios“ fehlt");
   else {
     if (d.portfolios.length > PL_GRENZEN.maxPortfolios) f.push(`mehr als ${PL_GRENZEN.maxPortfolios} Portfolios`);
-    const ids = new Set();
+    const ids = new Set(), szIds = new Set();
     d.portfolios.forEach((p, n) => {
       const wo = `Portfolio ${n + 1}`;
       if (!p || typeof p !== "object") { f.push(wo + ": kein Objekt"); return; }
       if (typeof p.id !== "string" || !/^pl-[a-z0-9-]{1,40}$/.test(p.id) || ids.has(p.id)) f.push(wo + ": Kennung ungültig oder doppelt"); else ids.add(p.id);
       if (typeof p.name !== "string" || !p.name.trim() || p.name.length > PL_GRENZEN.maxName) f.push(wo + `: Name fehlt oder länger als ${PL_GRENZEN.maxName} Zeichen`);
-      if (!(p.budget === null || (typeof p.budget === "number" && Number.isFinite(p.budget) && p.budget > 0 && p.budget <= PL_GRENZEN.maxBudget))) f.push(wo + ": Budget ungültig");
-      if (!Array.isArray(p.positionen) || p.positionen.length > PL_GRENZEN.maxPositionen) { f.push(wo + `: Positionen fehlen oder mehr als ${PL_GRENZEN.maxPositionen}`); return; }
-      const symbole = new Set();
-      p.positionen.forEach((x, k) => {
-        if (!x || typeof x.symbol !== "string" || !plTicker().test(x.symbol) || symbole.has(x.symbol)) f.push(`${wo}, Position ${k + 1}: Symbol ungültig oder doppelt`); else symbole.add(x.symbol);
-        if (!(typeof x.gewicht === "number" && Number.isFinite(x.gewicht) && x.gewicht >= 0 && x.gewicht <= 100)) f.push(`${wo}, Position ${k + 1}: Gewicht muss 0 bis 100 sein`);
+      if (!plBudgetOk(p.budget)) f.push(wo + ": Budget ungültig");
+      plPositionenPruefen(p.positionen, wo, f);
+      if (!v2) return;
+      if (!plNotizOk(p.notiz)) f.push(wo + `: Notiz fehlt oder länger als ${PL_GRENZEN.maxNotiz} Zeichen`);
+      if (typeof p.archiviert !== "boolean") f.push(wo + ": „archiviert“ fehlt");
+      for (const z of ["erstellt", "geaendert"]) if (!(p[z] === null || plIsoOk(p[z]))) f.push(wo + `: Zeitpunkt „${z}“ ungültig`);
+      if (!Array.isArray(p.szenarien) || p.szenarien.length > PL_GRENZEN.maxSzenarien) { f.push(wo + `: Szenarien fehlen oder mehr als ${PL_GRENZEN.maxSzenarien}`); return; }
+      const namen = new Set();
+      p.szenarien.forEach((s, k) => {
+        plSzenarioPruefen(s, `${wo}, Szenario ${k + 1}`, f, szIds);
+        if (s && typeof s.name === "string") { if (namen.has(plNameKey(s.name))) f.push(`${wo}, Szenario ${k + 1}: Name doppelt`); namen.add(plNameKey(s.name)); }
       });
     });
     if (d.aktiv !== null && d.aktiv !== undefined && !d.portfolios.some((p) => p && p.id === d.aktiv)) f.push("aktives Portfolio unbekannt");
+    if (v2) {
+      if (!Array.isArray(d.papierkorb) || d.papierkorb.length > PL_GRENZEN.maxPapierkorb) f.push("Papierkorb ungültig");
+      else d.papierkorb.forEach((x, k) => {
+        if (!x || typeof x.portfolio !== "string" || !plIsoOk(x.geloescht)) { f.push(`Papierkorb ${k + 1}: unvollständig`); return; }
+        plSzenarioPruefen(x.szenario, `Papierkorb ${k + 1}`, f, szIds);
+      });
+    }
   }
   return { ok: f.length === 0, fehler: f };
+}
+// Version 1 → 2 ohne Verlust: alle gültigen Werte bleiben, neue Felder mit neutralen Werten (Zeitpunkte unbekannt = null)
+function plMigrieren(d) {
+  if (d.version === 2) return d;
+  return { art: d.art, version: 2, aktiv: d.aktiv === undefined ? null : d.aktiv, papierkorb: [],
+    portfolios: d.portfolios.map((p) => ({ id: p.id, name: p.name, budget: p.budget, positionen: p.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht })),
+      notiz: "", archiviert: false, erstellt: null, geaendert: null, szenarien: [] })) };
+}
+// Import: nur die bekannten Felder eines (geprüften) Schnappschusses übernehmen – Zusatzfelder fremder Dateien bleiben draußen
+const plSchnappschussKopie = (sn) => ({ budget: sn.budget, positionen: sn.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht })), notiz: sn.notiz });
+// Version 2 → 1 nur für die Exportdatei des Rückwegs (Stand 02u): genau die Felder, die 02u kennt; Szenarien usw. entfallen
+function plAlsVersion1(d) {
+  return { art: "jarvis-portfolio-labor", version: 1, aktiv: d.aktiv === undefined ? null : d.aktiv,
+    portfolios: d.portfolios.map((p) => ({ id: p.id, name: p.name, budget: p.budget, positionen: p.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht })) })) };
 }
 function plLaden() {
   let roh;
   try { roh = localStorage.getItem(PL_SCHLUESSEL); } catch (e) { return { daten: null, beschaedigt: true, grund: "Browserspeicher gesperrt" }; }
-  if (roh === null) return { daten: { art: "jarvis-portfolio-labor", version: 1, portfolios: [], aktiv: null }, beschaedigt: false };
+  if (roh === null) return { daten: { art: "jarvis-portfolio-labor", version: 2, portfolios: [], aktiv: null, papierkorb: [] }, beschaedigt: false };
   let d;
   try { d = JSON.parse(roh); } catch (e) { return { daten: null, beschaedigt: true, grund: "gespeicherter Inhalt ist kein gültiges JSON" }; }
   const p = plPruefen(d);
-  return p.ok ? { daten: d, beschaedigt: false } : { daten: null, beschaedigt: true, grund: p.fehler.slice(0, 3).join("; ") };
+  return p.ok ? { daten: plMigrieren(d), beschaedigt: false, migriert: d.version === 1 } : { daten: null, beschaedigt: true, grund: p.fehler.slice(0, 3).join("; ") };
 }
+// Speichern nur geprüft und mit Größengrenze; voller Browserspeicher → verständliche Meldung, der alte Stand bleibt erhalten
 function plSpeichern(d) {
   const p = plPruefen(d);
-  if (!p.ok) return "nicht gespeichert: " + p.fehler.slice(0, 2).join("; ");
-  try { localStorage.setItem(PL_SCHLUESSEL, JSON.stringify(d)); return null; } catch (e) { return "Browserspeicher nicht beschreibbar – nichts gespeichert."; }
+  if (!p.ok || d.version !== 2) return "nicht gespeichert: " + (p.fehler.slice(0, 2).join("; ") || "falsche Version");
+  const text = JSON.stringify(d);
+  if (text.length > PL_GRENZEN.maxSpeicherZeichen) return `nicht gespeichert: Das Portfolio-Labor würde ${Math.round(text.length / 1000)} kB belegen (Grenze ${PL_GRENZEN.maxSpeicherZeichen / 1000} kB). Bitte exportieren und alte Szenarien oder Portfolios löschen – der bisherige Stand bleibt unverändert.`;
+  try { localStorage.setItem(PL_SCHLUESSEL, text); return null; } catch (e) {
+    return e && (e.name === "QuotaExceededError" || e.code === 22) ? "Browserspeicher voll – nichts gespeichert, der bisherige Stand bleibt unverändert. Bitte exportieren und alte Szenarien löschen." : "Browserspeicher nicht beschreibbar – nichts gespeichert.";
+  }
 }
-function plStatus(text, fehler) {
-  const s = ablaufEl("pl-status");
+function plStatus(text, fehler, ziel = "pl-status") {
+  const s = ablaufEl(ziel);
   s.textContent = (fehler ? "✖ " : "") + text;
   s.classList.toggle("wz-wichtig", Boolean(fehler));
 }
-// Eine Änderung am aktiven Portfolio: laden, ändern, prüfen, speichern, neu zeichnen (nie mit beschädigtem Speicher)
-function plAendern(aenderung, erfolg) {
+// Eine Änderung: laden, ändern, prüfen, speichern, neu zeichnen (nie mit beschädigtem Speicher). Ändert die Funktion das aktive
+// Portfolio, wird dessen „geaendert“ gesetzt. statusZiel: pl-status (Portfolio) oder pl-sz-status (Szenarien)
+function plAendern(aenderung, erfolg, statusZiel = "pl-status") {
   const st = plLaden();
-  if (st.beschaedigt) { plStatus("Gespeicherte Musterportfolios sind beschädigt (" + st.grund + ") – nichts geändert.", true); plZeigen(); return false; }
+  if (st.beschaedigt) { plStatus("Gespeicherte Musterportfolios sind beschädigt (" + st.grund + ") – nichts geändert.", true, statusZiel); plZeigen(); return false; }
   const d = st.daten;
   const p = d.portfolios.find((x) => x.id === d.aktiv) || null;
+  const vorher = p ? JSON.stringify([p.name, p.budget, p.positionen, p.notiz, p.archiviert]) : "";
   const fehler = aenderung(d, p);
-  if (fehler) { plStatus(fehler, true); return false; }
+  if (fehler) { plStatus(fehler, true, statusZiel); return false; }
+  if (p && d.portfolios.includes(p) && JSON.stringify([p.name, p.budget, p.positionen, p.notiz, p.archiviert]) !== vorher) p.geaendert = plJetzt();
   const s = plSpeichern(d);
-  if (s) { plStatus(s, true); return false; }
+  if (s) { plStatus(s, true, statusZiel); return false; }
   plZeigen();
-  if (erfolg) plStatus(typeof erfolg === "function" ? erfolg(d) : erfolg, false);
+  if (erfolg) plStatus(typeof erfolg === "function" ? erfolg(d) : erfolg, false, statusZiel);
   return true;
 }
-function plNeueKennung() { return "pl-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8); }
+const plNeueKennung = (praefix = "pl") => praefix + "-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+// Freier Name im Portfolio (Groß-/Kleinschreibung egal); vorschlagen: an einen belegten Namen „(2)“, „(3)“ … anhängen
+function plSzNameFrei(p, name, ohneId) { return !p.szenarien.some((s) => s.id !== ohneId && plNameKey(s.name) === plNameKey(name)); }
+function plSzNameEindeutig(p, name) {
+  const basis = String(name).trim().slice(0, PL_GRENZEN.maxName - 5);
+  if (plSzNameFrei(p, basis)) return basis;
+  for (let n = 2; n < 100; n++) if (plSzNameFrei(p, `${basis} (${n})`)) return `${basis} (${n})`;
+  return null;
+}
 function plSymbolPruefen(roh, p) {
   const s = String(roh || "").trim().toUpperCase();
   if (!s) return { fehler: "Kein Symbol angegeben – bitte ein US-Aktiensymbol eintragen, z. B. KO." };
@@ -3996,7 +4217,7 @@ function plAnalyseText(symbol) {
   const zr = kx && kx.zeitraum ? `${kx.zeitraum.von} bis ${kx.zeitraum.bis}` : "alle verfügbaren Tageskerzen";
   return { text: `${a.quelle}${/synthetisch/i.test(a.quelle) ? " – SYNTHETISCH" : ""} · ${zr}${n ? ` · ${n} Tageskerzen` : " · keine Tageskerzen"}${a.frisch === false ? " · VERALTET" : ""}`, fehlt: !n };
 }
-// Zielbeträge: Cent-genau gerundet; Rundungsdifferenz und nicht verteilter Rest werden ausgewiesen
+// Zielbeträge: Cent-genau gerundet; Rundungsdifferenz und nicht verteilter Rest werden ausgewiesen (für Portfolio und Schnappschuss)
 function plRechnen(p) {
   const summe = p.positionen.reduce((s, x) => s + x.gewicht, 0);
   const budget = p.budget;
@@ -4006,40 +4227,66 @@ function plRechnen(p) {
   // „|| 0“: aus -0 wird 0 (sonst stünde „-0,00 USD“ da)
   return { summe, budget, zeilen, exakt, gerundet, rundung: budget ? Math.round((gerundet - exakt) * 100) / 100 || 0 : null, rest: budget ? Math.round((budget - exakt) * 100) / 100 || 0 : null };
 }
+const PL_BEDIEN = ["pl-auswahl", "pl-name", "pl-neu", "pl-umbenennen", "pl-archivieren", "pl-loeschen", "pl-notiz", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-vergleich", "pl-export", "pl-export-v1", "pl-import-knopf", "pl-sz-name", "pl-sz-speichern", "pl-sz-rueckgaengig", "pl-sz-a", "pl-sz-b", "pl-sz-import-knopf"];
 function plZeigen() {
   const st = plLaden();
   const auswahl = ablaufEl("pl-auswahl"), zeilen = ablaufEl("pl-zeilen");
   ablaufEl("pl-verwerfen").hidden = !st.beschaedigt;
   const aus = (ids, an) => ids.forEach((id) => { ablaufEl(id).disabled = !an; });
   if (st.beschaedigt) {
-    auswahl.replaceChildren(); zeilen.replaceChildren();
-    for (const id of ["pl-summe", "pl-rechnung", "pl-konzentration", "pl-vergleich-ergebnis"]) ablaufEl(id).textContent = "";
-    aus(["pl-auswahl", "pl-name", "pl-neu", "pl-umbenennen", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-vergleich", "pl-export", "pl-import-knopf"], false);
+    auswahl.replaceChildren(); zeilen.replaceChildren(); ablaufEl("pl-sz-liste").replaceChildren();
+    for (const id of ["pl-summe", "pl-rechnung", "pl-konzentration", "pl-vergleich-ergebnis", "pl-meta", "pl-sz-vergleich", "pl-sz-vorschau"]) ablaufEl(id).textContent = "";
+    aus(PL_BEDIEN, false);
     plStatus("Gespeicherte Musterportfolios sind beschädigt (" + st.grund + ") – nichts überschrieben. „Beschädigten Speicher verwerfen“ löscht nur diesen Bereich.", true);
     return;
   }
   const d = st.daten;
   const p = d.portfolios.find((x) => x.id === d.aktiv) || null;
-  auswahl.replaceChildren(...(d.portfolios.length ? d.portfolios : [null]).map((x) => Object.assign(document.createElement("option"), x ? { value: x.id, textContent: x.name, selected: x.id === d.aktiv } : { value: "", textContent: "– noch keins –" })));
-  aus(["pl-auswahl", "pl-umbenennen", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-vergleich", "pl-export"], Boolean(p));
+  // Portfoliowechsel (auch per Import/Löschen): Auswahl, Vorschau und Vergleich der Szenarien gehören zum alten Portfolio
+  if (PL.aktivBeiAnzeige !== (p ? p.id : "")) {
+    Object.assign(PL, { szAuswahl: "", szA: "", szB: "", szLoeschen: "", szLaden: "", portfolioLoeschen: "", aktivBeiAnzeige: p ? p.id : "" });
+    ablaufEl("pl-sz-status").textContent = "";
+  }
+  const option = (x) => Object.assign(document.createElement("option"), { value: x.id, textContent: x.name + (x.archiviert ? " (archiviert)" : ""), selected: x.id === d.aktiv });
+  const aktive = d.portfolios.filter((x) => !x.archiviert), archiv = d.portfolios.filter((x) => x.archiviert);
+  const gruppe = (label, liste) => { const g = Object.assign(document.createElement("optgroup"), { label }); g.append(...liste.map(option)); return g; };
+  // Kein aktives trotz vorhandener Portfolios (z. B. Datei ohne „aktiv“): Platzhalter statt scheinbar gewähltem ersten Eintrag
+  const platzhalter = !p && d.portfolios.length ? [Object.assign(document.createElement("option"), { value: "", textContent: "– Musterportfolio wählen –", selected: true })] : [];
+  auswahl.replaceChildren(...platzhalter, ...(!d.portfolios.length ? [Object.assign(document.createElement("option"), { value: "", textContent: "– noch keins –" })]
+    : archiv.length ? [gruppe("Aktiv", aktive), gruppe("Archiviert", archiv)].filter((g) => g.children.length) : aktive.map(option)));
+  const bearbeitbar = Boolean(p && !p.archiviert);
+  aus(["pl-auswahl"], d.portfolios.length > 0);
+  aus(["pl-umbenennen", "pl-archivieren", "pl-loeschen", "pl-vergleich", "pl-sz-a", "pl-sz-b"], Boolean(p));
+  aus(["pl-export", "pl-export-v1"], d.portfolios.length > 0);
+  aus(["pl-notiz", "pl-budget", "pl-wl-symbol", "pl-wl-hinzu", "pl-symbol", "pl-hinzu", "pl-gleich", "pl-normieren", "pl-sz-name", "pl-sz-speichern", "pl-sz-import-knopf"], bearbeitbar);
   aus(["pl-name", "pl-neu", "pl-import-knopf"], true);
   ablaufEl("pl-name").value = p ? p.name : "";
   ablaufEl("pl-budget").value = p && p.budget !== null ? String(p.budget) : "";
-  plWlOptionen(p);
+  ablaufEl("pl-notiz").value = p ? p.notiz : "";
+  ablaufEl("pl-archivieren").textContent = p && p.archiviert ? "Wiederherstellen" : "Archivieren";
+  ablaufEl("pl-archivieren").setAttribute("aria-label", p ? (p.archiviert ? `„${p.name}“ wiederherstellen` : `„${p.name}“ archivieren (Szenarien bleiben erhalten)`) : "Musterportfolio archivieren");
+  const loeschen = ablaufEl("pl-loeschen");
+  const bestaetigen = Boolean(p && PL.portfolioLoeschen === p.id);
+  loeschen.textContent = bestaetigen ? `Wirklich endgültig löschen? (${p.szenarien.length} Szenario(s) gehen mit verloren)` : "Endgültig löschen …";
+  loeschen.setAttribute("aria-label", p ? (bestaetigen ? `Endgültiges Löschen von „${p.name}“ bestätigen` : `„${p.name}“ endgültig löschen (fragt nach)`) : "Musterportfolio endgültig löschen");
+  ablaufEl("pl-meta").textContent = p ? `Angelegt ${plZeit(p.erstellt)} · zuletzt geändert ${plZeit(p.geaendert)} · ${p.szenarien.length} Szenario(s)` + (p.archiviert ? " · ARCHIVIERT – nur ansehen; zum Bearbeiten „Wiederherstellen“." : "") + (st.migriert ? " · aus dem Format vor 02v übernommen (wird beim nächsten Speichern umgestellt)." : "") : "";
+  plWlOptionen(bearbeitbar ? p : null);
   if (!p) {
     zeilen.replaceChildren();
-    ablaufEl("pl-summe").textContent = "Noch kein Musterportfolio – Namen eintragen und „Neu anlegen“ (oder eine JSON-Datei importieren).";
+    ablaufEl("pl-summe").textContent = d.portfolios.length ? `Kein Musterportfolio ausgewählt – bitte oben eins der ${d.portfolios.length} vorhandenen wählen.`
+      : "Noch kein Musterportfolio – Namen eintragen und „Neu anlegen“ (oder eine JSON-Datei importieren).";
     for (const id of ["pl-rechnung", "pl-konzentration", "pl-vergleich-ergebnis"]) ablaufEl(id).textContent = "";
-    // Auswahlfeld nie leer: es nennt immer einen Wert (Barrierefreiheit)
-    ablaufEl("pl-vergleich").replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "– erst ein Musterportfolio anlegen –" }));
+    // Auswahlfelder nie leer: sie nennen immer einen Wert (Barrierefreiheit)
+    for (const id of ["pl-vergleich", "pl-sz-a", "pl-sz-b"]) ablaufEl(id).replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: "– erst ein Musterportfolio anlegen –" }));
+    plSzenarienZeigen(d, null);
     return;
   }
   const r = plRechnen(p);
   zeilen.replaceChildren(...(p.positionen.length ? r.zeilen : [null]).map((z, i) => {
     const tr = document.createElement("tr");
-    if (!z) { const td = Object.assign(document.createElement("td"), { colSpan: 6, textContent: "Noch keine Positionen – Symbol aus der Watchlist oder von Hand hinzufügen." }); tr.append(td); return tr; }
+    if (!z) { const td = Object.assign(document.createElement("td"), { colSpan: 6, textContent: bearbeitbar ? "Noch keine Positionen – Symbol aus der Watchlist oder von Hand hinzufügen." : "Keine Positionen." }); tr.append(td); return tr; }
     const zelle = (beschriftung, inhalt) => { const td = document.createElement("td"); td.dataset.beschriftung = beschriftung; if (typeof inhalt === "string") td.textContent = inhalt; else td.append(...inhalt); return td; };
-    const eingabe = Object.assign(document.createElement("input"), { className: "feld pl-gewicht", type: "number", min: "0", max: "100", step: "0.01", value: String(z.gewicht) });
+    const eingabe = Object.assign(document.createElement("input"), { className: "feld pl-gewicht", type: "number", min: "0", max: "100", step: "0.01", value: String(z.gewicht), disabled: !bearbeitbar });
     eingabe.setAttribute("aria-label", `Zielgewicht ${z.symbol} in Prozent`);
     eingabe.dataset.symbol = z.symbol;
     const huelle = Object.assign(document.createElement("span"), { className: "pl-balken-huelle" });
@@ -4048,7 +4295,7 @@ function plZeigen() {
     balken.style.width = Math.max(0, Math.min(100, z.gewicht)) + "%";
     huelle.append(balken);
     const anteil = Object.assign(document.createElement("span"), { textContent: ` ${plProzent(z.gewicht)} %` });
-    const knopf = (text, aktion, label, aus) => { const b = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", textContent: text, disabled: Boolean(aus) }); b.dataset.plAktion = aktion; b.dataset.symbol = z.symbol; b.setAttribute("aria-label", label); return b; };
+    const knopf = (text, aktion, label, ausgeschaltet) => { const b = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", textContent: text, disabled: Boolean(ausgeschaltet) || !bearbeitbar }); b.dataset.plAktion = aktion; b.dataset.symbol = z.symbol; b.setAttribute("aria-label", label); return b; };
     const info = plAnalyseText(z.symbol);
     tr.dataset.symbol = z.symbol;
     tr.append(zelle("Symbol", z.symbol), zelle("Zielgewicht (%)", [eingabe]), zelle("Anteil", [huelle, anteil]),
@@ -4064,11 +4311,12 @@ function plZeigen() {
       + ` (Rundungsdifferenz ${r.rundung >= 0 ? "+" : ""}${plUsd(r.rundung)} USD)` + (Math.abs(r.rest) >= 0.005 ? `; ${r.rest > 0 ? "nicht verteilt" : "über dem Budget"}: ${plUsd(Math.abs(r.rest))} USD (Gewichtssumme ${plProzent(r.summe)} %).` : ".");
   plKonzentrationZeigen(p, r);
   plVergleichZeigen(d, p);
+  plSzenarienZeigen(d, p);
 }
 function plWlOptionen(p) {
   const w = typeof wlLaden === "function" ? wlLaden() : { eintraege: [] };
   const frei = (w.eintraege || []).map((e) => e.symbol).filter((s) => !p || !p.positionen.some((x) => x.symbol === s));
-  ablaufEl("pl-wl-symbol").replaceChildren(...(frei.length ? frei : [null]).map((s) => Object.assign(document.createElement("option"), s ? { value: s, textContent: s } : { value: "", textContent: w.beschaedigt ? "Watchlist beschädigt" : "– keine weiteren Watchlist-Symbole –" })));
+  ablaufEl("pl-wl-symbol").replaceChildren(...(frei.length && p ? frei : [null]).map((s) => Object.assign(document.createElement("option"), s ? { value: s, textContent: s } : { value: "", textContent: w.beschaedigt ? "Watchlist beschädigt" : !p ? "– kein bearbeitbares Musterportfolio –" : "– keine weiteren Watchlist-Symbole –" })));
   ablaufEl("pl-wl-hinzu").disabled = !p || !frei.length;
 }
 // Konzentration (beschreibend, keine Prognose, keine Empfehlung). 25 % = Deckel maxPositionPct der vorhandenen Budget-Regel
@@ -4087,32 +4335,209 @@ function plKonzentrationZeigen(p, r) {
     + (hinweise.length ? "Hinweis: " + hinweise.join("; ") + " – Schwankungen dieser Werte wirken entsprechend stark auf das Musterportfolio." : "Keine Position über dem Deckel von " + deckel + " %.")
     + " Beschreibung der Eingaben, keine Prognose und keine Empfehlung.";
 }
+// Gemeinsame Vergleichsrechnung A → B (Portfolio gegen Portfolio, ab 11-02v auch Szenario gegen Szenario): je Symbol Zielgewicht
+// in Prozentpunkten und – nur wenn beide Budgets gültig sind – Zielbetrag in USD. Nur berechnete Werte, keine Order.
+function plVergleichListe(a, b) {
+  const ra = plRechnen(a), rb = plRechnen(b);
+  const symbole = [...new Set([...a.positionen.map((x) => x.symbol), ...b.positionen.map((x) => x.symbol)])];
+  const liste = document.createElement("ul");
+  liste.append(...symbole.map((s) => {
+    const inA = a.positionen.some((x) => x.symbol === s), inB = b.positionen.some((x) => x.symbol === s);
+    const ga = (a.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht, gb = (b.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht;
+    const ba = ra.budget ? Math.round(ra.budget * ga) / 100 : null, bb = rb.budget ? Math.round(rb.budget * gb) / 100 : null;
+    const dpp = Math.round((gb - ga) * 100) / 100 || 0, dusd = ba !== null && bb !== null ? Math.round((bb - ba) * 100) / 100 || 0 : null;
+    const art = !inA ? "neu aufnehmen (nur in B)" : !inB ? "herausnehmen (nur in A)" : ga === 0 && gb > 0 ? "neu aufnehmen" : gb === 0 && ga > 0 ? "herausnehmen"
+      : dusd === null ? (dpp > 0 ? "Gewicht erhöhen" : dpp < 0 ? "Gewicht senken" : "unverändert") : dusd > 0 ? "erhöhen" : dusd < 0 ? "verringern" : dpp !== 0 ? "Betrag unverändert" : "unverändert";
+    const li = Object.assign(document.createElement("li"), { textContent: `${s}: ${art} – Zielgewicht ${plProzent(ga)} % → ${plProzent(gb)} % (${dpp > 0 ? "+" : ""}${plProzent(dpp)} Prozentpunkte); `
+      + (dusd === null ? "USD-Änderung nicht berechenbar (Budget fehlt)" : `Zielbetrag ${plUsd(ba)} → ${plUsd(bb)} USD (${dusd > 0 ? "+" : ""}${plUsd(dusd)} USD)`) });
+    if (!inA || !inB) li.className = "wz-wichtig";
+    return li;
+  }));
+  return { liste, ra, rb };
+}
 // Vergleich: aktives Portfolio (A) → gewähltes Vergleichsportfolio (B); unverbindlicher Änderungsvorschlag nur aus den Eingaben
 function plVergleichZeigen(d, p) {
   const sel = ablaufEl("pl-vergleich"), aus = ablaufEl("pl-vergleich-ergebnis");
   const andere = d.portfolios.filter((x) => x.id !== p.id);
   if (!andere.some((x) => x.id === PL.vergleich)) PL.vergleich = "";
   sel.replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: andere.length ? "– kein Vergleich –" : "– zweites Musterportfolio anlegen –" }),
-    ...andere.map((x) => Object.assign(document.createElement("option"), { value: x.id, textContent: x.name, selected: x.id === PL.vergleich })));
+    ...andere.map((x) => Object.assign(document.createElement("option"), { value: x.id, textContent: x.name + (x.archiviert ? " (archiviert)" : ""), selected: x.id === PL.vergleich })));
   sel.disabled = !andere.length;
   aus.replaceChildren();
   const b = andere.find((x) => x.id === PL.vergleich);
   if (!b) return;
-  const ra = plRechnen(p), rb = plRechnen(b);
-  const symbole = [...new Set([...p.positionen.map((x) => x.symbol), ...b.positionen.map((x) => x.symbol)])];
-  const kopf = Object.assign(document.createElement("p"), { textContent: `Von „${p.name}“ (A) zu „${b.name}“ (B). Annahmen: Zielbetrag = Budget × Zielgewicht, auf Cent gerundet; Budget A ${ra.budget ? plUsd(ra.budget) + " USD" : "fehlt"}, Budget B ${rb.budget ? plUsd(rb.budget) + " USD" : "fehlt"}; Gewichtssummen A ${plProzent(ra.summe)} %, B ${plProzent(rb.summe)} %. Grundlage sind nur deine Eingaben – keine Kurse, keine Analysedaten (auch keine synthetischen).` });
-  const liste = document.createElement("ul");
+  const { liste, ra, rb } = plVergleichListe(p, b);
   liste.setAttribute("aria-label", "Änderungen je Symbol von A nach B");
-  liste.append(...symbole.map((s) => {
-    const ga = (p.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht, gb = (b.positionen.find((x) => x.symbol === s) || { gewicht: 0 }).gewicht;
-    const ba = ra.budget ? Math.round(ra.budget * ga) / 100 : null, bb = rb.budget ? Math.round(rb.budget * gb) / 100 : null;
-    const dpp = Math.round((gb - ga) * 100) / 100, dusd = ba !== null && bb !== null ? Math.round((bb - ba) * 100) / 100 : null;
-    const art = ga === 0 && gb > 0 ? "neu aufnehmen" : gb === 0 && ga > 0 ? "herausnehmen" : dusd === null ? (dpp > 0 ? "Gewicht erhöhen" : dpp < 0 ? "Gewicht senken" : "unverändert") : dusd > 0 ? "erhöhen" : dusd < 0 ? "verringern" : dpp !== 0 ? "Betrag unverändert" : "unverändert";
-    return Object.assign(document.createElement("li"), { textContent: `${s}: ${art} – Zielgewicht ${plProzent(ga)} % → ${plProzent(gb)} % (${dpp > 0 ? "+" : ""}${plProzent(dpp)} Prozentpunkte); `
-      + (dusd === null ? "USD-Änderung nicht berechenbar (Budget fehlt)" : `Zielbetrag ${plUsd(ba)} → ${plUsd(bb)} USD (${dusd > 0 ? "+" : ""}${plUsd(dusd)} USD)`) });
-  }));
+  const kopf = Object.assign(document.createElement("p"), { textContent: `Von „${p.name}“ (A) zu „${b.name}“ (B). Annahmen: Zielbetrag = Budget × Zielgewicht, auf Cent gerundet; Budget A ${ra.budget ? plUsd(ra.budget) + " USD" : "fehlt"}, Budget B ${rb.budget ? plUsd(rb.budget) + " USD" : "fehlt"}; Gewichtssummen A ${plProzent(ra.summe)} %, B ${plProzent(rb.summe)} %. Grundlage sind nur deine Eingaben – keine Kurse, keine Analysedaten (auch keine synthetischen).` });
   const fuss = Object.assign(document.createElement("p"), { className: "wz-wichtig", textContent: "Unverbindlicher Vorschlag nur aus deinen hypothetischen Eingaben – keine Order, wird nie automatisch ausgeführt, nichts wird gesendet. Paper-Buchungen gibt es nur über den Paper-Vorschlag oben mit ausdrücklicher Bestätigung." });
   aus.append(kopf, liste, fuss);
+}
+// ---------- Szenarien (ab 11-02v) ----------
+const plSzKurz = (sn) => `Budget ${sn.budget ? plUsd(sn.budget) + " USD" : "nicht festgelegt"} · ${sn.positionen.length} Symbol(e)${sn.positionen.length ? " (" + sn.positionen.map((x) => `${x.symbol} ${plProzent(x.gewicht)} %`).join(", ") + ")" : ""} · Gewichtssumme ${plProzent(sn.positionen.reduce((s, x) => s + x.gewicht, 0))} %`;
+function plSzenarienZeigen(d, p) {
+  const liste = ablaufEl("pl-sz-liste"), rueck = ablaufEl("pl-sz-rueckgaengig");
+  const szenarien = p ? p.szenarien : [];
+  for (const k of ["szAuswahl", "szA", "szB", "szLoeschen", "szLaden"]) if (PL[k] && !szenarien.some((s) => s.id === PL[k])) PL[k] = "";
+  const letzte = p ? [...d.papierkorb].reverse().find((x) => x.portfolio === p.id) : null;
+  rueck.hidden = !letzte;
+  rueck.textContent = letzte ? `Löschen rückgängig: „${letzte.szenario.name}“` : "Löschen rückgängig";
+  rueck.disabled = !letzte || !p || p.archiviert;
+  if (letzte) rueck.setAttribute("aria-label", `Gelöschtes Szenario „${letzte.szenario.name}“ (gelöscht ${plZeit(letzte.geloescht)}) wiederherstellen`);
+  liste.replaceChildren(...(szenarien.length ? szenarien : [null]).map((s) => {
+    const li = document.createElement("li");
+    if (!s) { li.textContent = !p ? "Erst ein Musterportfolio anlegen." : "Noch keine Szenarien – Namen eintragen und „Als neues Szenario speichern“ hält den jetzigen Stand fest."; return li; }
+    li.dataset.szenario = s.id;
+    const gewaehlt = PL.szAuswahl === s.id;
+    if (gewaehlt) li.setAttribute("aria-current", "true");
+    const text = Object.assign(document.createElement("div"), { textContent: `${gewaehlt ? "✔ AUSGEWÄHLT: " : ""}„${s.name}“ · gespeichert ${plZeit(s.erstellt)} · ${plSzKurz(s.schnappschuss)}${s.schnappschuss.notiz ? " · Notiz: " + s.schnappschuss.notiz : ""}` });
+    const knopf = (textK, aktion, label, ausgeschaltet) => { const b = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", textContent: textK, disabled: Boolean(ausgeschaltet) }); b.dataset.szAktion = aktion; b.dataset.szenario = s.id; b.setAttribute("aria-label", label); return b; };
+    const nurLesen = p.archiviert;
+    const loeschen = PL.szLoeschen === s.id;
+    const k = [knopf(gewaehlt ? "Ausgewählt" : "Auswählen", "auswahl", `Szenario „${s.name}“ auswählen`), knopf("Umbenennen", "umbenennen", `Szenario „${s.name}“ umbenennen (Name aus dem Feld „Szenarioname“)`, nurLesen),
+      knopf("Duplizieren", "duplizieren", `Szenario „${s.name}“ duplizieren (Name aus dem Feld „Szenarioname“ oder automatisch)`, nurLesen),
+      knopf("In Portfolioeingaben laden …", "laden", `Szenario „${s.name}“ in die aktuellen Portfolioeingaben laden (zeigt vorher eine Vorschau)`, nurLesen),
+      knopf("Exportieren", "export", `Szenario „${s.name}“ als JSON exportieren`),
+      knopf(loeschen ? "Wirklich löschen?" : "Löschen …", "loeschen", loeschen ? `Löschen von „${s.name}“ bestätigen` : `Szenario „${s.name}“ löschen (fragt nach)`, nurLesen)];
+    k[0].setAttribute("aria-pressed", gewaehlt ? "true" : "false");
+    if (loeschen) k.push(knopf("Nicht löschen", "loeschen-nein", `Löschen von „${s.name}“ abbrechen`));
+    li.append(text, ...k);
+    return li;
+  }));
+  // Vergleichsauswahl (nur Szenarien dieses Portfolios)
+  for (const [id, schluessel] of [["pl-sz-a", "szA"], ["pl-sz-b", "szB"]]) {
+    ablaufEl(id).replaceChildren(Object.assign(document.createElement("option"), { value: "", textContent: szenarien.length >= 2 ? "– Szenario wählen –" : "– mindestens zwei Szenarien speichern –" }),
+      ...szenarien.map((s) => Object.assign(document.createElement("option"), { value: s.id, textContent: s.name, selected: PL[schluessel] === s.id })));
+    ablaufEl(id).disabled = szenarien.length < 2;
+  }
+  plSzVergleichZeigen(p);
+  plSzVorschauZeigen(p);
+}
+// Vergleich zweier Szenarien: gespeicherte Fakten getrennt von berechneten Werten; Reihenfolge und Notiz ohne finanzielle Differenz
+function plSzVergleichZeigen(p) {
+  const aus = ablaufEl("pl-sz-vergleich");
+  aus.replaceChildren();
+  if (!p) return;
+  const a = p.szenarien.find((s) => s.id === PL.szA), b = p.szenarien.find((s) => s.id === PL.szB);
+  if (!a || !b) { if (p.szenarien.length >= 2) aus.append(Object.assign(document.createElement("p"), { textContent: "Zwei Szenarien wählen, um sie zu vergleichen." })); return; }
+  if (a.id === b.id) { aus.append(Object.assign(document.createElement("p"), { textContent: "Bitte zwei verschiedene Szenarien wählen." })); return; }
+  const fakten = Object.assign(document.createElement("p"), { textContent: "Gespeicherte Werte (Fakten aus den Schnappschüssen):" });
+  const tab = document.createElement("table");
+  tab.className = "pl-tabelle pl-sz-fakten";
+  const kopfZeile = document.createElement("tr");
+  for (const t of ["", `A: „${a.name}“`, `B: „${b.name}“`]) kopfZeile.append(Object.assign(document.createElement("th"), { scope: "col", textContent: t }));
+  const zeile = (titel, va, vb) => { const tr = document.createElement("tr"); tr.append(Object.assign(document.createElement("th"), { scope: "row", textContent: titel })); for (const [v, l] of [[va, "A"], [vb, "B"]]) { const td = Object.assign(document.createElement("td"), { textContent: v }); td.dataset.beschriftung = l; tr.append(td); } return tr; };
+  const sa = a.schnappschuss, sb = b.schnappschuss, summe = (sn) => sn.positionen.reduce((s, x) => s + x.gewicht, 0);
+  const thead = document.createElement("thead"); thead.append(kopfZeile);
+  const tbody = document.createElement("tbody");
+  tbody.append(zeile("Gespeichert", plZeit(a.erstellt), plZeit(b.erstellt)), zeile("Budget", sa.budget ? plUsd(sa.budget) + " USD" : "nicht festgelegt", sb.budget ? plUsd(sb.budget) + " USD" : "nicht festgelegt"),
+    zeile("Gesamtgewicht", plProzent(summe(sa)) + " %", plProzent(summe(sb)) + " %"), zeile("Symbole", String(sa.positionen.length), String(sb.positionen.length)));
+  tab.append(thead, tbody);
+  const huelle = Object.assign(document.createElement("div"), { className: "pl-tabelle-huelle" }); huelle.append(tab);
+  const berechnet = Object.assign(document.createElement("p"), { textContent: "Berechnete Vergleichswerte (A → B, Zielbetrag = Budget × Zielgewicht, auf Cent gerundet):" });
+  const { liste } = plVergleichListe(sa, sb);
+  liste.setAttribute("aria-label", `Unterschiede je Symbol von „${a.name}“ nach „${b.name}“`);
+  const gemeinsam = sa.positionen.map((x) => x.symbol).filter((s) => sb.positionen.some((y) => y.symbol === s));
+  const reihenA = gemeinsam.join(", "), reihenB = sb.positionen.map((x) => x.symbol).filter((s) => gemeinsam.includes(s)).join(", ");
+  const weitere = Object.assign(document.createElement("ul"), {});
+  weitere.setAttribute("aria-label", "Weitere Unterschiede ohne finanzielle Bedeutung");
+  weitere.append(Object.assign(document.createElement("li"), { textContent: reihenA === reihenB ? "Reihenfolge der gemeinsamen Symbole: gleich." : `Reihenfolge der gemeinsamen Symbole unterschiedlich – A: ${reihenA || "–"}; B: ${reihenB || "–"} (nur Anordnung, keine finanzielle Differenz).` }),
+    Object.assign(document.createElement("li"), { textContent: sa.notiz === sb.notiz ? `Notiz: gleich${sa.notiz ? " („" + sa.notiz + "“)" : " (keine)"}.` : `Notiz unterschiedlich – A: ${sa.notiz ? "„" + sa.notiz + "“" : "keine"}; B: ${sb.notiz ? "„" + sb.notiz + "“" : "keine"} (keine finanzielle Differenz).` }));
+  const fuss = Object.assign(document.createElement("p"), { className: "wz-wichtig", textContent: "Vergleich gespeicherter Planungswerte – keine Kurse, keine Prognose, keine Order. Nichts wird gesendet oder ausgeführt." });
+  aus.append(fakten, huelle, berechnet, liste, Object.assign(document.createElement("p"), { textContent: "Weitere Unterschiede (keine finanzielle Differenz):" }), weitere, fuss);
+}
+// Vorschau vor dem Laden: welche aktuellen Werte durch den Schnappschuss ersetzt würden
+function plSzVorschauZeigen(p) {
+  const v = ablaufEl("pl-sz-vorschau");
+  const s = p && p.szenarien.find((x) => x.id === PL.szLaden);
+  v.replaceChildren();
+  v.hidden = !s;
+  if (!s) return;
+  const sn = s.schnappschuss;
+  const f = [];
+  plSzenarioPruefen(s, "Szenario", f, null);
+  const titel = Object.assign(document.createElement("p"), { textContent: `Vorschau: „${s.name}“ in die aktuellen Eingaben von „${p.name}“ laden. Ersetzt würden:` });
+  const liste = document.createElement("ul");
+  const aktuell = { budget: p.budget, positionen: p.positionen, notiz: p.notiz };
+  liste.append(Object.assign(document.createElement("li"), { textContent: `Budget: ${aktuell.budget ? plUsd(aktuell.budget) + " USD" : "nicht festgelegt"} → ${sn.budget ? plUsd(sn.budget) + " USD" : "nicht festgelegt"}` }),
+    Object.assign(document.createElement("li"), { textContent: `Positionen: ${aktuell.positionen.map((x) => `${x.symbol} ${plProzent(x.gewicht)} %`).join(", ") || "keine"} → ${sn.positionen.map((x) => `${x.symbol} ${plProzent(x.gewicht)} %`).join(", ") || "keine"}` }),
+    Object.assign(document.createElement("li"), { textContent: `Notiz: ${aktuell.notiz ? "„" + aktuell.notiz + "“" : "keine"} → ${sn.notiz ? "„" + sn.notiz + "“" : "keine"}` }));
+  const hinweis = Object.assign(document.createElement("p"), { className: "klein", textContent: "Name und gespeicherte Szenarien des Portfolios bleiben unverändert. Das ändert nur lokale Planungswerte – keine Order, nichts wird gesendet." });
+  const ja = Object.assign(document.createElement("button"), { type: "button", className: "knopf", id: "pl-sz-laden-ja", textContent: "Laden bestätigen", disabled: f.length > 0 });
+  const nein = Object.assign(document.createElement("button"), { type: "button", className: "knopf zweit", id: "pl-sz-laden-nein", textContent: "Abbrechen" });
+  const zeile = Object.assign(document.createElement("div"), { className: "order-zeile" }); zeile.append(ja, nein);
+  v.append(titel, liste, hinweis);
+  if (f.length) v.append(Object.assign(document.createElement("p"), { className: "wz-wichtig", textContent: "✖ Szenario beschädigt oder unvollständig – Laden gesperrt: " + f.slice(0, 3).join("; ") }));
+  v.append(zeile);
+}
+function plSzSchnappschuss(p) { return { budget: p.budget, positionen: p.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht })), notiz: p.notiz }; }
+function plSzName(roh) {
+  const n = String(roh || "").trim();
+  if (!n) return { fehler: "Bitte einen Szenarionamen eintragen (1 bis 60 Zeichen)." };
+  if (n.length > PL_GRENZEN.maxName) return { fehler: `Szenarioname höchstens ${PL_GRENZEN.maxName} Zeichen.` };
+  return { name: n };
+}
+// Nach Neuzeichnen der Liste: verlorenen Fokus auf denselben Knopf des Szenarios setzen, sonst auf dessen Auswahl, sonst auf
+// die Statusmeldung (z. B. nach dem Löschen). Ein bewusst gesetzter Fokus (Vorschau, Rückfrage) bleibt unangetastet.
+function plSzFokus(id, aktion) {
+  const f = document.activeElement;
+  if (f && f !== document.body && document.contains(f) && !f.closest("[hidden]")) return;
+  const liste = ablaufEl("pl-sz-liste");
+  const ziel = (id && (liste.querySelector(`button[data-sz-aktion="${aktion}"][data-szenario="${id}"]:not(:disabled)`) || liste.querySelector(`button[data-sz-aktion="auswahl"][data-szenario="${id}"]`))) || ablaufEl("pl-sz-status");
+  ziel.focus();
+}
+function plSzAktion(aktion, id) {
+  const feldName = () => ablaufEl("pl-sz-name").value;
+  if (aktion === "auswahl") { PL.szAuswahl = id; if (!PL.szA) PL.szA = id; plZeigen(); const st = plLaden(); const p = st.daten && st.daten.portfolios.find((x) => x.id === st.daten.aktiv); const s = p && p.szenarien.find((x) => x.id === id); if (s) plStatus(`Szenario „${s.name}“ ausgewählt (für den Vergleich als A vorgemerkt, falls A leer war).`, false, "pl-sz-status"); return; }
+  if (aktion === "loeschen-nein") { PL.szLoeschen = ""; plZeigen(); plStatus("Nicht gelöscht.", false, "pl-sz-status"); return; }
+  if (aktion === "laden") { PL.szLaden = id; plZeigen(); const ja = ablaufEl("pl-sz-laden-ja"); if (ja && !ja.disabled) ja.focus(); else { const nein = ablaufEl("pl-sz-laden-nein"); if (nein) nein.focus(); } return; }
+  if (aktion === "export") {
+    const st = plLaden(); const p = st.daten && st.daten.portfolios.find((x) => x.id === st.daten.aktiv); const s = p && p.szenarien.find((x) => x.id === id);
+    if (!s) return;
+    const inhalt = { art: "jarvis-portfolio-szenario", version: 2, exportiert: plJetzt(), aus_portfolio: p.name, szenario: s };
+    const dateiname = "jarvis-szenario-" + s.name.replace(/[^A-Za-z0-9ÄÖÜäöüß_-]+/g, "-").slice(0, 40) + ".json";
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(inhalt, null, 2)], { type: "application/json" })), download: dateiname });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    plStatus(`Szenario „${s.name}“ exportiert (${dateiname}) – nur Name, Zeitpunkt, Budget, Symbole, Gewichte und Notiz.`, false, "pl-sz-status");
+    return;
+  }
+  if (aktion === "loeschen" && PL.szLoeschen !== id) { PL.szLoeschen = id; plZeigen(); const b = ablaufEl("pl-sz-liste").querySelector(`button[data-sz-aktion="loeschen"][data-szenario="${id}"]`); if (b) b.focus(); plStatus("Noch einmal „Wirklich löschen?“ drücken, um das Szenario zu löschen – es lässt sich danach mit „Löschen rückgängig“ wiederherstellen.", false, "pl-sz-status"); return; }
+  plAendern((d, p) => {
+    if (!p) return "Kein Musterportfolio ausgewählt.";
+    if (p.archiviert) return "Archiviertes Musterportfolio – erst „Wiederherstellen“.";
+    const i = p.szenarien.findIndex((s) => s.id === id);
+    if (i < 0) return "Szenario nicht gefunden.";
+    const s = p.szenarien[i];
+    if (aktion === "umbenennen") {
+      const n = plSzName(feldName()); if (n.fehler) return n.fehler;
+      if (!plSzNameFrei(p, n.name, s.id)) return `Name „${n.name}“ gibt es in diesem Portfolio schon – bitte einen anderen wählen.`;
+      PL.letzteMeldung = `Szenario „${s.name}“ heißt jetzt „${n.name}“ – gespeicherte Werte unverändert.`;
+      s.name = n.name;
+      return null;
+    }
+    if (aktion === "duplizieren") {
+      if (p.szenarien.length >= PL_GRENZEN.maxSzenarien) return `Höchstens ${PL_GRENZEN.maxSzenarien} Szenarien je Musterportfolio.`;
+      const wunsch = String(feldName() || "").trim();
+      if (wunsch.length > PL_GRENZEN.maxName) return `Szenarioname höchstens ${PL_GRENZEN.maxName} Zeichen.`;
+      if (wunsch && !plSzNameFrei(p, wunsch)) return `Name „${wunsch}“ gibt es in diesem Portfolio schon – bitte einen anderen wählen.`;
+      const name = wunsch || plSzNameEindeutig(p, `Kopie von ${s.name}`);
+      if (!name) return "Kein freier Name gefunden – bitte einen eintragen.";
+      const neu = { id: plNeueKennung("sz"), name, erstellt: plJetzt(), schnappschuss: JSON.parse(JSON.stringify(s.schnappschuss)) };
+      p.szenarien.push(neu);
+      PL.szAuswahl = neu.id;
+      PL.letzteMeldung = `Kopie „${name}“ von „${s.name}“ angelegt (gleiche Werte, neuer Zeitpunkt).`;
+      return null;
+    }
+    if (aktion === "loeschen") {
+      p.szenarien.splice(i, 1);
+      d.papierkorb.push({ portfolio: p.id, szenario: s, geloescht: plJetzt() });
+      while (d.papierkorb.length > PL_GRENZEN.maxPapierkorb) d.papierkorb.shift();
+      PL.szLoeschen = "";
+      PL.letzteMeldung = `Szenario „${s.name}“ gelöscht. „Löschen rückgängig“ stellt es wieder her (die letzten ${PL_GRENZEN.maxPapierkorb} Löschungen bleiben dafür gespeichert).`;
+      return null;
+    }
+    return "Unbekannte Aktion.";
+  }, () => PL.letzteMeldung, "pl-sz-status");
+  if (aktion === "duplizieren" || aktion === "umbenennen") ablaufEl("pl-sz-name").value = "";
 }
 function plStarten() {
   if (!ablaufEl("pl-bereich")) return;
@@ -4127,7 +4552,8 @@ function plStarten() {
       if (d.portfolios.length >= PL_GRENZEN.maxPortfolios) return `Höchstens ${PL_GRENZEN.maxPortfolios} Musterportfolios.`;
       if (vorschlag.length > PL_GRENZEN.maxName) return `Name höchstens ${PL_GRENZEN.maxName} Zeichen.`;
       const id = plNeueKennung();
-      d.portfolios.push({ id, name: vorschlag, budget: null, positionen: [] });
+      const jetzt = plJetzt();
+      d.portfolios.push({ id, name: vorschlag, budget: null, positionen: [], notiz: "", archiviert: false, erstellt: jetzt, geaendert: jetzt, szenarien: [] });
       d.aktiv = id;
       PL.vergleich = "";
       return null;
@@ -4143,6 +4569,39 @@ function plStarten() {
     const id = ablaufEl("pl-auswahl").value;
     // Wechsel: alles wird aus dem gewählten Portfolio neu gezeichnet – keine Ergebnisse des vorigen bleiben stehen
     plAendern((d) => { if (!d.portfolios.some((x) => x.id === id)) return "Unbekanntes Musterportfolio."; d.aktiv = id; if (PL.vergleich === id) PL.vergleich = ""; return null; }, (d) => `„${d.portfolios.find((x) => x.id === id).name}“ ausgewählt.`);
+  });
+  ablaufEl("pl-archivieren").addEventListener("click", () => plAendern((d, p) => {
+    if (!p) return "Kein Musterportfolio ausgewählt.";
+    p.archiviert = !p.archiviert;
+    PL.letzteMeldung = p.archiviert ? `„${p.name}“ archiviert – ${p.szenarien.length} Szenario(s) bleiben erhalten; ansehen ja, bearbeiten erst nach „Wiederherstellen“.` : `„${p.name}“ wiederhergestellt – wieder bearbeitbar.`;
+    return null;
+  }, () => PL.letzteMeldung));
+  ablaufEl("pl-loeschen").addEventListener("click", () => {
+    const st = plLaden();
+    const p = st.daten && st.daten.portfolios.find((x) => x.id === st.daten.aktiv);
+    if (!p) return;
+    if (PL.portfolioLoeschen !== p.id) {
+      PL.portfolioLoeschen = p.id;
+      plZeigen();
+      ablaufEl("pl-loeschen").focus();
+      plStatus(`Endgültig löschen entfernt „${p.name}“ mit ${p.szenarien.length} Szenario(s) ohne Rückgängig – vorher exportieren, falls du sie behalten willst. Zum Bestätigen noch einmal drücken; jede andere Aktion bricht ab.`, true);
+      return;
+    }
+    const name = p.name, anzahl = p.szenarien.length;
+    plAendern((d) => {
+      d.portfolios = d.portfolios.filter((x) => x.id !== p.id);
+      d.papierkorb = d.papierkorb.filter((x) => x.portfolio !== p.id);
+      d.aktiv = (d.portfolios.find((x) => !x.archiviert) || d.portfolios[0] || { id: null }).id;
+      PL.portfolioLoeschen = "";
+      return null;
+    }, `„${name}“ endgültig gelöscht (mit ${anzahl} Szenario(s)).`);
+  });
+  ablaufEl("pl-notiz").addEventListener("change", () => {
+    const n = String(ablaufEl("pl-notiz").value || "");
+    const zuLang = n.length > PL_GRENZEN.maxNotiz;
+    feldUngueltig("pl-notiz", zuLang);
+    if (zuLang) { plStatus(`Notiz höchstens ${PL_GRENZEN.maxNotiz} Zeichen – nichts geändert.`, true); return; }
+    plAendern((d, p) => { if (!p) return "Kein Musterportfolio ausgewählt."; p.notiz = n.trim(); return null; }, "Notiz gespeichert (nur auf diesem Gerät).");
   });
   ablaufEl("pl-budget").addEventListener("change", () => {
     const roh = String(ablaufEl("pl-budget").value).trim();
@@ -4164,7 +4623,7 @@ function plStarten() {
   ablaufEl("pl-symbol").addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); ablaufEl("pl-hinzu").click(); } });
   ablaufEl("pl-symbol").addEventListener("input", () => feldUngueltig("pl-symbol", false));
   ablaufEl("pl-wl-hinzu").addEventListener("click", () => { const s = ablaufEl("pl-wl-symbol").value; if (s) hinzufuegen(s, "watchlist"); });
-  ablaufEl("pl-wl-symbol").addEventListener("focus", () => { const st = plLaden(); if (!st.beschaedigt) plWlOptionen(st.daten.portfolios.find((x) => x.id === st.daten.aktiv) || null); });
+  ablaufEl("pl-wl-symbol").addEventListener("focus", () => { const st = plLaden(); if (!st.beschaedigt) { const p = st.daten.portfolios.find((x) => x.id === st.daten.aktiv) || null; plWlOptionen(p && !p.archiviert ? p : null); } });
   // Tabelle: Gewichte und Knöpfe per Ereignisdelegation
   ablaufEl("pl-zeilen").addEventListener("change", (ev) => {
     const f = ev.target.closest(".pl-gewicht");
@@ -4215,9 +4674,21 @@ function plStarten() {
   ablaufEl("pl-export").addEventListener("click", () => {
     const st = plLaden();
     if (st.beschaedigt || !st.daten.portfolios.length) { plStatus("Nichts zu exportieren.", true); return; }
-    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(st.daten, null, 2)], { type: "application/json" })), download: "jarvis-portfolio-labor.json" });
+    // Export ohne Papierkorb: nur Portfolios mit ihren Szenarien
+    const inhalt = { art: st.daten.art, version: 2, aktiv: st.daten.aktiv, portfolios: st.daten.portfolios, papierkorb: [] };
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(inhalt, null, 2)], { type: "application/json" })), download: "jarvis-portfolio-labor.json" });
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    plStatus(`Export erstellt: ${st.daten.portfolios.length} Musterportfolio(s) – nur Namen, Budgets, Symbole und Gewichte, keine Zugangs- oder Kontodaten.`, false);
+    plStatus(`Export erstellt: ${st.daten.portfolios.length} Musterportfolio(s) mit ${st.daten.portfolios.reduce((s, p) => s + p.szenarien.length, 0)} Szenario(s) – nur Namen, Budgets, Symbole, Gewichte, Notizen und Zeitpunkte, keine Zugangs- oder Kontodaten.`, false);
+  });
+  // Rückweg: Stand 02u liest nur Version 1 – Datei ohne Szenarien, Notizen, Archiv und Zeitpunkte (der Speicher bleibt unverändert)
+  ablaufEl("pl-export-v1").addEventListener("click", () => {
+    const st = plLaden();
+    if (st.beschaedigt || !st.daten.portfolios.length) { plStatus("Nichts zu exportieren.", true); return; }
+    const inhalt = plAlsVersion1(st.daten);
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([JSON.stringify(inhalt, null, 2)], { type: "application/json" })), download: "jarvis-portfolio-labor-fuer-02u.json" });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    const sz = st.daten.portfolios.reduce((s, p) => s + p.szenarien.length, 0), ar = st.daten.portfolios.filter((p) => p.archiviert).length;
+    plStatus(`Export für Stand 02u erstellt: ${inhalt.portfolios.length} Musterportfolio(s) mit Namen, Budgets, Symbolen und Gewichten. Nicht enthalten: ${sz} Szenario(s), Notizen und Zeitpunkte${ar ? `; ${ar} archivierte erscheinen dort als normale Portfolios` : ""}. Für alles zusätzlich „Alle Musterportfolios exportieren“ nutzen.`, false);
   });
   ablaufEl("pl-import-knopf").addEventListener("click", () => ablaufEl("pl-import").click());
   ablaufEl("pl-import").addEventListener("change", (ev) => {
@@ -4233,22 +4704,126 @@ function plStarten() {
     plZeigen();
     plStatus("Beschädigter Speicher verworfen – das Portfolio-Labor ist leer.", false);
   });
+  // Szenarien (ab 11-02v)
+  ablaufEl("pl-sz-speichern").addEventListener("click", () => {
+    const n = plSzName(ablaufEl("pl-sz-name").value);
+    feldUngueltig("pl-sz-name", Boolean(n.fehler));
+    if (n.fehler) { plStatus(n.fehler, true, "pl-sz-status"); return; }
+    if (plAendern((d, p) => {
+      if (!p) return "Erst ein Musterportfolio anlegen.";
+      if (p.archiviert) return "Archiviertes Musterportfolio – erst „Wiederherstellen“.";
+      if (p.szenarien.length >= PL_GRENZEN.maxSzenarien) return `Höchstens ${PL_GRENZEN.maxSzenarien} Szenarien je Musterportfolio – bitte ältere löschen.`;
+      if (!plSzNameFrei(p, n.name)) return `Ein Szenario „${n.name}“ gibt es in diesem Portfolio schon – nichts überschrieben. Bitte einen anderen Namen wählen.`;
+      const s = { id: plNeueKennung("sz"), name: n.name, erstellt: plJetzt(), schnappschuss: plSzSchnappschuss(p) };
+      p.szenarien.push(s);
+      PL.szAuswahl = s.id;
+      return null;
+    }, `Szenario „${n.name}“ gespeichert – Schnappschuss von Budget, Symbolen, Reihenfolge, Gewichten und Notiz (unveränderlich).`, "pl-sz-status")) { ablaufEl("pl-sz-name").value = ""; feldUngueltig("pl-sz-name", false); }
+  });
+  ablaufEl("pl-sz-name").addEventListener("input", () => feldUngueltig("pl-sz-name", false));
+  ablaufEl("pl-sz-liste").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-sz-aktion]");
+    if (!b) return;
+    plSzAktion(b.dataset.szAktion, b.dataset.szenario);
+    plSzFokus(b.dataset.szenario, b.dataset.szAktion === "loeschen-nein" ? "loeschen" : b.dataset.szAktion);
+  });
+  for (const [id, schluessel] of [["pl-sz-a", "szA"], ["pl-sz-b", "szB"]]) ablaufEl(id).addEventListener("change", () => { PL[schluessel] = ablaufEl(id).value; plZeigen(); });
+  ablaufEl("pl-sz-rueckgaengig").addEventListener("click", () => plAendern((d, p) => {
+    if (!p) return "Kein Musterportfolio ausgewählt.";
+    if (p.archiviert) return "Archiviertes Musterportfolio – erst „Wiederherstellen“.";
+    let idx = -1;
+    for (let k = d.papierkorb.length - 1; k >= 0; k--) if (d.papierkorb[k].portfolio === p.id) { idx = k; break; }
+    if (idx < 0) return "Nichts zum Wiederherstellen.";
+    if (p.szenarien.length >= PL_GRENZEN.maxSzenarien) return `Höchstens ${PL_GRENZEN.maxSzenarien} Szenarien – bitte erst eines löschen.`;
+    const s = d.papierkorb.splice(idx, 1)[0].szenario;
+    const name = plSzNameFrei(p, s.name) ? s.name : plSzNameEindeutig(p, s.name);
+    if (!name) return "Kein freier Name zum Wiederherstellen gefunden.";
+    PL.letzteMeldung = `Szenario „${s.name}“ wiederhergestellt` + (name !== s.name ? ` als „${name}“ (Name war inzwischen vergeben).` : " (unverändert).");
+    s.name = name;
+    p.szenarien.push(s);
+    PL.szAuswahl = s.id;
+    return null;
+  }, () => PL.letzteMeldung, "pl-sz-status") && plSzFokus(PL.szAuswahl, "auswahl"));
+  // Laden-Vorschau: Bestätigen / Abbrechen (per Ereignisdelegation, die Knöpfe werden neu gezeichnet)
+  ablaufEl("pl-sz-vorschau").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.id === "pl-sz-laden-nein") { const war = PL.szLaden; PL.szLaden = ""; plZeigen(); plStatus("Nicht geladen – die aktuellen Eingaben sind unverändert.", false, "pl-sz-status"); plSzFokus(war, "laden"); return; }
+    if (b.id !== "pl-sz-laden-ja") return;
+    const id = PL.szLaden;
+    plAendern((d, p) => {
+      if (!p) return "Kein Musterportfolio ausgewählt.";
+      if (p.archiviert) return "Archiviertes Musterportfolio – erst „Wiederherstellen“.";
+      const s = p.szenarien.find((x) => x.id === id);
+      if (!s) return "Szenario nicht gefunden – nichts geladen.";
+      const f = []; plSzenarioPruefen(s, "Szenario", f, null);
+      if (f.length) return "Szenario beschädigt oder unvollständig – nichts geladen: " + f.slice(0, 2).join("; ");
+      p.budget = s.schnappschuss.budget;
+      p.positionen = s.schnappschuss.positionen.map((x) => ({ symbol: x.symbol, gewicht: x.gewicht }));
+      p.notiz = s.schnappschuss.notiz;
+      PL.szLaden = "";
+      PL.szAuswahl = s.id;
+      PL.letzteMeldung = `Szenario „${s.name}“ in die aktuellen Eingaben von „${p.name}“ geladen. Geändert wurden nur lokale Planungswerte (Budget, Positionen, Notiz) – keine Order, nichts gesendet; das Szenario selbst bleibt unverändert.`;
+      return null;
+    }, () => PL.letzteMeldung, "pl-sz-status");
+    ablaufEl("pl-sz-status").focus();
+  });
+  ablaufEl("pl-sz-import-knopf").addEventListener("click", () => ablaufEl("pl-sz-import").click());
+  ablaufEl("pl-sz-import").addEventListener("change", (ev) => {
+    const f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (f) plSzImportieren(f);
+  });
+  // Jede andere Aktion im Labor bricht ein angefordertes endgültiges Löschen des Portfolios ab
+  ablaufEl("pl-bereich").addEventListener("click", (ev) => { if (PL.portfolioLoeschen && !ev.target.closest("#pl-loeschen")) { PL.portfolioLoeschen = ""; ablaufEl("pl-loeschen").textContent = "Endgültig löschen …"; } }, true);
   plZeigen();
 }
-// Import: Datei lesen (Ladezustand), prüfen; gültige Portfolios werden ZUSÄTZLICH angelegt (neue Kennungen), nie überschrieben
+async function plDateiLesen(datei, statusZiel) {
+  plStatus(`Datei „${String(datei.name).slice(0, 60)}“ wird gelesen …`, false, statusZiel);
+  if (datei.size > PL_GRENZEN.maxImportZeichen) { plStatus("Datei zu groß (über 200 KB) – nichts importiert.", true, statusZiel); return null; }
+  try { return JSON.parse(await datei.text()); } catch (e) { plStatus("Datei ist kein gültiges JSON – nichts importiert.", true, statusZiel); return null; }
+}
+// Import ganzer Bestände (Version 1 oder 2): gültige Portfolios werden ZUSÄTZLICH angelegt (neue Kennungen), nie überschrieben
 async function plImportieren(datei) {
-  plStatus(`Datei „${String(datei.name).slice(0, 60)}“ wird gelesen …`, false);
-  if (datei.size > PL_GRENZEN.maxImportZeichen) { plStatus("Datei zu groß für ein Portfolio-Labor-Export (über 200 KB) – nichts importiert.", true); return; }
-  let d;
-  try { d = JSON.parse(await datei.text()); } catch (e) { plStatus("Datei ist kein gültiges JSON – nichts importiert.", true); return; }
-  const p = plPruefen(d);
+  const roh = await plDateiLesen(datei, "pl-status");
+  if (!roh) return;
+  const p = plPruefen(roh);
   if (!p.ok) { plStatus("Datei abgelehnt: " + p.fehler.slice(0, 3).join("; ") + (p.fehler.length > 3 ? ` (und ${p.fehler.length - 3} weitere)` : "") + " – nichts importiert.", true); return; }
+  const d = plMigrieren(roh);
   plAendern((ziel) => {
     if (ziel.portfolios.length + d.portfolios.length > PL_GRENZEN.maxPortfolios) return `Zu viele Musterportfolios: vorhanden ${ziel.portfolios.length}, in der Datei ${d.portfolios.length}, höchstens ${PL_GRENZEN.maxPortfolios} – nichts importiert.`;
-    for (const x of d.portfolios) ziel.portfolios.push({ id: plNeueKennung(), name: x.name.trim().slice(0, PL_GRENZEN.maxName), budget: x.budget, positionen: x.positionen.map((y) => ({ symbol: y.symbol, gewicht: y.gewicht })) });
+    const jetzt = plJetzt();
+    for (const x of d.portfolios) ziel.portfolios.push({ id: plNeueKennung(), name: x.name.trim().slice(0, PL_GRENZEN.maxName), budget: x.budget, positionen: x.positionen.map((y) => ({ symbol: y.symbol, gewicht: y.gewicht })),
+      notiz: x.notiz, archiviert: x.archiviert, erstellt: x.erstellt || jetzt, geaendert: jetzt,
+      szenarien: x.szenarien.map((s) => ({ id: plNeueKennung("sz"), name: s.name, erstellt: s.erstellt, schnappschuss: plSchnappschussKopie(s.schnappschuss) })) });
     if (!ziel.aktiv && ziel.portfolios.length) ziel.aktiv = ziel.portfolios[0].id;
     return null;
-  }, `${d.portfolios.length} Musterportfolio(s) importiert (zusätzlich, nichts überschrieben).`);
+  }, `${d.portfolios.length} Musterportfolio(s) importiert (mit ${d.portfolios.reduce((s, x) => s + x.szenarien.length, 0)} Szenario(s); zusätzlich, nichts überschrieben).`);
+}
+// Import eines einzelnen Szenarios in das aktive Portfolio: neue Kennung, Name bei Gleichheit mit „(2)“ usw.; nie überschrieben
+async function plSzImportieren(datei) {
+  const roh = await plDateiLesen(datei, "pl-sz-status");
+  if (!roh) return;
+  const f = [];
+  if (!roh || typeof roh !== "object" || Array.isArray(roh)) f.push("kein JSON-Objekt");
+  else {
+    if (roh.art !== "jarvis-portfolio-szenario") f.push("„art“ ist nicht „jarvis-portfolio-szenario“");
+    if (roh.version !== 2) f.push("unbekannte Version");
+    plSzenarioPruefen(roh.szenario, "Szenario", f, null);
+  }
+  if (f.length) { plStatus("Datei abgelehnt: " + f.slice(0, 3).join("; ") + (f.length > 3 ? ` (und ${f.length - 3} weitere)` : "") + " – nichts importiert.", true, "pl-sz-status"); return; }
+  plAendern((d, p) => {
+    if (!p) return "Erst ein Musterportfolio auswählen – nichts importiert.";
+    if (p.archiviert) return "Archiviertes Musterportfolio – erst „Wiederherstellen“; nichts importiert.";
+    if (p.szenarien.length >= PL_GRENZEN.maxSzenarien) return `Höchstens ${PL_GRENZEN.maxSzenarien} Szenarien – nichts importiert.`;
+    const name = plSzNameFrei(p, roh.szenario.name) ? roh.szenario.name : plSzNameEindeutig(p, roh.szenario.name);
+    if (!name) return "Kein freier Name gefunden – nichts importiert.";
+    const s = { id: plNeueKennung("sz"), name, erstellt: roh.szenario.erstellt, schnappschuss: plSchnappschussKopie(roh.szenario.schnappschuss) };
+    p.szenarien.push(s);
+    PL.szAuswahl = s.id;
+    PL.letzteMeldung = `Szenario „${roh.szenario.name}“ in „${p.name}“ importiert` + (name !== roh.szenario.name ? ` als „${name}“ (Name war schon vergeben)` : "") + " – vorhandene Szenarien unverändert.";
+    return null;
+  }, () => PL.letzteMeldung, "pl-sz-status");
 }
 document.addEventListener("DOMContentLoaded", plStarten);
 // ---------- Aktien-Watchlist (ab 11-02a, nur dieses Gerät) ----------
@@ -4458,7 +5033,7 @@ function abBriefing(variante, symbol) {
       li.dataset.art = z.art;
       if (g.id === "warnung" || g.id === "nicht_verfuegbar") li.className = "wz-wichtig";
       // textContent: Nachrichtentitel und Meldungstexte bleiben Daten (kein HTML, keine Befehle)
-      li.textContent = `${z.bereich} – ${art[z.art]}: ${z.inhalt}` + (z.belegt ? ` (Quelle: ${z.quelle}, Stand ${new Date(z.stand).toISOString().slice(0, 16).replace("T", " ")} UTC${alter(z.alter_min)})` : z.art === "fehlt" ? "" : " (ohne Beleg – nicht als Tatsache)");
+      li.textContent = `${z.bereich} – ${art[z.art]}: ${z.inhalt}` + (z.belegt ? ` (Quelle: ${z.quelle}, Stand ${new Date(z.stand).toISOString().slice(0, 16).replace("T", " ")} UTC${z.kuenstlich ? ", künstliches Datum (synthetische Testdaten) – kein echtes Datenalter" : alter(z.alter_min)})` : z.art === "fehlt" ? "" : " (ohne Beleg – nicht als Tatsache)");
       return li;
     }));
     return [h, ul];
@@ -5480,8 +6055,13 @@ setInterval(function () {
     }
   }
 
+  // ab 11-04a: Speichern gescheitert → Hinweis in der Meldungszeile (vorher nur bei leerer Liste sichtbar, sonst stiller Erfolg)
   function speichern() {
-    try { localStorage.setItem(SCHLUESSEL, JSON.stringify(aufgaben)); speicherOk = true; } catch (e) { speicherOk = false; }
+    try { localStorage.setItem(SCHLUESSEL, JSON.stringify(aufgaben)); speicherOk = true; } catch (e) {
+      speicherOk = false;
+      const hinweis = "Nicht gespeichert: Browserspeicher gesperrt oder voll – die Änderung gilt nur bis zum Neuladen.";
+      if (!meldung.textContent.includes(hinweis)) meldung.textContent = (meldung.textContent ? meldung.textContent + " " : "") + hinweis;
+    }
   }
 
   function faelligDatum(a) { return a.faellig ? new Date(a.faellig) : null; }
@@ -6256,6 +6836,8 @@ document.getElementById("routinen-import").addEventListener("change", async (e) 
   e.target.value = "";
   if (!datei) return;
   const r = datei.size > 200000 ? { fehler: "Die Datei ist zu groß." } : routinenImportieren(await datei.text());
+  // ab 11-03i: Speichern gescheitert → keine Erfolgsmeldung (vorher „… importiert“, beim Neuladen fehlten die Routinen)
+  if (!r.fehler && r.neu && !routineSpeicherOk) { lokalAntworten("Import nicht gespeichert: Browserspeicher gesperrt oder voll – " + r.neu + " Routine(n) nur bis zum Neuladen sichtbar, gespeicherte Routinen unverändert."); return; }
   lokalAntworten(r.fehler ? "Import nicht möglich: " + r.fehler : r.neu + " Routine(n) importiert" + (r.uebersprungen.length ? "; übersprungen: " + r.uebersprungen.join(" · ") : "") + ".", r.fehler ? "fehler" : "");
 });
 
@@ -6330,12 +6912,13 @@ async function adressePruefen() {
   if (!code && !verbindung.code) return "Bitte den Zugangscode eingeben.";
   verbindung.url = url;
   if (code) verbindung.code = code;
-  einstellungSchreiben("jarvis-worker-url", verbindung.url);
-  einstellungSchreiben("jarvis-zugangscode", verbindung.code);
+  // ab 11-04b: beide Schreibvorgänge werden versucht und ausgewertet (vorher „gespeichert“, auch wenn der Speicher gesperrt war)
+  const gespeichert = [einstellungSchreiben("jarvis-worker-url", verbindung.url), einstellungSchreiben("jarvis-zugangscode", verbindung.code)].every(Boolean);
   document.getElementById("worker-url").value = verbindung.url;
   document.getElementById("zugangscode").value = verbindung.code;
   document.getElementById("einrichtung-code").value = ""; // nicht im Feld stehen lassen
-  ergebnisSetzen("adresse", "funktioniert", "Adresse gespeichert; Zugangscode gespeichert (nicht angezeigt)");
+  if (gespeichert) ergebnisSetzen("adresse", "funktioniert", "Adresse gespeichert; Zugangscode gespeichert (nicht angezeigt)");
+  else ergebnisSetzen("adresse", "fehler", "Adresse und Zugangscode nur für diese Sitzung übernommen – Browserspeicher gesperrt oder voll; nach dem Neuladen gilt wieder der vorherige Stand");
   return null;
 }
 
@@ -6775,6 +7358,8 @@ document.getElementById("profil-import").addEventListener("change", async (e) =>
   if (!p.uebernehmen.length) { meldung.textContent = "Nichts zu importieren. " + p.uebersprungen.join(" · "); return; }
   if (!confirm("Profil importieren?\n\n" + vorschau)) { meldung.textContent = "Import abgebrochen."; return; }
   const r = profilImportieren(text);
+  // ab 11-03i: Speichern gescheitert → keine Erfolgsmeldung (vorher „… importiert“, beim Neuladen fehlten die Einträge)
+  if (r.neu && !profilSpeicherOk) { meldung.textContent = "Import nicht gespeichert: Browserspeicher gesperrt oder voll – " + r.neu + " Einträge nur bis zum Neuladen sichtbar, gespeichertes Profil unverändert."; return; }
   meldung.textContent = r.neu + " Einträge importiert" + (r.uebersprungen.length ? ", übersprungen: " + r.uebersprungen.join(" · ") : "") + ".";
 });
 
@@ -6826,7 +7411,7 @@ const RECHERCHE_ANBIETER = {
     name: "Claude-Websuche über den Worker",
     verfuegbar: () => verbunden(),
     suchen: async (frage) => {
-      const d = await workerAnfrage("/chat", { method: "POST", body: JSON.stringify({ messages: [{ role: "user", content: rechercheAuftrag(frage) }] }) });
+      const d = await workerAnfrage("/chat", { method: "POST", body: JSON.stringify({ messages: kiKontextFuerVersand([{ role: "user", content: rechercheAuftrag(frage) }]) }) });
       if (typeof d.antwort !== "string") throw new Error("Ungültige Antwort des Workers (keine Antwort enthalten).");
       return { antwort: d.antwort, quellen: Array.isArray(d.quellen) ? d.quellen : [], modell: d.modell, nutzung: d.nutzung };
     },
@@ -6859,6 +7444,7 @@ async function rechercheAusfuehren(frage) {
     return null;
   }
   frage = frage.slice(0, RECHERCHE.maxFrage);
+  const meineEingabe = eingabeNr; // ab 11-04k: neuere Eingabe während des Wartens → Antwort nur bei ihrer Frage, kein Untertitel/Vorlesen
   const platzhalter = lokalAntworten("Recherchiere: „" + frage + "“ … (" + anbieter.name + ")", "denkt");
   try {
     const r = await anbieter.suchen(frage);
@@ -6877,8 +7463,10 @@ async function rechercheAusfuehren(frage) {
     }
     if (!quellen.length) liste.append(Object.assign(document.createElement("li"), { textContent: "Keine Quellen geliefert – die Antwort ist nicht belegt." }));
     platzhalter.append(liste);
-    untertitelSetzen(null, text);
-    if (typeof lokalVorlesen === "function") lokalVorlesen(text);
+    if (meineEingabe === eingabeNr) {
+      untertitelSetzen(null, text);
+      if (typeof lokalVorlesen === "function") lokalVorlesen(text);
+    }
     return { text, quellen };
   } catch (e) {
     platzhalter.className = "nachricht fehler";
@@ -7008,6 +7596,9 @@ window.profilIntern = { laden: profilLaden, liste: () => profil, auswahl: () => 
 const ANGEHEFTET = { schluessel: "jarvis-verlauf-angeheftet", max: 50, maxText: 4000 };
 const VERLAUF_ART_TEXT = { nutzer: "Sie", jarvis: "JARVIS", fehler: "Fehler" };
 let angeheftet = [];
+// ab 11-04a: false, wenn das letzte Speichern des Angehefteten scheiterte – die Trefferliste sagt das dann (vorher stiller Erfolg,
+// obwohl die Karte „bleiben auf diesem Gerät gespeichert“ verspricht)
+let angeheftetSpeicherOk = true;
 
 function kurzPruefsumme(text) { let h = 5381; for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0; return h.toString(36); }
 function verlaufEintragSchluessel(n) { return n.zeit + "|" + n.art + "|" + kurzPruefsumme(n.text); }
@@ -7017,6 +7608,7 @@ function angeheftetLaden() {
   try { roh = JSON.parse(localStorage.getItem(ANGEHEFTET.schluessel) || "[]"); } catch (e) { roh = []; }
   angeheftet = (Array.isArray(roh) ? roh : []).filter((n) => n && typeof n.text === "string" && VERLAUF_ART_TEXT[n.art] && !isNaN(Date.parse(n.zeit)))
     .slice(0, ANGEHEFTET.max).map((n) => ({ art: n.art, text: verlaufBereinigen(n.text).slice(0, ANGEHEFTET.maxText), zeit: n.zeit }));
+  angeheftetSpeicherOk = true; // frisch geladen = gespeicherter Stand
 }
 function angeheftetSpeichern() {
   try {
@@ -7057,14 +7649,14 @@ function verlaufAnheften(n) {
   if (angeheftet.length >= ANGEHEFTET.max) return false;
   angeheftet.push({ art: n.art, text: verlaufBereinigen(n.text).slice(0, ANGEHEFTET.maxText), zeit: n.zeit });
   angeheftet.sort((a, b) => a.zeit.localeCompare(b.zeit));
-  angeheftetSpeichern();
+  angeheftetSpeicherOk = angeheftetSpeichern();
   verlaufTrefferAnzeigen();
   return true;
 }
 function verlaufLoesen(schluessel) {
   const vorher = angeheftet.length;
   angeheftet = angeheftet.filter((a) => verlaufEintragSchluessel(a) !== schluessel);
-  angeheftetSpeichern();
+  angeheftetSpeicherOk = angeheftetSpeichern();
   verlaufTrefferAnzeigen();
   return angeheftet.length < vorher;
 }
@@ -7104,17 +7696,21 @@ function verlaufTrefferAnzeigen() {
   const treffer = verlaufSuchen(filter);
   const gefiltert = filter.text.trim() || filter.von || filter.bis || filter.nurAngeheftet;
   info.textContent = (treffer.length ? treffer.length + (treffer.length === 1 ? " Nachricht" : " Nachrichten") : "Keine Nachricht")
-    + (gefiltert ? " passt zum Filter." : " im Verlauf.") + " Angeheftet: " + angeheftet.length + ".";
+    + (gefiltert ? " passt zum Filter." : " im Verlauf.") + " Angeheftet: " + angeheftet.length + "."
+    + (angeheftetSpeicherOk ? "" : " Nicht gespeichert: Browserspeicher gesperrt oder voll – die letzte Änderung am Angehefteten gilt nur bis zum Neuladen.")
+    // ab 11-04l: die Liste zeigt höchstens die neuesten 200 Treffer – das wird jetzt gesagt
+    + (treffer.length > 200 ? " Angezeigt: die neuesten 200." : "");
   const zeitText = (z) => new Date(z).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
   document.getElementById("verlauf-treffer").replaceChildren(...treffer.slice(-200).reverse().map((n) => {
     const li = document.createElement("li");
     li.dataset.schluessel = n.schluessel;
     if (n.angeheftet) li.className = "angeheftet";
-    const text = Object.assign(document.createElement("span"), { className: "aufgabe-text", textContent: VERLAUF_ART_TEXT[n.art] + ": " + n.text.replace(/^JARVIS: /, "").slice(0, 300) });
+    const voll = verlaufAnzeigeText(n.text).replace(/^JARVIS: /, "");
+    const text = Object.assign(document.createElement("span"), { className: "aufgabe-text", textContent: VERLAUF_ART_TEXT[n.art] + ": " + voll.slice(0, 300) + (voll.length > 300 ? " …" : "") });
     const stand = Object.assign(document.createElement("span"), { className: "aufgabe-faellig", textContent: zeitText(n.zeit) + (n.angezeigt ? "" : " · nur angeheftet") });
     const knopf = (beschriftung, aktion) => {
       const b = Object.assign(document.createElement("button"), { type: "button", className: "schalter", textContent: beschriftung });
-      b.setAttribute("aria-label", beschriftung + ": " + n.text.slice(0, 60));
+      b.setAttribute("aria-label", beschriftung + ": " + verlaufAnzeigeText(n.text).slice(0, 60));
       b.addEventListener("click", aktion);
       return b;
     };
@@ -7302,7 +7898,7 @@ function faehigkeitenAnzeigen() {
       wahl.setAttribute("aria-label", "Freigabe: " + skill.beschreibung);
       for (const stufe of Object.keys(RISIKO_STUFE)) if (RISIKO_STUFE[stufe] >= RISIKO_STUFE[skill.risiko]) wahl.append(new Option(FREIGABE_NAMEN[stufe], stufe));
       wahl.value = wirksam;
-      wahl.addEventListener("change", () => { freigabeSetzen(skill.name, wahl.value); faehigkeitenAnzeigen(); });
+      wahl.addEventListener("change", () => { const r = freigabeSetzen(skill.name, wahl.value); faehigkeitenAnzeigen(); freigabenMeldung(r.gespeichert); });
       li.append(wahl);
     } else {
       li.append(Object.assign(document.createElement("span"), { className: "aufgabe-faellig", textContent: "fest" }));
@@ -7319,8 +7915,10 @@ function faehigkeitenAnzeigen() {
 function freigabenAlleStandard() {
   const geaendert = SKILLS.filter((s) => skillRisiko(s) !== s.risiko);
   if (!geaendert.length || !confirm("Alle " + geaendert.length + " geänderten Freigaben auf den Standard zurücksetzen?")) return 0;
-  for (const s of geaendert) freigabeSetzen(s.name, s.risiko);
+  let gespeichert = true;
+  for (const s of geaendert) if (freigabeSetzen(s.name, s.risiko).gespeichert === false) gespeichert = false;
   faehigkeitenAnzeigen();
+  freigabenMeldung(gespeichert);
   return geaendert.length;
 }
 
@@ -7363,13 +7961,13 @@ const DATEN = { maxWert: 2000000, maxDatei: 5000000 };
 const speicherLesen = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
 
 // Entfernt Schlüssel/Tokens und die eigenen Codes aus einem gespeicherten Wert (Ersatz ohne Anführungszeichen: JSON bleibt gültig)
-function geheimnisseEntfernen(text) {
+// ab 11-03c: gleiche Muster wie geheimnisMuster (auch Großschrift und allgemeine sk-Schlüssel); Zuweisungen (api_key=…) nur bei
+// Fehlertexten – bei gespeicherten JSON-Werten bleibt die Regel aus, damit das JSON gültig bleibt
+function geheimnisseEntfernen(text, { fehlertext = false } = {}) {
   let s = String(text);
-  for (const k of ["jarvis-zugangscode", "jarvis-helfer-code"]) { const c = speicherLesen(k); if (c && c.length >= 4) s = s.split(c).join("[entfernt]"); }
-  if (verbindung.code && verbindung.code.length >= 4) s = s.split(verbindung.code).join("[entfernt]");
-  return s.replace(/sk-ant-[A-Za-z0-9_\-]{6,}/g, "[entfernt]").replace(/\bAIza[0-9A-Za-z_\-]{20,}/g, "[entfernt]")
-    .replace(/\b(ghp|gho|ghs|github_pat)_[A-Za-z0-9_]{10,}/g, "[entfernt]").replace(/Bearer\s+[A-Za-z0-9._\-]{6,}/gi, "Bearer [entfernt]")
-    .replace(/eyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]*/g, "[entfernt]").replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, "[entfernt]");
+  // ab 11-04j: auch die JSON-maskierte Form (Code mit " oder \ steht in gespeicherten JSON-Werten als \" bzw. \\) – vorher blieb er dort stehen
+  for (const k of ["jarvis-zugangscode", "jarvis-helfer-code"]) { const c = speicherLesen(k); if (c && c.length >= 4) { s = s.split(c).join("[entfernt]"); const m = JSON.stringify(c).slice(1, -1); if (m !== c) s = s.split(m).join("[entfernt]"); } }
+  return geheimnisMuster(s, { zuweisungen: fehlertext });
 }
 const enthaeltGeheimnis = (text) => geheimnisseEntfernen(text) !== String(text);
 
@@ -7428,13 +8026,21 @@ function datenLoeschen(id) {
   return true;
 }
 
+// Wert für die Sicherung (ab 11-03d): Verlauf, Angeheftetes und Diagnose enthalten Freitext und Fehlermeldungen – dort auch
+// Zuweisungen wie api_key=… entfernen, aber nur, wenn das gespeicherte JSON dabei gültig bleibt; sonst wie bisher.
+function sicherungsWert(schluessel, wert) {
+  const einfach = geheimnisseEntfernen(wert);
+  if (!/^jarvis-(verlauf|verlauf-angeheftet|diagnose)$/.test(schluessel)) return einfach;
+  const streng = geheimnisseEntfernen(wert, { fehlertext: true });
+  try { JSON.parse(wert); JSON.parse(streng); return streng; } catch (e) { return einfach; }
+}
 // umfang: "alles" (ohne Geheimes) oder "einstellungen" (nur harmlose Einstellungen für ein anderes Gerät)
 function datenSicherung(umfang = "alles") {
   const bereiche = {};
   for (const b of DATEN_BEREICHE) {
     if (b.geheim || (umfang === "einstellungen" && !b.einstellung)) continue;
     const werte = {};
-    for (const k of b.schluessel) { const w = speicherLesen(k); if (w !== null) werte[k] = geheimnisseEntfernen(w); }
+    for (const k of b.schluessel) { const w = speicherLesen(k); if (w !== null) werte[k] = sicherungsWert(k, w); }
     if (Object.keys(werte).length) bereiche[b.id] = werte;
   }
   return { art: "jarvis-sicherung", version: 1, umfang, erstellt: new Date().toISOString(),
@@ -7465,23 +8071,38 @@ function datenImportPruefen(text) {
     }
     if (grund) { uebersprungen.push(b.name + ": " + grund); continue; }
     if (!Object.keys(gueltig).length) { uebersprungen.push(b.name + ": keine gültigen Werte"); continue; }
+    const kurz = (v) => (v === null ? "leer" : v.length > 40 ? "Daten (" + kb(v.length * 2) + ")" : v);
     const aenderungen = Object.entries(gueltig).map(([k, w]) => {
       const alt = speicherLesen(k);
-      const kurz = (v) => (v === null ? "leer" : v.length > 40 ? "Daten (" + kb(v.length * 2) + ")" : v);
       return k + ": " + (alt === w ? "unverändert" : kurz(alt) + " → " + kurz(w));
     });
+    // ab 11-04g: Übernahme ersetzt den Bereich vollständig – hier gesetzte Schlüssel, die in der Datei fehlen, werden entfernt
+    for (const k of b.schluessel) { const alt = speicherLesen(k); if (!(k in gueltig) && alt !== null) aenderungen.push(k + ": " + kurz(alt) + " → wird entfernt"); }
     bereiche.push({ id, name: b.name, werte: gueltig, aenderungen });
   }
   return { umfang: d.umfang === "einstellungen" ? "einstellungen" : "alles", erstellt: d.erstellt, bereiche, uebersprungen };
 }
 
 // Übernimmt die geprüften Bereiche (ersetzt deren Werte vollständig); danach Seite neu laden
+// ab 11-03h: alles oder nichts – scheitert ein Schreibvorgang (Speicher voll/gesperrt), werden alle schon geänderten Werte
+// auf den vorherigen Stand zurückgesetzt (vorher blieb ein Teilstand aus alten und neuen Werten stehen)
 function datenImportieren(text) {
   const p = datenImportPruefen(text);
   if (p.fehler) return p;
-  for (const b of p.bereiche) {
-    const bereich = DATEN_BEREICHE.find((x) => x.id === b.id);
-    for (const k of bereich.schluessel) { try { if (k in b.werte) localStorage.setItem(k, b.werte[k]); else localStorage.removeItem(k); } catch (e) { return { fehler: "Browserspeicher gesperrt oder voll." }; } }
+  const alt = [];
+  try {
+    for (const b of p.bereiche) {
+      const bereich = DATEN_BEREICHE.find((x) => x.id === b.id);
+      for (const k of bereich.schluessel) {
+        const vorher = localStorage.getItem(k);
+        if (k in b.werte) localStorage.setItem(k, b.werte[k]); else localStorage.removeItem(k);
+        alt.push([k, vorher]); // nur erfolgreich geschriebene Schlüssel zurücksetzen (ein gescheitertes setItem ändert nichts)
+      }
+    }
+  } catch (e) {
+    let zurueck = true;
+    for (const [k, v] of alt.reverse()) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (_) { zurueck = false; } }
+    return { fehler: zurueck ? "Browserspeicher gesperrt oder voll – nichts geändert." : "Browserspeicher gesperrt oder voll – vorheriger Stand nicht vollständig wiederherstellbar." };
   }
   datenAnzeigen();
   return { uebernommen: p.bereiche.map((b) => b.name), uebersprungen: p.uebersprungen };
@@ -7494,22 +8115,46 @@ function datenDateiSpeichern(daten, name) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
-document.getElementById("daten-export").addEventListener("click", () => {
-  const s = datenSicherung("alles");
-  datenDateiSpeichern(s, "jarvis-sicherung");
-  document.getElementById("daten-meldung").textContent = "Sicherung mit " + Object.keys(s.bereiche).length + " Bereichen erstellt (ohne Zugangs- und Kopplungscode).";
-});
-document.getElementById("daten-export-einstellungen").addEventListener("click", () => {
-  const s = datenSicherung("einstellungen");
-  datenDateiSpeichern(s, "jarvis-einstellungen");
-  document.getElementById("daten-meldung").textContent = "Einstellungen exportiert (" + Object.keys(s.bereiche).length + " Bereiche, ohne Code). Auf dem anderen Gerät „Wiederherstellen …“.";
-});
+// ab 11-04j: Bereiche, deren gespeicherter JSON-Wert erst durch die Schwärzung unlesbar wird (z. B. ein kurzer Code, der in einer Zahl
+// vorkommt) – eine solche Sicherung ließe sich nicht vollständig wiederherstellen. Die Schwärzung selbst bleibt unverändert.
+function sicherungUnlesbar(s) {
+  const json = (t) => { try { JSON.parse(t); return true; } catch (e) { return false; } };
+  return DATEN_BEREICHE.filter((b) => s.bereiche[b.id] && Object.entries(s.bereiche[b.id]).some(([k, w]) => { const roh = speicherLesen(k); return roh !== null && (b.json || /^[\[{]/.test(roh)) && json(roh) && !json(w); })).map((b) => b.name);
+}
+const mbText = (bytes) => (bytes / 1e6).toLocaleString("de-DE", { maximumFractionDigits: 2 }) + " MB";
+// Kein Download und keine Erfolgsmeldung, wenn die Sicherung nicht wiederherstellbar wäre
+function datenExportieren(umfang, name, erfolg) {
+  const s = datenSicherung(umfang);
+  const unlesbar = sicherungUnlesbar(s);
+  if (unlesbar.length) {
+    document.getElementById("daten-meldung").textContent = "Sicherung nicht erstellt: Beim Entfernen des gespeicherten Zugangs- oder Kopplungscodes würden diese Daten unlesbar – "
+      + unlesbar.map((n) => "„" + n + "“").join(", ") + " (der Code kommt dort als gewöhnliche Zeichenfolge vor). Nichts wurde heruntergeladen.";
+    return false;
+  }
+  // ab 11-04l: dieselben Grenzen wie beim Wiederherstellen (Datei, je Wert) – vorher Erfolg und Download einer nicht wiederherstellbaren Datei
+  const zuGross = DATEN_BEREICHE.filter((b) => s.bereiche[b.id] && Object.values(s.bereiche[b.id]).some((w) => w.length > DATEN.maxWert)).map((b) => b.name);
+  const bytes = new Blob([JSON.stringify(s, null, 2)]).size;
+  if (zuGross.length || bytes > DATEN.maxDatei) {
+    document.getElementById("daten-meldung").textContent = "Sicherung nicht erstellt: " + (zuGross.length
+      ? "Zu große Daten in " + zuGross.map((n) => "„" + n + "“").join(", ") + " (je Wert höchstens " + (DATEN.maxWert / 1e6).toLocaleString("de-DE") + " Mio. Zeichen)"
+      : "Die Datei wäre " + mbText(bytes) + " groß, wiederherstellen lassen sich höchstens " + mbText(DATEN.maxDatei))
+      + " – so ließe sie sich nicht wiederherstellen. Nichts wurde heruntergeladen.";
+    return false;
+  }
+  datenDateiSpeichern(s, name);
+  document.getElementById("daten-meldung").textContent = erfolg(Object.keys(s.bereiche).length);
+  return true;
+}
+document.getElementById("daten-export").addEventListener("click", () => datenExportieren("alles", "jarvis-sicherung", (n) => "Sicherung mit " + n + " Bereichen erstellt (ohne Zugangs- und Kopplungscode)."));
+document.getElementById("daten-export-einstellungen").addEventListener("click", () => datenExportieren("einstellungen", "jarvis-einstellungen", (n) => "Einstellungen exportiert (" + n + " Bereiche, ohne Code). Auf dem anderen Gerät „Wiederherstellen …“."));
 document.getElementById("daten-import").addEventListener("change", async (e) => {
   const datei = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!datei) return;
   const meldung = document.getElementById("daten-meldung");
-  const text = datei.size > DATEN.maxDatei ? "" : await datei.text();
+  // ab 11-04l: übergroße Datei klar benennen (vorher wurde sie als leerer Text geprüft → „kein gültiges JSON“)
+  if (datei.size > DATEN.maxDatei) { meldung.textContent = "Wiederherstellen abgelehnt: Die Datei ist zu groß (" + mbText(datei.size) + ", höchstens " + mbText(DATEN.maxDatei) + ")."; return; }
+  const text = await datei.text();
   const p = datenImportPruefen(text);
   if (p.fehler) { meldung.textContent = "Wiederherstellen abgelehnt: " + p.fehler; return; }
   if (!p.bereiche.length) { meldung.textContent = "Nichts zu übernehmen. " + p.uebersprungen.join(" · "); return; }
@@ -7529,9 +8174,12 @@ const HAUS_DEMO = [{ id: "light.wohnzimmer", name: "Wohnzimmer (Demo)", art: "li
 let hausModus = ["aus", "demo"].includes(einstellungLesen("jarvis-haus")) ? einstellungLesen("jarvis-haus") : "";
 let hausStand = { art: null, status: null, geraete: [], meldung: "", geprueft: null };
 let hausLaeuft = false;
+// ab 11-04c: false, wenn „Trennen“/„Wieder verbinden“ nicht gespeichert werden konnte (Browserspeicher gesperrt/voll) –
+// dann heißt es „nur für diese Sitzung getrennt“ statt „auf diesem Gerät getrennt“ (vorher nach dem Neuladen wieder verbunden)
+let hausSpeicherOk = true;
 
 function hausZeile() {
-  if (hausModus === "aus") return ["aus", "auf diesem Gerät getrennt"];
+  if (hausModus === "aus") return ["aus", hausSpeicherOk ? "auf diesem Gerät getrennt" : "nur für diese Sitzung getrennt – Browserspeicher gesperrt oder voll; nach dem Neuladen wird Home Assistant wieder angefragt"];
   if (hausStand.art === "attrappe") return ["warn", "Demo (Attrappe) – keine echte Verbindung"];
   const s = hausStand.status;
   if (s && s.eingerichtet) return hausStand.meldung ? ["fehler", "eingerichtet, aber: " + hausStand.meldung] : ["ok", "verbunden über den Worker · " + hausStand.geraete.length + " Geräte (" + s.adresse + ")"];
@@ -7546,7 +8194,7 @@ async function hausPruefen() {
   knopf.disabled = true;
   hausStand = { art: null, status: null, geraete: [], meldung: "", geprueft: new Date().toISOString() };
   try {
-    if (hausModus === "aus") { hausStand.meldung = "Auf diesem Gerät getrennt – es wird nichts angefragt."; return hausStand; }
+    if (hausModus === "aus") { hausStand.meldung = (hausSpeicherOk ? "Auf diesem Gerät" : "Nur für diese Sitzung") + " getrennt – es wird nichts angefragt."; return hausStand; }
     if (hausModus === "demo") { hausStand.art = "attrappe"; hausStand.geraete = HAUS_DEMO.map((g) => ({ ...g })); return hausStand; }
     if (!verbunden()) { hausStand.meldung = "Worker-Verbindung fehlt (Cockpit → Verbindung)."; return hausStand; }
     hausStand.art = "worker";
@@ -7575,10 +8223,10 @@ async function hausSchalten(id, aktion) {
 }
 
 function hausTrennen() {
-  if (hausModus === "aus") { hausModus = ""; einstellungSchreiben("jarvis-haus", ""); hausStand = { art: null, status: null, geraete: [], meldung: "", geprueft: null }; hausAnzeigen(); return "verbunden"; }
+  if (hausModus === "aus") { hausModus = ""; hausSpeicherOk = einstellungSchreiben("jarvis-haus", ""); hausStand = { art: null, status: null, geraete: [], meldung: "", geprueft: null }; hausAnzeigen(); return "verbunden"; }
   if (!confirm("Smart Home auf diesem Gerät trennen?\nJARVIS fragt Home Assistant dann nicht mehr an. Vollständig trennen: Token in Home Assistant widerrufen und das Secret HA_TOKEN im Worker löschen.")) return null;
   hausModus = "aus";
-  einstellungSchreiben("jarvis-haus", "aus");
+  hausSpeicherOk = einstellungSchreiben("jarvis-haus", "aus");
   hausStand = { art: null, status: null, geraete: [], meldung: "", geprueft: null };
   hausAnzeigen();
   return "getrennt";
@@ -8216,6 +8864,7 @@ setInterval(aktienTicketsAltern, 60000);
 // /nachrichten, /quelle). Eine Order entsteht nur über „In die Risiko-Prüfung übernehmen“ → Karte der Stufe 1 → Freigabe je Order.
 const WZ = { kerzen: new Map(), tickerListe: null, konto: null, status: null };
 const WZ_TICKER = /^[A-Z]{1,5}([.-][A-Z]{1,2})?$/;
+const WZ_KERZEN_MAX = 50;
 const WZ_ALARME = "jarvis-aktien-alarme";
 const WZ_KONGRESS = "jarvis-kongress-gesehen";
 const wzEl = (id) => document.getElementById(id);
@@ -8238,20 +8887,44 @@ function wzKnoten(tag, eigenschaften = {}, ...kinder) {
 function wzLink(url, text) {
   return /^https:\/\//.test(String(url || "")) ? wzKnoten("a", { href: url, target: "_blank", rel: "noopener noreferrer", text }) : null;
 }
+// ab 11-03b: Fehlertexte ohne Schlüssel/Tokens (geheimnisseEntfernen), nur erste Zeile
 function wzFehlerText(e) {
-  return e && e.message === "Unbekannter Endpunkt." ? "Der verbundene Worker kennt Stufe 2 noch nicht (älterer Stand)." : String((e && e.message) || e);
+  return e && e.message === "Unbekannter Endpunkt." ? "Der verbundene Worker kennt Stufe 2 noch nicht (älterer Stand)." : geheimnisseEntfernen(String((e && e.message) || e).split("\n")[0], { fehlertext: true }).slice(0, 300);
 }
 
-async function wzStatus() {
-  WZ.status = await workerAnfrage("/aktien/status", { method: "GET", zeitlimitMs: 15000 });
+// optionen.abbruch (ab 11-02x): AbortController des Analyselaufs
+async function wzStatus({ abbruch = null } = {}) {
+  WZ.status = await workerAnfrage("/aktien/status", { method: "GET", zeitlimitMs: 15000, abbruch });
   return WZ.status;
 }
-async function wzKerzen(symbol, anzahl = 300) {
+async function wzKerzen(symbol, anzahl = 300, { abbruch = null } = {}) {
   const schluessel = symbol + "|" + anzahl;
   const c = WZ.kerzen.get(schluessel);
   if (c && Date.now() - c.zeit < 5 * 60000) return c.daten;
-  const d = await workerAnfrage(`/aktien/kerzen?symbol=${encodeURIComponent(symbol)}&intervall=1d&anzahl=${anzahl}`, { method: "GET" });
+  const d = await workerAnfrage(`/aktien/kerzen?symbol=${encodeURIComponent(symbol)}&intervall=1d&anzahl=${anzahl}`, { method: "GET", abbruch });
+  // Abgebrochener Lauf (ab 11-02x): eine dennoch eingetroffene Antwort kommt weder in den Cache noch zum Aufrufer
+  if (abbruch && abbruch.signal.aborted) throw Object.assign(new Error("Anfrage abgebrochen."), { netzwerk: true, abgebrochen: true });
+  // Begrenzung (ab 11-02x): abgelaufene Einträge entfernen, höchstens WZ_KERZEN_MAX Einträge (ältester zuerst raus)
+  for (const [k, e] of WZ.kerzen) if (Date.now() - e.zeit >= 5 * 60000) WZ.kerzen.delete(k);
+  WZ.kerzen.delete(schluessel);
+  while (WZ.kerzen.size >= WZ_KERZEN_MAX) WZ.kerzen.delete(WZ.kerzen.keys().next().value);
   WZ.kerzen.set(schluessel, { zeit: Date.now(), daten: d });
+  return d;
+}
+// Werkzeuge im Trading-Reiter (ab 11-02x): dieselbe Kerzenprüfung wie im Analyseablauf (JarvisDaten.kerzenPruefen: ungültige Werte,
+// Doppelte, Reihenfolge, Lücke über 4 Kalendertage; Kerze aus der Zukunft). Vorher rechneten die Werkzeuge direkt mit wzKerzen.
+// maxAlterTage (nur Exit-Planer, dessen Vorschlag zur Risiko-Prüfung führt): ältere Kerzen → nichts berechnen. Die Antwort bleibt
+// unverändert (gleiche Kerzen wie bisher), nur ungeprüfte Daten werden abgewiesen.
+async function wzKerzenGeprueft(symbol, anzahl = 300, { maxAlterTage = null } = {}) {
+  const d = await wzKerzen(symbol, anzahl);
+  const D = window.JarvisDaten;
+  const p = D.kerzenPruefen(d && d.kerzen, { intervall: "1d", kalender: "boerse" });
+  if (!p.ok) throw new Error(`Kursdaten von ${symbol} ${p.fehler.code === "nicht_verfuegbar" ? "nicht verfügbar" : "ungültig"} – nichts berechnet: ${p.fehler.text}`);
+  const jetzt = Date.now();
+  const datenzeit = D.kerzenDatenzeit("kerzen", { daten: p.kerzen, datenzeit: p.kerzen[p.kerzen.length - 1].t + D.INTERVALLE["1d"] }, jetzt);
+  const f = D.frischePruefen(datenzeit, "kerzen", jetzt, maxAlterTage > 0 ? maxAlterTage * 86400000 : null);
+  if (f.fehler && f.fehler.code === "veraltet") throw new Error(`Kursdaten von ${symbol} veraltet – nichts berechnet: jüngste Tageskerze vom ${wzTag(p.kerzen[p.kerzen.length - 1].t)} (erlaubt höchstens ${maxAlterTage} Tage).`);
+  if (f.fehler) throw new Error(`Kursdaten von ${symbol} widersprüchlich – nichts berechnet: ${f.fehler.text}`);
   return d;
 }
 // Heutige Tageskerze während der Sitzung ist unfertig (Alpaca-Tageskerzen beginnen um Mitternacht New York)
@@ -8275,12 +8948,17 @@ async function wzRoh(pfad) {
   if (!a.ok) {
     let d = null;
     try { d = JSON.parse(await a.text()); } catch (e) { /* kein JSON */ }
-    throw Object.assign(new Error((d && d.fehler) || "Fehler " + a.status), { status: a.status });
+    throw Object.assign(new Error(geheimnisMuster((d && d.fehler) || "Fehler " + a.status).slice(0, 500)), { status: a.status });
   }
   return a.arrayBuffer();
 }
-async function wzSecCik(symbol) {
-  if (!WZ.tickerListe) WZ.tickerListe = await workerAnfrage("/aktien/quelle?art=sec-ticker", { method: "GET" });
+// optionen.abbruch (ab 11-02y): AbortController des Analyselaufs; nach einem Abbruch wird die Tickerliste nicht gespeichert
+async function wzSecCik(symbol, { abbruch = null } = {}) {
+  if (!WZ.tickerListe) {
+    const liste = await workerAnfrage("/aktien/quelle?art=sec-ticker", { method: "GET", abbruch });
+    if (abbruch && abbruch.signal.aborted) throw Object.assign(new Error("Anfrage abgebrochen."), { netzwerk: true, abgebrochen: true });
+    WZ.tickerListe = liste;
+  }
   const c = window.AktienSec.cikFuer(WZ.tickerListe, symbol);
   if (!c) throw new Error(symbol + " steht nicht in der SEC-Tickerliste.");
   return c;
@@ -8332,7 +9010,7 @@ async function wzScannen(ev) {
     const ergebnisse = [];
     for (const s of symbole) {
       try {
-        const d = await wzKerzen(s);
+        const d = await wzKerzenGeprueft(s);
         ergebnisse.push({ symbol: s, ...window.AktienTechnik.scannen(d.kerzen, { letzteLaufend: wzLaufend(d.kerzen, uhr), jetzt: Date.now() }) });
       } catch (e) { fehler.push(s + ": " + wzFehlerText(e)); }
     }
@@ -8366,7 +9044,7 @@ async function wzEinstieg(ev) {
   knopf.disabled = true;
   aus.textContent = "Prüfe " + symbol + " …";
   try {
-    const [st, d] = await Promise.all([wzStatus(), wzKerzen(symbol)]);
+    const [st, d] = await Promise.all([wzStatus(), wzKerzenGeprueft(symbol)]);
     let termin = null, terminHinweis = "Zahlentermin unbekannt (SEC nicht eingerichtet).";
     if (st.sec_konfiguriert) {
       try {
@@ -8422,7 +9100,8 @@ async function wzAusstieg(ev) {
   knopf.disabled = true;
   aus.textContent = "Berechne Plan für " + p.symbol + " …";
   try {
-    const d = await wzKerzen(p.symbol);
+    // ATR nur aus geprüften, höchstens 5 Tage alten Kerzen (Grenze wie Entry-Timer) – der Plan kann zur Risiko-Prüfung führen
+    const d = await wzKerzenGeprueft(p.symbol, 300, { maxAlterTage: window.AktienEinstieg.STANDARD.maxKerzenAlterTage });
     const ind = window.AktienTechnik.indikatoren(d.kerzen);
     const atr = ind.atr14.filter((x) => x !== null).pop() || null;
     const plan = window.AktienAusstieg.planen({
@@ -8469,7 +9148,7 @@ async function wzSimulieren(ev) {
   knopf.disabled = true;
   aus.textContent = "Lade Kursverlauf und simuliere …";
   try {
-    const d = await wzKerzen(symbol, Number(wzEl("wz-sim-anzahl").value));
+    const d = await wzKerzenGeprueft(symbol, Number(wzEl("wz-sim-anzahl").value));
     const r = window.AktienSimulation.simulieren(d.kerzen, { slippagePct: slip });
     if (r.fehler) { aus.textContent = r.fehler; return; }
     aus.replaceChildren(
@@ -8903,7 +9582,7 @@ async function wzScreenen(ev) {
     for (const s of symbole) {
       let technisch, fundamental = {};
       try {
-        const d = await wzKerzen(s);
+        const d = await wzKerzenGeprueft(s);
         technisch = S.kennzahlenAusKerzen(d.kerzen, { jetzt: Date.now(), letzteLaufend: wzLaufend(d.kerzen, st.uhr) });
       } catch (e) { technisch = { _hinweise: ["Kursdaten nicht verfügbar: " + wzFehlerText(e)] }; }
       if (sec) {
@@ -9739,6 +10418,8 @@ const ANSICHTEN = ["cockpit", "analyse", "trading"];
 
 function ansichtZeigen(name) {
   if (!ANSICHTEN.includes(name)) name = "cockpit";
+  // ab 11-05a: außerhalb des Cockpits ist keine Spracheingabe sichtbar – laufende Aufnahme abbrechen (siehe spracheingabeAbbrechen)
+  if (name !== "cockpit" && window.spracheingabeAbbrechen) spracheingabeAbbrechen("reiter");
   for (const a of ANSICHTEN) {
     const aktiv = a === name;
     document.getElementById("ansicht-" + a).hidden = !aktiv;
@@ -10754,6 +11435,7 @@ const STIMMEN_WARTEN_MS = 800;
       maximal: "Maximale Aufnahmedauer (" + sekunden(ZEITEN.maximal) + ") erreicht.",
       dienst: "Der Erkennungsdienst des Browsers hat die Aufnahme beendet.",
       esc: "Aufnahme abgebrochen.",
+      reiter: "Aufnahme abgebrochen, weil der Bereich gewechselt wurde.",
       vorlesen: "Aufnahme beendet, weil JARVIS vorliest.",
       verlassen: "Aufnahme beendet, weil die Seite verlassen wurde.",
     }[grund] || "Aufnahme beendet.";
@@ -10905,6 +11587,9 @@ const STIMMEN_WARTEN_MS = 800;
   window.spracheingabeStarten = () => { if (!aufnahme && zustand !== "verarbeiten") starten(); };
   // Für die lokalen Tests (Nachbildung der Spracherkennung, verkürzte Zeiten)
   window.spracheingabeAktualisieren = unterstuetzungAnzeigen;
+  // ab 11-05a: Reiterwechsel aus dem Cockpit bricht eine laufende Aufnahme ab wie Esc (nichts gesendet, Text bleibt zur Prüfung) –
+  // Knopf, Status und Kern liegen nur im Cockpit; vorher hörte das Mikrofon dort unsichtbar weiter und sendete danach automatisch
+  window.spracheingabeAbbrechen = (grund) => beenden(grund);
   window.spracheingabeZeiten = ZEITEN;
   window.spracheingabeErkennung = ERKENNUNG;
 })();

@@ -25,6 +25,23 @@
     return ende - (verkuerzt ? 210 : 390) * MIN;
   }
 
+  // Fehlende Werktage (ab 11-03a): Werktage (Mo–Fr, UTC-Datum der Kerze) ohne Tageskerze zwischen zwei Kerzen, deren spätere höchstens
+  // `tage` Kalendertage alt ist – also in den jüngsten, für einen neuen Einstieg maßgeblichen Daten. JARVIS hat keinen Börsenkalender:
+  // Ob ein solcher Tag ein Feiertag oder eine Datenlücke ist, bleibt unbekannt (es werden keine Feiertagsregeln angenommen).
+  // Wochenenden zählen nie als Lücke; ältere Lücken und die Zeit nach der letzten Kerze (dafür gilt die Frische-Regel) nicht.
+  function fehlendeWerktage(kerzen, jetzt, tage) {
+    const TAG = 86400000, grenze = jetzt - tage * TAG, fehlend = [];
+    const tagBeginn = (t) => Date.UTC(new Date(t).getUTCFullYear(), new Date(t).getUTCMonth(), new Date(t).getUTCDate());
+    for (let j = 1; j < (kerzen || []).length; j++) {
+      if (!(kerzen[j].t >= grenze)) continue;
+      for (let d = tagBeginn(kerzen[j - 1].t) + TAG; d < tagBeginn(kerzen[j].t); d += TAG) {
+        const w = new Date(d).getUTCDay();
+        if (w !== 0 && w !== 6) fehlend.push(new Date(d).toISOString().slice(0, 10));
+      }
+    }
+    return fehlend;
+  }
+
   // eingabe: { kerzen (Tageskerzen, aufsteigend), uhr: {offen, naechste_oeffnung, naechste_schliessung}, jetzt (ms),
   //            regeln, zahlenTermin: {datum: "JJJJ-MM-TT", geschaetzt: bool} | null, letzteLaufend }
   function bewerten(eingabe) {
@@ -48,6 +65,9 @@
     // Veraltete Daten (z. B. Datenausfall): jüngste Tageskerze älter als maxKerzenAlterTage Kalendertage → nicht auf alten Kurs handeln
     const alterTage = (jetzt - kerzen[kerzen.length - 1].t) / 86400000;
     if (alterTage > regeln.maxKerzenAlterTage) warten.push(`Kursdaten veraltet: jüngste Tageskerze ist ${Math.floor(alterTage)} Tage alt – erst mit aktuellen Daten prüfen.`);
+    // Fehlender Werktag in den jüngsten Kerzen: Feiertag oder Datenlücke? Ohne Börsenkalender nicht prüfbar → kein „jetzt“
+    const fehlend = fehlendeWerktage(kerzen, jetzt, regeln.maxKerzenAlterTage);
+    if (fehlend.length) warten.push(`Handelskalender unbekannt: keine Tageskerze für ${fehlend.join(", ")} (Werktag) – ob Börsenfeiertag oder Datenlücke, ist ohne Börsenkalender nicht prüfbar; neue Einstiegsbewertung erst mit lückenlosen jüngsten Daten.`);
 
     const uhr = eingabe.uhr;
     if (!uhr || typeof uhr.offen !== "boolean") {
@@ -103,6 +123,7 @@
       gruende: [...nicht, ...warten],
       erfuellt: ok,
       fruehestens: fruehestens ? new Date(fruehestens).toISOString() : null,
+      fehlende_werktage: fehlend,
       kurs,
       zielzone,
       hinweis: HINWEIS,
@@ -116,5 +137,5 @@
     return { symbol: String(symbol).toUpperCase(), side: "buy", notional: String(b), type: "market", time_in_force: "day" };
   }
 
-  global.AktienEinstieg = { bewerten, orderVorschlag, sitzungsBeginn, STANDARD, HINWEIS };
+  global.AktienEinstieg = { bewerten, orderVorschlag, sitzungsBeginn, fehlendeWerktage, STANDARD, HINWEIS };
 })(typeof window !== "undefined" ? window : globalThis);

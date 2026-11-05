@@ -270,7 +270,8 @@
   // (beobachtet | einordnung | annahme | simulation | fehlt), Inhalt, Quelle, Stand. Ohne Quelle oder Stand → als „unbelegt“ markiert.
   function briefingErstellen(d, portfolio, { variante = "kurz", jetzt = Date.now() } = {}) {
     const zeilen = [];
-    const z = (bereich, art, inhalt, quelle, stand) => zeilen.push({ bereich, art, inhalt, quelle: quelle || null, stand: Number.isFinite(stand) ? stand : null, belegt: Boolean(quelle && Number.isFinite(stand)) });
+    // kuenstlich (ab 11-03g): Stand stammt aus synthetischen Testdaten – künstliches Datum, kein echtes Datenalter (Einstufung unverändert)
+    const z = (bereich, art, inhalt, quelle, stand, kuenstlich = false) => zeilen.push({ bereich, art, inhalt, quelle: quelle || null, stand: Number.isFinite(stand) ? stand : null, belegt: Boolean(quelle && Number.isFinite(stand)), kuenstlich: Boolean(kuenstlich) });
     if (!d || !d.ok) {
       z("Aktienprofil", "fehlt", "Kein Aktienprofil in dieser Sitzung – erst eine US-Aktie analysieren.", null, null);
       return fertig(zeilen, variante, jetzt);
@@ -279,14 +280,15 @@
     const a = sek.analyse;
     if (a && a.daten && ["ok", "warnung", "veraltet"].includes(a.status)) {
       const w = a.daten;
-      z("Analyse", "beobachtet", `${d.kontext.symbol}: letzter Schluss ${w.kurs} (${w.quelle && w.quelle.synthetisch ? "synthetische Testdaten" : w.quelle ? w.quelle.name : "?"})${a.status === "veraltet" ? " – VERALTET" : ""}.`, w.quelle && w.quelle.name, w.datenzeit);
+      const synth = Boolean(w.quelle && w.quelle.synthetisch);
+      z("Analyse", "beobachtet", `${d.kontext.symbol}: letzter Schluss ${w.kurs} (${synth ? "synthetische Testdaten" : w.quelle ? w.quelle.name : "?"})${a.status === "veraltet" ? " – VERALTET" : ""}.`, w.quelle && w.quelle.name, w.datenzeit, synth);
       if (d.kontext.zeitraum) z("Analyse", "annahme", `Zeitraum ${d.kontext.zeitraum.von} bis ${d.kontext.zeitraum.bis} (deine Vorgabe) – filtert nur Kursdaten und daraus berechnete Werte; Nachrichten, Meldungen, Alarme, Budget- und Rebalancing-Kurse bleiben außerhalb.`, "deine Eingabe", jetzt);
       else z("Analyse", "annahme", "Kein Zeitraum vorgegeben – berechnet über alle verfügbaren Tageskerzen der Quelle.", "keine Zeitraum-Vorgabe", jetzt);
       const sc = w.schritte.find((s) => s.id === "technik"), ein = w.schritte.find((s) => s.id === "einstieg");
-      if (sc) z("Analyse", "einordnung", "Technische Einordnung (keine Prognose): " + sc.text, w.quelle && w.quelle.name, w.datenzeit);
-      if (ein && variante === "lang") z("Analyse", "einordnung", "Entry-Timer (Regel, keine Empfehlung): " + ein.text, w.quelle && w.quelle.name, w.datenzeit);
+      if (sc) z("Analyse", "einordnung", "Technische Einordnung (keine Prognose): " + sc.text, w.quelle && w.quelle.name, w.datenzeit, synth);
+      if (ein && variante === "lang") z("Analyse", "einordnung", "Entry-Timer (Regel, keine Empfehlung): " + ein.text, w.quelle && w.quelle.name, w.datenzeit, synth);
       const sim = w.schritte.find((s) => s.id === "simulation");
-      if (sim && variante === "lang") z("Analyse", "simulation", sim.text, "Paper-Kern (lokal)", w.datenzeit);
+      if (sim && variante === "lang") z("Analyse", "simulation", sim.text, "Paper-Kern (lokal)", w.datenzeit, synth);
     } else z("Analyse", "fehlt", `Analyse ${a ? STATUS_TEXT[a.status] : "nicht vorhanden"}${a && a.blockaden[0] ? ": " + a.blockaden[0].grund : ""}.`, null, null);
     const n = sek.nachrichten;
     if (n && ["ok", "warnung", "veraltet"].includes(n.status) && n.daten) {
@@ -305,7 +307,8 @@
     const al = sek.alarme;
     if (al && ["ok", "warnung"].includes(al.status)) {
       const erkannt = (al.daten && al.daten.ausgeloest) || [];
-      z("Alarme", "beobachtet", erkannt.length ? `${erkannt.length} Alarm(e) erkannt (keine Order): ` + erkannt.map((x) => x.text).join(" · ") : `${al.zeilen.length} Alarm(e) eingerichtet, keiner erkannt.`, al.quellen.join(", "), jetzt - (al.datenalter_ms || 0));
+      // ab 11-04i: bei lokalen Testdaten stammt das Alarm-Datenalter aus dem künstlichen Datum (wie die Analysezeilen gekennzeichnet)
+      z("Alarme", "beobachtet", erkannt.length ? `${erkannt.length} Alarm(e) erkannt (keine Order): ` + erkannt.map((x) => x.text).join(" · ") : `${al.zeilen.length} Alarm(e) eingerichtet, keiner erkannt.`, al.quellen.join(", "), jetzt - (al.datenalter_ms || 0), Boolean(d.kontext && d.kontext.quelle === "lokal"));
       z("Alarme", "annahme", "Alarmwerte sind deine eigenen Einstellungen.", "Alarm-Werkzeug (lokal)", jetzt);
     } else z("Alarme", "fehlt", "Alarme " + (al ? STATUS_TEXT[al.status] : "nicht vorhanden") + ".", null, null);
     if (portfolio && portfolio.art === "simulation") {
@@ -324,14 +327,15 @@
     return "fakt";
   }
   function fertig(zeilen, variante, jetzt) {
-    for (const x of zeilen) { x.gruppe = gruppeVon(x); x.alter_min = x.stand === null ? null : Math.max(0, Math.round((jetzt - x.stand) / 60000)); }
+    for (const x of zeilen) { x.gruppe = gruppeVon(x); x.alter_min = x.stand === null || x.kuenstlich ? null : Math.max(0, Math.round((jetzt - x.stand) / 60000)); }
     const gruppen = GRUPPEN.map(([id, titel]) => ({ id, titel, zeilen: zeilen.filter((x) => x.gruppe === id) })).filter((g) => g.zeilen.length);
     return { zeilen, gruppen, erstellt: new Date(jetzt).toISOString(), zeitzone_intern: "UTC", text: textAus(gruppen, variante, jetzt) };
   }
-  function alterText(min) { return min === null ? "" : min < 120 ? `${min} min alt` : min < 2880 ? `${Math.round(min / 60)} h alt` : `${Math.round(min / 1440)} Tage alt`; }
+  const KUENSTLICH_TEXT = "künstliches Datum (synthetische Testdaten) – kein echtes Datenalter";
+  function alterText(min, kuenstlich = false) { return kuenstlich ? KUENSTLICH_TEXT : min === null ? "" : min < 120 ? `${min} min alt` : min < 2880 ? `${Math.round(min / 60)} h alt` : `${Math.round(min / 1440)} Tage alt`; }
   function textAus(gruppen, variante, jetzt) {
     const art = { beobachtet: "Beobachtet", einordnung: "Einordnung", annahme: "Annahme", simulation: "Simulation", fehlt: "Fehlt" };
-    return "US-Aktien-Briefing (" + (variante === "lang" ? "ausführlich" : "kurz") + `), erstellt ${new Date(jetzt).toISOString().slice(0, 16).replace("T", " ")} UTC. ` + gruppen.map((g) => g.titel + ": " + g.zeilen.map((x) => `${x.bereich} – ${art[x.art]}: ${x.inhalt}${x.belegt ? ` (Quelle: ${x.quelle}, Stand ${new Date(x.stand).toISOString().slice(0, 16).replace("T", " ")} UTC, ${alterText(x.alter_min)})` : x.art === "fehlt" ? "" : " (ohne Beleg – nicht als Tatsache)"}`).join(" ")).join(" ") + " Keine Empfehlung, keine Prognose, keine Order.";
+    return "US-Aktien-Briefing (" + (variante === "lang" ? "ausführlich" : "kurz") + `), erstellt ${new Date(jetzt).toISOString().slice(0, 16).replace("T", " ")} UTC. ` + gruppen.map((g) => g.titel + ": " + g.zeilen.map((x) => `${x.bereich} – ${art[x.art]}: ${x.inhalt}${x.belegt ? ` (Quelle: ${x.quelle}, Stand ${new Date(x.stand).toISOString().slice(0, 16).replace("T", " ")} UTC, ${alterText(x.alter_min, x.kuenstlich)})` : x.art === "fehlt" ? "" : " (ohne Beleg – nicht als Tatsache)"}`).join(" ")).join(" ") + " Keine Empfehlung, keine Prognose, keine Order.";
   }
 
   // ---------- Strategie-Vergleich (vorhandenes Strategy Lab) ----------

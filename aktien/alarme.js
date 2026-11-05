@@ -111,7 +111,8 @@
       }
       const k = daten.kurse && daten.kurse[regel.symbol];
       if (!k || !(k.preis > 0)) { hinweise.push(`${regel.symbol}: kein Kurs.`); continue; }
-      if (Number(k.alter_min) > MAX_ALTER_MIN) { hinweise.push(`${regel.symbol}: Kurs ${k.alter_min} min alt – nicht bewertet.`); continue; }
+      // kuenstlich (ab 11-04i): synthetische Testdaten – das Alter stammt aus einem künstlichen Datum und wird nicht als Alter genannt
+      if (Number(k.alter_min) > MAX_ALTER_MIN) { hinweise.push(k.kuenstlich ? `${regel.symbol}: Kurs mit künstlichem Datum (synthetische Testdaten) – nicht bewertet.` : `${regel.symbol}: Kurs ${k.alter_min} min alt – nicht bewertet.`); continue; }
       const preis = k.preis;
       if (regel.art === "prozent") {
         const ref = daten.vortag && daten.vortag[regel.symbol];

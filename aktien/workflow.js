@@ -75,7 +75,7 @@
     const veraltet = k.frisch === false;
     schritt("daten", "Kursdaten", veraltet ? "warnung" : "ok",
       `${kerzen.length} Tageskerzen von ${quelle.name}${quelle.synthetisch ? " (synthetische Testdaten, keine Marktdaten)" : ""}; Datenzeit ${new Date(datenzeit).toISOString().slice(0, 16).replace("T", " ")} UTC`
-        + (veraltet ? ` – VERALTET (älter als ${maxTage} Tage)` : "") + "; Qualität geprüft (Reihenfolge, Doppelte, Lücken" + (optionen.ausreisser ? ", Ausreißer" : "") + ").");
+        + (veraltet ? ` – VERALTET (älter als ${maxTage} Tage)` : "") + "; Qualität geprüft (Reihenfolge, Doppelte, Lücken über 4 Kalendertage" + (optionen.ausreisser ? ", Ausreißer" : "") + "); einzelne fehlende Handelstage sind ohne Börsenkalender nicht prüfbar.");
     if (veraltet) blockade("Daten", `Kursdaten veraltet (${k.fehler.text})`, "Mit aktuellen Daten neu analysieren – auf alte Kurse wird nicht gehandelt.");
     if (!optionen.ausreisser) blockade("Konfiguration", "Ausreißerregeln nicht festgelegt – die Daten wurden nicht auf Ausreißer geprüft.", "Regeln (max. Tagessprung %, max. Spanne %) eintragen; bis dahin gilt die Analyse nur als Information.");
 

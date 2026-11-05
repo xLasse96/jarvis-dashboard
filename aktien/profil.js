@@ -303,6 +303,23 @@
     vorschlag.fingerabdruck = fnv(JSON.stringify([vorschlag.symbol, vorschlag.richtung, vorschlag.stueck, vorschlag.preisannahme, vorschlag.risiko.bestanden, vorschlag.risiko.gruende, vorschlag.erstellt, vorschlag.sitzung]));
     return { vorschlag: Object.freeze(vorschlag) };
   }
+  // Parameter der Paper-Buchung eines Vorschlags (ab 11-05b an einer Stelle: Bestätigung und Vorschau-Schätzung nutzen dieselben)
+  function buchungsParameter(vorschlag, b) {
+    const P = global.PaperKern;
+    return { datensatz: "Profil " + vorschlag.sitzung, symbol: vorschlag.symbol, seite: vorschlag.richtung, wertKauf: vorschlag.betrag_geschaetzt, signalZeit: vorschlag.erstellt, kerze: { t: b.jetzt, o: vorschlag.preisannahme }, annahmen: P.annahmenNormal(b.annahmen), limits: b.limits, kurse: { [vorschlag.symbol]: vorschlag.preisannahme } };
+  }
+  // Schätzung vor der Bestätigung (ab 11-05b): derselbe Paper-Kern-Aufruf auf einer Kopie des Portfolios – Ausführungspreis mit
+  // Slippage, Stückzahl, Volumen, Gebühr und Belastung (Kauf) bzw. Gutschrift (Verkauf); das Portfolio selbst bleibt unverändert
+  function vorschlagSchaetzen(vorschlag, b) {
+    const P = global.PaperKern;
+    if (!vorschlag || !vorschlag.simulation || !vorschlag.risiko.bestanden || !b || !b.portfolio) return null;
+    const kopie = JSON.parse(JSON.stringify(b.portfolio));
+    const r = P.orderAusfuehren(kopie, buchungsParameter(vorschlag, b));
+    const e = r.order && kopie.ledger.find((x) => x.trade_id === r.order.trade_id);
+    if (!e || e.zustand !== "gefuellt") return null;
+    const betrag = Math.round((vorschlag.richtung === "kauf" ? e.volumen + e.gebuehr : e.volumen - e.gebuehr) * 100) / 100;
+    return { preis: e.preis, menge: e.menge, volumen: e.volumen, gebuehr: e.gebuehr, betrag, annahmen: e.annahmen };
+  }
   // Bestätigung GENAU dieses Vorschlags: Fingerabdruck stimmt, nicht abgelaufen, Risiko unverändert, kein Not-Aus → Paper-Kern bucht.
   // b: { fingerabdruck, jetzt, portfolio, limits, notaus, kurse }
   function vorschlagBestaetigen(vorschlag, b) {
@@ -316,7 +333,7 @@
     const risiko = P.risikoPruefen(b.portfolio, { seite: vorschlag.richtung, symbol: vorschlag.symbol, wert: vorschlag.betrag_geschaetzt }, b.limits, { jetzt: b.jetzt, kurse: b.kurse || { [vorschlag.symbol]: vorschlag.preisannahme } });
     if (risiko.bestanden !== vorschlag.risiko.bestanden || JSON.stringify(risiko.gruende) !== JSON.stringify(vorschlag.risiko.gruende)) return { fehler: "Risikostatus hat sich geändert – neuer Vorschlag und neue Bestätigung nötig.", risiko };
     if (!risiko.bestanden) return { fehler: "Risikoprüfung nicht bestanden: " + risiko.gruende.join("; ") };
-    const r = P.orderAusfuehren(b.portfolio, { datensatz: "Profil " + vorschlag.sitzung, symbol: vorschlag.symbol, seite: vorschlag.richtung, wertKauf: vorschlag.betrag_geschaetzt, signalZeit: vorschlag.erstellt, kerze: { t: b.jetzt, o: vorschlag.preisannahme }, annahmen: P.annahmenNormal(b.annahmen), limits: b.limits, kurse: { [vorschlag.symbol]: vorschlag.preisannahme } });
+    const r = P.orderAusfuehren(b.portfolio, buchungsParameter(vorschlag, b));
     if (r.doppelt) return { fehler: "Dieser Vorschlag wurde schon gebucht." };
     return { ok: true, trade_id: r.order.trade_id, zustand: r.order.zustand, hinweis: "SIMULATION – im lokalen Paper-Kern gebucht, keine Order an einen Broker." };
   }
@@ -340,5 +357,5 @@
     return { ok: true, kontext: kx.kontext, ergebnisse, zusammenfassung: { verfuegbar, fehlend, vollstaendig: fehlend.length === 0, text: fehlend.length ? `Teilanalyse: ${verfuegbar.length} von ${ergebnisse.length} Bereichen verfügbar – fehlend: ${fehlend.join(", ")}.` : `Alle ${ergebnisse.length} Bereiche verfügbar.` } };
   }
 
-  global.AktienProfil = { kontextNeu, kerzenImZeitraum, providerImZeitraum, ergebnisNeu, dispatch, grenzenPruefen, vorschlagErstellen, vorschlagBestaetigen, SKILL, STATUS, VORSCHLAG_GUELTIG_MS, ANWEISUNG, WERKZEUGE: WERKZEUGE.map(([id]) => id) };
+  global.AktienProfil = { kontextNeu, kerzenImZeitraum, providerImZeitraum, ergebnisNeu, dispatch, grenzenPruefen, vorschlagErstellen, vorschlagSchaetzen, vorschlagBestaetigen, SKILL, STATUS, VORSCHLAG_GUELTIG_MS, ANWEISUNG, WERKZEUGE: WERKZEUGE.map(([id]) => id) };
 })(typeof window !== "undefined" ? window : globalThis);

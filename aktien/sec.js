@@ -184,11 +184,27 @@
   }
 
   // company_tickers.json → CIK (zehnstellig) zum Ticker
+  // Zuordnung Ticker → CIK über die SEC-Liste company_tickers.json. Exakter Treffer zuerst (Verhalten wie bisher).
+  // SEC-Alias (ab 11-03a): JARVIS schreibt Aktienklassen mit Punkt (BRK.B, wie AktienWorkflow.US_TICKER und die Aktienklassen-Tabelle
+  // in copycat.js), die SEC-Liste mit Bindestrich (BRK-B). Nur für die SEC-Zuordnung wird „.“ → „-“ versucht – Kursabrufe und
+  // Cache-Schlüssel bleiben unberührt. Mehrere verschiedene CIKs für den Alias → null (nicht eindeutig, also „nicht verfügbar“).
+  function secAlias(ticker) {
+    const m = /^([A-Z]{1,5})\.([A-Z]{1,2})$/.exec(ticker);
+    return m ? m[1] + "-" + m[2] : null;
+  }
   function cikFuer(tickerListe, ticker) {
-    const t = String(ticker || "").toUpperCase();
-    for (const v of Object.values(tickerListe || {})) if (v && String(v.ticker).toUpperCase() === t) return { cik: String(v.cik_str).padStart(10, "0"), name: v.title };
-    return null;
+    const t = String(ticker || "").trim().toUpperCase();
+    if (!t) return null;
+    const eintraege = Object.values(tickerListe || {}).filter((v) => v && v.ticker !== undefined && v.cik_str !== undefined);
+    const treffer = (s) => eintraege.filter((v) => String(v.ticker).toUpperCase() === s);
+    const exakt = treffer(t);
+    if (exakt.length) return { cik: String(exakt[0].cik_str).padStart(10, "0"), name: exakt[0].title };
+    const alias = secAlias(t);
+    if (!alias) return null;
+    const ciks = [...new Set(treffer(alias).map((v) => String(v.cik_str).padStart(10, "0")))];
+    if (ciks.length !== 1) return null;
+    return { cik: ciks[0], name: treffer(alias)[0].title, sec_ticker: alias };
   }
 
-  global.AktienSec = { analysieren, meldungen, nachlaufHinweis, naechsteZahlenSchaetzung, aenderungen, cikFuer, quartale, KONZEPTE };
+  global.AktienSec = { analysieren, meldungen, nachlaufHinweis, naechsteZahlenSchaetzung, aenderungen, cikFuer, secAlias, quartale, KONZEPTE };
 })(typeof window !== "undefined" ? window : globalThis);

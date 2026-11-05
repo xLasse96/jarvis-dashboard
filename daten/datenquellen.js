@@ -164,6 +164,14 @@
     return null;
   }
 
+  // Laufende Kerze (begonnen, Ende noch in der Zukunft – z. B. die heutige Tageskerze während der Börsensitzung): Datenstand ist
+  // „jetzt“, nicht das Kerzenende. Sonst gälte jede laufende Kerze als „aus der Zukunft“. Beginnt die Kerze selbst in der Zukunft,
+  // bleibt es beim Kerzenende → widerspruch (ab 11-02x).
+  function kerzenDatenzeit(art, n, jetzt) {
+    if (art !== "kerzen" || !(n.datenzeit > jetzt)) return n.datenzeit;
+    return n.daten[n.daten.length - 1].t <= jetzt ? jetzt : n.datenzeit;
+  }
+
   // ---------- Abruf ----------
   // optionen: { zeitlimitMs (Pflicht, > 0), jetzt (UTC ms, für Tests), maxAlterMs }
   async function abrufen(provider, art, anfrage = {}, optionen = {}) {
@@ -187,8 +195,9 @@
     }
     const n = normalisieren(art, roh, anfrage);
     if (!n.ok) return ergebnis(art, name, jetzt, { fehler: n.fehler });
-    const f = frischePruefen(n.datenzeit, art, jetzt, optionen.maxAlterMs);
-    return ergebnis(art, name, jetzt, { ok: !f.fehler, daten: n.daten, datenzeit: n.datenzeit, frisch: f.frisch, fehler: f.fehler });
+    const datenzeit = kerzenDatenzeit(art, n, jetzt);
+    const f = frischePruefen(datenzeit, art, jetzt, optionen.maxAlterMs);
+    return ergebnis(art, name, jetzt, { ok: !f.fehler, daten: n.daten, datenzeit, frisch: f.frisch, fehler: f.fehler });
   }
 
   // Für eine Orderfreigabe zählen nur gültige UND nachweislich frische Daten (frisch === true); unbekannte Frische blockiert.
@@ -379,7 +388,7 @@
     CSV_GRENZEN, CSV_SPALTEN, csvKerzenLesen,
     ARTEN, FRISCHE_VORGABE, INTERVALLE,
     symbolNormal, waehrungNormal, intervallNormal, zeitNormal, kerzeNormal,
-    kerzenPruefen, ausreisserPruefen, frischePruefen, normalisieren, providerPruefen,
+    kerzenPruefen, ausreisserPruefen, frischePruefen, kerzenDatenzeit, normalisieren, providerPruefen,
     abrufen, fuerFreigabe, mitErsatz, quellenAbgleich, cacheNeu, mockProvider,
     HINWEIS: "Datenqualität: geprüft, nicht verändert. Ungültige oder veraltete Daten sperren Signale und Freigaben.",
   };
