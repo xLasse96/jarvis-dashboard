@@ -9,11 +9,13 @@
 //   Abstand       Kurs höchstens 3 % über der EMA20 (sonst „überdehnt“, Zielzone bis EMA20 + 3 %)
 //   Zahlen        nicht in den 3 Tagen vor voraussichtlichen Quartalszahlen (Termin ist oft nur geschätzt)
 //   Daten         jüngste Tageskerze höchstens 5 Kalendertage alt (sonst „Kursdaten veraltet“)
+//   Kurs          ab 11-06d: „jetzt“ nur mit einem aktuellen Kurs (kursAktuell, höchstens 20 Minuten alt). Ohne ihn bleibt die
+//                 Einordnung auf dem letzten Tagesschluss erhalten, ist aber als historisch gekennzeichnet und nie „jetzt“.
 // Sitzungsbeginn: aus Alpacas nächster Schließung (16:00 New York → Beginn 6,5 h früher; 13:00 bei verkürztem Handel → 3,5 h).
 (function (global) {
   "use strict";
 
-  const STANDARD = { minNachOeffnungMin: 15, minVorSchlussMin: 15, trendPflicht: true, rsiMax: 70, maxAbstandEma20Pct: 3, vorZahlenTage: 3, maxKerzenAlterTage: 5 };
+  const STANDARD = { minNachOeffnungMin: 15, minVorSchlussMin: 15, trendPflicht: true, rsiMax: 70, maxAbstandEma20Pct: 3, vorZahlenTage: 3, maxKerzenAlterTage: 5, maxKursAlterMin: 20 };
   const HINWEIS = "Regelbasierte Einordnung, keine Empfehlung. Ein Kauf braucht weiter Risiko-Prüfung und deine Freigabe genau dieser Order.";
   const MIN = 60000;
 
@@ -43,7 +45,17 @@
   }
 
   // eingabe: { kerzen (Tageskerzen, aufsteigend), uhr: {offen, naechste_oeffnung, naechste_schliessung}, jetzt (ms),
-  //            regeln, zahlenTermin: {datum: "JJJJ-MM-TT", geschaetzt: bool} | null, letzteLaufend }
+  //            regeln, zahlenTermin: {datum: "JJJJ-MM-TT", geschaetzt: bool} | null, letzteLaufend,
+  //            kursAktuell: {preis, zeit (ms)} | null – aktueller Einzelkurs; ohne ihn nie „jetzt“ }
+  function kursPruefen(k, jetzt, maxMin) {
+    if (!k) return { ok: false, grund: `Kein aktueller Kurs – ein zeitkritischer Einstieg braucht einen Kurs, der höchstens ${maxMin} Minuten alt ist.` };
+    if (!(Number(k.preis) > 0) || !Number.isFinite(k.zeit)) return { ok: false, grund: "Aktueller Kurs unvollständig (Preis oder Zeit fehlt) – nicht verwendet." };
+    if (k.zeit - jetzt > 60000) return { ok: false, grund: "Zeit des aktuellen Kurses liegt in der Zukunft – nicht verwendet." };
+    const min = (jetzt - k.zeit) / MIN;
+    if (min > maxMin) return { ok: false, grund: `Kurs ${Math.floor(min)} Minuten alt (erlaubt höchstens ${maxMin}) – erst mit aktuellem Kurs prüfen.` };
+    return { ok: true, preis: Number(k.preis), alterMin: Math.max(0, Math.floor(min)) };
+  }
+
   function bewerten(eingabe) {
     const regeln = { ...STANDARD, ...(eingabe.regeln || {}) };
     const T = global.AktienTechnik;
@@ -55,7 +67,8 @@
     const ind = T.indikatoren(kerzen);
     // Während der Sitzung ist die heutige Tageskerze unfertig: Trend/RSI aus der letzten abgeschlossenen, Kurs aus der laufenden
     const i = eingabe.letzteLaufend && kerzen.length > 1 ? kerzen.length - 2 : kerzen.length - 1;
-    const kurs = kerzen[kerzen.length - 1].c;
+    const aktuell = kursPruefen(eingabe.kursAktuell, jetzt, regeln.maxKursAlterMin);
+    const kurs = aktuell.ok ? aktuell.preis : kerzen[kerzen.length - 1].c;
     const e20 = ind.ema20[i], e50 = ind.ema50[i], e200 = ind.ema200[i], rs = ind.rsi14[i];
     const warten = [];
     const nicht = [];
@@ -90,6 +103,8 @@
         ok.push("Börse offen, außerhalb der ersten und letzten Minuten.");
       }
     }
+    if (!aktuell.ok) warten.push(aktuell.grund + " Einordnung auf dem Tagesschluss (historisch).");
+    else ok.push(`Aktueller Kurs (${aktuell.alterMin} min alt).`);
 
     if (regeln.trendPflicht) {
       if (e50 === null || e200 === null) nicht.push("Trend nicht prüfbar (zu wenige Kerzen für EMA200).");
@@ -125,6 +140,8 @@
       fruehestens: fruehestens ? new Date(fruehestens).toISOString() : null,
       fehlende_werktage: fehlend,
       kurs,
+      kurs_quelle: aktuell.ok ? "aktuell" : "tagesschluss",
+      kurs_alter_min: aktuell.ok ? aktuell.alterMin : null,
       zielzone,
       hinweis: HINWEIS,
     };
@@ -137,5 +154,5 @@
     return { symbol: String(symbol).toUpperCase(), side: "buy", notional: String(b), type: "market", time_in_force: "day" };
   }
 
-  global.AktienEinstieg = { bewerten, orderVorschlag, sitzungsBeginn, fehlendeWerktage, STANDARD, HINWEIS };
+  global.AktienEinstieg = { bewerten, orderVorschlag, sitzungsBeginn, fehlendeWerktage, kursPruefen, STANDARD, HINWEIS };
 })(typeof window !== "undefined" ? window : globalThis);

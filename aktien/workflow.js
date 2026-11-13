@@ -92,8 +92,13 @@
     if (sc.fehler) schritt("technik", "Chart-Scanner", "blockiert", sc.fehler);
     else schritt("technik", "Chart-Scanner", sc.punkte > 0 ? "ok" : "warnung", `Punkte ${sc.punkte}: ` + (sc.signale.length ? sc.signale.map((s) => s.text).join("; ") : "keine Signale") + (sc.hinweise.length ? " · " + sc.hinweise.join(" ") : ""), { stand: sc.stand, signale: sc.signale });
 
-    // 4. Entry-Timer
-    const ein = E.bewerten({ kerzen, uhr, jetzt, letzteLaufend });
+    // 4. Entry-Timer – ab 11-06d mit aktuellem Einzelkurs, falls die Quelle „kurs“ liefert (Frische prüft der Entry-Timer selbst)
+    let kursAktuell = null;
+    if (provider && Array.isArray(provider.arten) && provider.arten.includes("kurs")) {
+      const ka = await D.abrufen(provider, "kurs", { symbol }, { zeitlimitMs: optionen.zeitlimitMs, jetzt, maxAlterMs: null });
+      if (ka.ok && ka.daten) kursAktuell = { preis: ka.daten.preis, zeit: ka.daten.zeit };
+    }
+    const ein = E.bewerten({ kerzen, uhr, jetzt, letzteLaufend, kursAktuell });
     if (ein.fehler) schritt("einstieg", "Entry-Timer", "blockiert", ein.fehler);
     else {
       schritt("einstieg", "Entry-Timer", ein.urteil === "jetzt" ? "ok" : ein.urteil === "warten" ? "warnung" : "blockiert", `${ein.text} ${ein.gruende.join(" ")}`.trim() + (uhr ? "" : " (Börsenuhr nicht verfügbar)"), ein);
@@ -102,17 +107,20 @@
 
     // 5. Exit-Planer (gedachter Einstieg zum letzten Kurs, 1 Aktie – nur zur Einordnung von Stop und Zielen)
     const kurs = kerzen[kerzen.length - 1].c;
-    const atr = sc.stand ? sc.stand.atr14 : null;
+    // ab 11-05c: ungerundeter ATR der bewerteten Kerze (wie das Werkzeug „Exit-Planer“); vorher der auf 2 Dezimalen gerundete
+    // Anzeigewert des Scanners – der Stop wich dann um bis zu einen Cent ab
+    const atr = sc.stand ? T.atr(kerzen, 14)[letzteLaufend && kerzen.length > 1 ? kerzen.length - 2 : kerzen.length - 1] : null;
     const aus = A.planen({ symbol, einstand: kurs, menge: 1, kurs, atr, hoechstkurs: kurs, tageGehalten: 0 });
     if (aus.fehler) schritt("ausstieg", "Exit-Planer", "nicht_verfuegbar", aus.fehler);
     else schritt("ausstieg", "Exit-Planer", "ok", `Bei Einstieg zu ${r2(kurs)}: Stop ${aus.wirksamerStop} (${aus.stopGrund || aus.stopArt}, ${aus.abstandStopPct} % Abstand), Ziele ${aus.ziele.map((z) => z.preis !== undefined ? z.preis : z.kurs).filter((x) => x !== undefined).join(" / ") || "–"}, Zeit-Stop ${aus.zeitStopTage} Tage.`, aus);
 
     // 6. Quartalszahlen (SEC companyfacts) – trader-analyst
-    let fundamental = null;
+    let fundamental = null, secAnalyse = null;
     if (provider && typeof provider.secFakten === "function") {
       try {
         const fakten = await mitZeitlimit(Promise.resolve().then(() => provider.secFakten(symbol)), optionen.zeitlimitMs, "SEC");
         const a = S.analysieren(fakten, 6);
+        secAnalyse = a;
         fundamental = SC.kennzahlenAusSec(a, { jetzt });
         if (a.fehler) schritt("sec", "Quartalszahlen (SEC)", "nicht_verfuegbar", a.fehler);
         else schritt("sec", "Quartalszahlen (SEC)", fundamental._widerspruch ? "warnung" : "ok", `${a.firma || symbol}, Quartal bis ${fundamental.period_end}: Umsatz ggü. Vorjahr ${fundamental.revenue_growth_yoy ?? "–"} %, Betriebsmarge ${fundamental.operating_margin ?? "–"} %, EPS (4 Quartale) ${fundamental.eps_ttm ?? "nicht verfügbar"}` + (fundamental._hinweise.length ? " · " + fundamental._hinweise.join(" ") : "") + " · Quelle SEC EDGAR (companyfacts).", fundamental);
@@ -124,9 +132,24 @@
     }
 
     // 6b. Meldungen zum Symbol (trader-copycat: 13F, Form 4; trader-pelosi: Kongress) – nur Beobachtung, nie Empfehlung oder Order
+    let secSubmissions = null;
     if (provider && typeof provider.meldungen === "function") {
       try {
         const bundle = await mitZeitlimit(Promise.resolve().then(() => provider.meldungen(symbol)), optionen.zeitlimitMs, "Meldungen");
+        // ab AJ5: neuerer eingereichter 10-Q/10-K/20-F/40-F als die SEC-Zahlen (Regel wie facts.py:281-291, AktienSec.nachlaufHinweis)
+        // → SEC-Schritt als veraltet kennzeichnen. Nur mit den schon geladenen submissions, keine zusätzliche Anfrage.
+        const sub = bundle && bundle.form4 && bundle.form4.submissions;
+        secSubmissions = sub || null;
+        if (sub && fundamental && secAnalyse && !secAnalyse.fehler) {
+          const mb = S.meldungen(sub), nl = S.nachlaufHinweis(secAnalyse, mb);
+          const s6 = schritte.find((x) => x.id === "sec");
+          if (nl && s6) {
+            const text = `SEC-Zahlen enden am ${secAnalyse.zeilen[0].ende} – veraltet: eine neuere ${mb.bericht.form} für den Zeitraum bis ${mb.bericht.zeitraum} wurde am ${mb.bericht.eingereicht} eingereicht; bitte direkt lesen: ${mb.bericht.link}`;
+            fundamental._hinweise.push(text);
+            s6.status = "warnung";
+            s6.text += " · " + text;
+          }
+        }
         const m = meldungenAuswerten(symbol, bundle, jetzt);
         schritt("meldungen", "Meldungen (13F, Form 4, Kongress)", m.eintraege.length ? (m.eintraege.some((e) => e.verspaetet || e.unsicherheit.length) ? "warnung" : "ok") : "nicht_verfuegbar",
           (m.eintraege.length ? m.eintraege.map((e) => e.text).join("\n") : "Keine Meldungen zu " + symbol + " in den geladenen Daten.") + (m.nicht_verfuegbar.length ? "\nNicht verfügbar: " + m.nicht_verfuegbar.join(" · ") : "") + "\n" + MELDUNGEN_HINWEIS, m);
@@ -135,6 +158,31 @@
       }
     } else {
       schritt("meldungen", "Meldungen (13F, Form 4, Kongress)", "nicht_verfuegbar", `Die Datenquelle „${quelle.name}“ liefert keine Meldungen. 13F-Tracker und Kongress-Tracker stehen als eigene Werkzeuge bereit.`);
+    }
+
+    // 6c. Unternehmensbeschreibung (ab Folgeauftrag nach 14q): wörtlicher Auszug aus dem neuesten 10-K/20-F bei der SEC – nur mit
+    // den schon geladenen submissions und einem Abruf des Berichtsdokuments über den Worker (provider.secDokument). Ohne Quelle:
+    // „nicht verfügbar“ mit Grund; nie etwas aus Ticker, Namen oder Kursen abgeleitet. Gehört nicht zur Einschätzung (keine Regel).
+    // Datenquelle ohne SEC-Berichte (z. B. lokale Testdaten): kein Schritt – die Analysekarte nennt den Grund selbst (Schrittliste unverändert)
+    const SB = global.AktienSecBeschreibung;
+    if (!provider || typeof provider.secDokument !== "function") { /* keine SEC-Berichte in dieser Datenquelle */ }
+    else if (!SB) schritt("beschreibung", "Unternehmensbeschreibung (SEC)", "nicht_verfuegbar", "Modul für Unternehmensbeschreibungen nicht geladen.");
+    else if (!secSubmissions) schritt("beschreibung", "Unternehmensbeschreibung (SEC)", "nicht_verfuegbar", "Keine SEC-Meldungsliste geladen (SEC nicht eingerichtet, Symbol nicht in der SEC-Tickerliste oder Abruf gescheitert) – keine Unternehmensbeschreibung.", { ok: false, grund: "keine SEC-Meldungsliste" });
+    else {
+      const b = SB.berichtWaehlen(secSubmissions, { jetzt });
+      if (b.fehler) schritt("beschreibung", "Unternehmensbeschreibung (SEC)", "nicht_verfuegbar", b.fehler, { ok: false, grund: b.fehler });
+      else {
+        try {
+          const antwort = await mitZeitlimit(Promise.resolve().then(() => provider.secDokument(b)), optionen.zeitlimitMs, "SEC-Bericht");
+          // ab 14t: Antwort als Text (ältere Provider) oder { html, abgerufen, cache } – Abrufzeit nur aus dem Worker, nie geraten
+          const html = typeof antwort === "string" ? antwort : antwort && antwort.html;
+          const e = { ...SB.ergebnisBauen(b, SB.beschreibungLesen(html, { form: b.form }), symbol), abgerufen: antwort && typeof antwort === "object" ? antwort.abgerufen || null : null, aus_cache: Boolean(antwort && antwort.cache) };
+          if (e.ok) schritt("beschreibung", "Unternehmensbeschreibung (SEC)", e.veraltet ? "warnung" : "ok", `${e.form}, eingereicht ${e.eingereicht}${e.zeitraum ? ", Geschäftsjahr bis " + e.zeitraum : ""}${e.veraltet ? " – VERALTET (" + e.alter_tage + " Tage)" : ""} · Auszug aus „${e.abschnitt}“ (wörtlich, englisch${e.gekuerzt ? ", gekürzt" : ""}).`, e);
+          else schritt("beschreibung", "Unternehmensbeschreibung (SEC)", "nicht_verfuegbar", `${b.form} vom ${b.eingereicht}: ${e.grund}`, { ...e, bericht: { form: b.form, eingereicht: b.eingereicht, link: b.link } });
+        } catch (e) {
+          schritt("beschreibung", "Unternehmensbeschreibung (SEC)", "nicht_verfuegbar", `${b.form} vom ${b.eingereicht} nicht ladbar: ` + (e && e.message ? String(e.message).slice(0, 160) : "unbekannt"), { ok: false, grund: "Bericht nicht ladbar" });
+        }
+      }
     }
 
     // 7. Screener-Regeln – trader-screener
@@ -160,7 +208,57 @@
     // Abschluss: Order nur über Worker-Risiko-Prüfung und Freigabe – in diesem Ablauf nie
     blockade("Order", "Dieser Ablauf sendet nie eine Order.", "Für eine Paper-Order: Risiko-Prüfung im Worker (trader-risk) und Freigabe genau dieser Order (trader-broker) – Not-Aus und alle Grenzen gelten.");
     // ab 11-02q-r: Zahl der tatsächlich verwendeten Kerzen und ob die letzte noch läuft (für Anzeige und lokale Einordnung)
-    return ergebnis({ symbol, quelle, datenzeit, frisch: k.frisch, kurs, simulation, einstieg: ein.urteil || null, kerzen_anzahl: kerzen.length, letzte_laufend: letzteLaufend });
+    // ab 11-06e: Widersprüche zwischen den Bausteinen benennen (nur Einordnung; ändert keinen Schritt und keine Blockade)
+    return ergebnis({ symbol, quelle, datenzeit, frisch: k.frisch, kurs, simulation, einstieg: ein.urteil || null, kerzen_anzahl: kerzen.length, letzte_laufend: letzteLaufend, widersprueche: widerspruecheFinden(schritte), chancen_risiken: chancenRisiken(schritte) });
+  }
+
+  // Chancen und Risiken (ab 11-06i): was in den ausgewerteten Daten dafür bzw. dagegen spricht – je Punkt mit Quelle. Beschreibt
+  // vergangene Daten; keine Prognose, kein Renditeversprechen, keine Empfehlung. Fehlende Bausteine werden als „nicht bewertet“ genannt.
+  function chancenRisiken(schritte) {
+    const s = (id) => (schritte || []).find((x) => x.id === id);
+    const dafuer = [], dagegen = [], offen = [];
+    const tech = s("technik");
+    for (const sig of (tech && tech.details && tech.details.signale) || []) (sig.punkte > 0 ? dafuer : sig.punkte < 0 ? dagegen : offen).push({ text: sig.text, quelle: "Chart-Scanner" });
+    const ein = s("einstieg");
+    if (ein && ein.details && ein.details.urteil) {
+      if (ein.details.urteil === "jetzt") dafuer.push({ text: "Einstiegsregeln erfüllt (mit aktuellem Kurs)", quelle: "Entry-Timer" });
+      else if (ein.details.urteil === "nicht") dagegen.push({ text: "Einstiegsregeln nicht erfüllt: " + (ein.details.gruende[0] || ""), quelle: "Entry-Timer" });
+      else offen.push({ text: "Entry-Timer: warten – " + (ein.details.gruende[0] || ""), quelle: "Entry-Timer" });
+    }
+    for (const id of ["screener-technisch", "screener-fundamental"]) {
+      const sc = s(id);
+      if (!sc || !sc.details) continue;
+      const name = id === "screener-technisch" ? "Screener technisch" : "Screener fundamental";
+      for (const t of sc.details.bestanden || []) dafuer.push({ text: t, quelle: name });
+      for (const t of sc.details.durchgefallen || []) (t.includes("nicht verfügbar") ? offen : dagegen).push({ text: t, quelle: name });
+    }
+    const aus = s("ausstieg");
+    if (aus && aus.details && Number.isFinite(aus.details.abstandStopPct)) offen.push({ text: `Risiko bis zum Stop laut Exit-Planer: ${aus.details.abstandStopPct} % unter dem letzten Kurs`, quelle: "Exit-Planer" });
+    if (!s("screener-fundamental")) offen.push({ text: "Fundamentaldaten nicht bewertet (keine SEC-Zahlen in dieser Analyse)", quelle: "SEC" });
+    return { dafuer, dagegen, offen, hinweis: "Einordnung vergangener Daten – keine Prognose, kein Renditeversprechen, keine Empfehlung." };
+  }
+
+  // Widersprüchliche Signale (ab 11-06e). Eingabe: Schritte von analysieren. Ergebnis: [{ art, text, quellen }] – jede Zeile nennt,
+  // welche Bausteine sich widersprechen. Grenzen (Punkte ≥ 2 bzw. ≤ −2) wie die Trendsignale des Scanners. Keine Empfehlung.
+  function widerspruecheFinden(schritte) {
+    const s = (id) => (schritte || []).find((x) => x.id === id);
+    const tech = s("technik"), ein = s("einstieg"), st = s("screener-technisch"), sf = s("screener-fundamental");
+    const punkte = tech && tech.details && Array.isArray(tech.details.signale) ? tech.details.signale.reduce((a, x) => a + x.punkte, 0) : null;
+    const signale = tech && tech.details && Array.isArray(tech.details.signale) ? tech.details.signale : [];
+    const urteil = ein && ein.details ? ein.details.urteil : null;
+    const techOk = st && st.details ? st.details.bestanden_alle === true : null;
+    const fundOk = sf && sf.details ? sf.details.bestanden_alle === true : null;
+    const w = [];
+    const plus = (art, text, quellen) => w.push({ art, text, quellen });
+    if (punkte !== null && punkte >= 2 && urteil === "nicht") plus("scanner-timer", `Chart-Scanner positiv (${punkte} Punkte), Entry-Timer: Regeln für einen Einstieg nicht erfüllt.`, ["Chart-Scanner", "Entry-Timer"]);
+    if (punkte !== null && punkte <= -2 && urteil === "jetzt") plus("scanner-timer", `Chart-Scanner negativ (${punkte} Punkte), Entry-Timer sieht den Einstieg im Rahmen.`, ["Chart-Scanner", "Entry-Timer"]);
+    if (punkte !== null && punkte <= -2 && techOk === true) plus("scanner-screener", `Chart-Scanner negativ (${punkte} Punkte), technische Screener-Vorlage aber erfüllt.`, ["Chart-Scanner", "Screener technisch"]);
+    if (punkte !== null && punkte >= 2 && techOk === false) plus("scanner-screener", `Chart-Scanner positiv (${punkte} Punkte), technische Screener-Vorlage nicht erfüllt.`, ["Chart-Scanner", "Screener technisch"]);
+    if (fundOk === true && ((punkte !== null && punkte <= -2) || techOk === false)) plus("fundamental-technik", "Fundamentaldaten erfüllen die Vorlage, die Kursentwicklung (Technik) nicht.", ["Screener fundamental", punkte !== null && punkte <= -2 ? "Chart-Scanner" : "Screener technisch"]);
+    if (fundOk === false && ((punkte !== null && punkte >= 2) || techOk === true)) plus("fundamental-technik", "Technik positiv, Fundamentaldaten erfüllen die Vorlage nicht.", ["Screener fundamental", punkte !== null && punkte >= 2 ? "Chart-Scanner" : "Screener technisch"]);
+    const pos = signale.filter((x) => x.punkte > 0), neg = signale.filter((x) => x.punkte < 0);
+    if (pos.length && neg.length) plus("gemischt", `Gemischte Scanner-Signale: ${pos.map((x) => x.text).join("; ")} – dagegen: ${neg.map((x) => x.text).join("; ")}.`, ["Chart-Scanner"]);
+    return w;
   }
 
   // ---------- Meldungen zu einem Symbol (ab 2026-11-01c) ----------
@@ -248,5 +346,5 @@
     };
   }
 
-  global.AktienWorkflow = { analysieren, symbolPruefen, testProvider, meldungenAuswerten, US_TICKER, HINWEIS, MELDUNGEN_HINWEIS };
+  global.AktienWorkflow = { analysieren, widerspruecheFinden, chancenRisiken, symbolPruefen, testProvider, meldungenAuswerten, US_TICKER, HINWEIS, MELDUNGEN_HINWEIS };
 })(typeof window !== "undefined" ? window : globalThis);

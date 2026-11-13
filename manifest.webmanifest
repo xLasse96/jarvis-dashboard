@@ -3,12 +3,17 @@
   "short_name": "JARVIS",
   "description": "Persönlicher KI-Assistent mit Marktanalyse und Paper-Trading (Spielgeld).",
   "lang": "de",
+  "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#020912",
   "theme_color": "#020912",
+  "shortcuts": [
+    { "name": "Analyse", "url": "./#analyse", "icons": [{ "src": "icons/jarvis-192.png", "sizes": "192x192", "type": "image/png" }] },
+    { "name": "Trading (Simulation)", "url": "./#trading", "icons": [{ "src": "icons/jarvis-192.png", "sizes": "192x192", "type": "image/png" }] }
+  ],
   "icons": [
     { "src": "icons/jarvis-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "icons/jarvis-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }

@@ -10,7 +10,8 @@
 //   Gebühr und Slippage kommen nur aus den Annahmen des Laufs; fehlen sie, sind sie 0 und als „Testannahme“ gekennzeichnet.
 // Risiko je Order (alle Grenzen Pflicht, sonst wird jeder Kauf blockiert): Not-Aus, Orderwert, offene Positionen, Tagesverlust
 //   (UTC-Tag, Wert zu Tagesbeginn − aktueller Wert), Häufigkeit (gleitendes Fenster über simulierte Ausführungszeiten).
-// Ledger: jede Buchung mit eindeutiger, aus Datensatz/Symbol/Zeit/Seite abgeleiteter trade_id – erneutes Abspielen bucht nichts doppelt.
+// Ledger: jede Buchung mit eindeutiger, aus Datensatz/Symbol/Zeit/Seite abgeleiteter trade_id – erneutes Abspielen bucht nichts doppelt;
+//   derselbe Vorschlag (Datensatz, Symbol, Seite, Signalzeit) wird auch bei späterer zweiter Bestätigung nur einmal gebucht (ab 14p).
 // Braucht aktien/technik.js (AktienTechnik.ema) und daten/datenquellen.js (JarvisDaten.kerzenPruefen/ausreisserPruefen).
 (function (global) {
   "use strict";
@@ -24,6 +25,7 @@
   const US_TICKER = /^[A-Z]{1,5}(\.[A-Z]{1,2})?$/;
   const TAG = 86400000;
   const r2 = (x) => Math.round(x * 100) / 100;
+  const geld = (x) => x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const r6 = (x) => Math.round(x * 1e6) / 1e6;
 
   function portfolioNeu({ startkapital, waehrung = "USD" } = {}) {
@@ -79,7 +81,10 @@
       const volumen = order.wert;
       if (!(volumen > 0)) gruende.push("Orderwert ungültig");
       if (volumen > limits.maxOrderWert) gruende.push(`Orderwert ${r2(volumen)} über Höchstwert ${limits.maxOrderWert}`);
-      if (volumen > p.bargeld) gruende.push("nicht genug Spielgeld");
+      // ab 11-05g (Nutzerentscheidung zu docs/ENTSCHEIDUNGEN_OFFEN.md, Nachtrag 31 b): Orderwert PLUS Gebühr muss ins Spielgeld passen –
+      // vorher nur der Orderwert, die Gebühr konnte das Bargeld ins Minus bringen. Gebühr aus den Annahmen des Laufs (kontext.annahmen).
+      const gebuehr = kontext.annahmen && kontext.annahmen.gebuehrPct > 0 ? r2(volumen * kontext.annahmen.gebuehrPct / 100) : 0;
+      if (r2(volumen + gebuehr) > p.bargeld) gruende.push(gebuehr ? `nicht genug Spielgeld: Orderwert ${geld(volumen)} + Gebühr ${geld(gebuehr)} = ${geld(r2(volumen + gebuehr))} USD, verfügbar ${geld(p.bargeld)} USD` : "nicht genug Spielgeld");
       const offen = Object.keys(p.positionen).length + (p.positionen[order.symbol] ? 0 : 1);
       if (offen > limits.maxPositionen) gruende.push(`höchstens ${limits.maxPositionen} offene Positionen`);
       const tag = new Date(kontext.jetzt).toISOString().slice(0, 10);
@@ -93,25 +98,49 @@
   // Fill nur aus der übergebenen Kerze (aufgezeichnete/explizite Testdaten). unklar: true → Zustand „unklar“ (z. B. Testfall)
   function fillSimulieren(order, kerze, annahmen, { unklar = false } = {}) {
     if (unklar) return { zustand: "unklar" };
-    if (!kerze || !(kerze.o > 0)) return { zustand: "abgelehnt", grund: "keine Ausführungskerze in den Testdaten" };
+    if (!kerze || !(kerze.o > 0) || !Number.isFinite(kerze.o)) return { zustand: "abgelehnt", grund: "keine Ausführungskerze in den Testdaten" };
     const preis = order.seite === "kauf" ? kerze.o * (1 + annahmen.slippagePct / 100) : kerze.o * (1 - annahmen.slippagePct / 100);
     return { zustand: "gefuellt", preis: r6(preis), zeit: kerze.t };
+  }
+
+  // Noch nicht verrechnete Kaufgebühren einer Position (ab 11-05h). Stände vor 11-05h speichern sie nicht: dann aus dem Ledger – die
+  // Kaufgebühren dieses Symbols seit dessen letztem Verkauf (bis 11-05h wurde stets die ganze Position verkauft); ohne Position 0
+  function kaufgebuehrenOffen(p, symbol) {
+    const pos = p.positionen[symbol];
+    if (!pos) return 0;
+    if (Number.isFinite(pos.kaufgebuehren)) return pos.kaufgebuehren;
+    let summe = 0;
+    for (const e of p.ledger) if (e.symbol === symbol && e.zustand === "gefuellt") summe = e.seite === "verkauf" ? 0 : summe + (e.gebuehr || 0);
+    return r2(summe);
   }
 
   // Bucht einen Ledger-Eintrag genau einmal (trade_id). Rückgabe: true = gebucht, false = schon vorhanden (nichts geändert)
   function buchen(p, eintrag) {
     if (p.ledger.some((e) => e.trade_id === eintrag.trade_id)) return false;
     if (eintrag.zustand === "gefuellt") {
+      // ab 11-06b: nie eine Ausführung mit Menge 0 oder ungültigem Preis und nie einen Verkauf über dem Bestand buchen
+      // (vorher Einstand NaN bzw. Gutschrift für nicht gehaltene Stücke)
+      if (!(eintrag.menge > 0) || !(eintrag.preis > 0) || !Number.isFinite(eintrag.preis)) throw new Error("Ungültige Ausführung: Menge und Preis müssen größer als 0 sein.");
+      const bestand = p.positionen[eintrag.symbol];
+      if (eintrag.seite === "verkauf" && (!bestand || eintrag.menge > bestand.menge + 1e-9)) throw new Error("Verkauf über dem simulierten Bestand.");
       if (eintrag.seite === "kauf") {
         const pos = p.positionen[eintrag.symbol] || { menge: 0, einstand: 0 };
         const menge = pos.menge + eintrag.menge;
-        p.positionen[eintrag.symbol] = { menge: r6(menge), einstand: r6((pos.menge * pos.einstand + eintrag.menge * eintrag.preis) / menge) };
+        p.positionen[eintrag.symbol] = { menge: r6(menge), einstand: r6((pos.menge * pos.einstand + eintrag.menge * eintrag.preis) / menge), kaufgebuehren: r2(kaufgebuehrenOffen(p, eintrag.symbol) + eintrag.gebuehr) };
         p.bargeld = r2(p.bargeld - eintrag.volumen - eintrag.gebuehr);
       } else {
+        // ab 11-05h (Nutzerentscheidung zu docs/ENTSCHEIDUNGEN_OFFEN.md, Nachtrag 31 a): realisiertes Ergebnis nach Kauf- UND
+        // Verkaufsgebühren wie die Historische Simulation (vorher nur die Verkaufsgebühr). Die Kaufgebühren werden nach Stückzahl
+        // anteilig verrechnet; der Rest bleibt mit unverändertem Einstand bei der Position, der letzte Verkauf nimmt den ganzen Rest.
         const pos = p.positionen[eintrag.symbol];
-        eintrag.ergebnis = r2((eintrag.preis - pos.einstand) * eintrag.menge - eintrag.gebuehr);
+        const offen = kaufgebuehrenOffen(p, eintrag.symbol);
+        const alles = eintrag.menge >= pos.menge - 1e-9;
+        const anteil = alles ? offen : r2(offen * eintrag.menge / pos.menge);
+        eintrag.kaufgebuehr_anteil = anteil;
+        eintrag.ergebnis = r2((eintrag.preis - pos.einstand) * eintrag.menge - eintrag.gebuehr - anteil);
         p.bargeld = r2(p.bargeld + eintrag.volumen - eintrag.gebuehr);
-        delete p.positionen[eintrag.symbol];
+        if (alles) delete p.positionen[eintrag.symbol];
+        else p.positionen[eintrag.symbol] = { menge: r6(pos.menge - eintrag.menge), einstand: pos.einstand, kaufgebuehren: r2(offen - anteil) };
       }
       p.ausfuehrungen.push(eintrag.zeit);
     }
@@ -124,16 +153,37 @@
     const zeit = kerze ? kerze.t : signalZeit;
     const id = tradeId(datensatz, symbol, zeit, seite);
     if (p.ledger.some((e) => e.trade_id === id)) return { doppelt: true, trade_id: id };
-    let order = { trade_id: id, symbol, seite, wert: seite === "kauf" ? wertKauf : null, zustand: "erstellt", verlauf: [] };
+    // ab 14p (Freigabe des Nutzers vom 12.11.): derselbe Vorschlag – gleiche Kennung aus Datensatz (Sitzung), Symbol, Seite und
+    // Signal- bzw. Erstellzeit – wird höchstens einmal gebucht, auch wenn er später noch einmal bestätigt wird (andere Ausführungszeit,
+    // damit andere trade_id). Abgelehnte und verworfene Versuche sperren nicht; ein neu erstellter Vorschlag hat eine eigene Erstellzeit.
+    const schon = Number.isFinite(signalZeit) ? p.ledger.find((e) => (e.zustand === "gefuellt" || e.zustand === "unklar") && e.datensatz === datensatz && e.symbol === symbol && e.seite === seite && e.signal_zeit === signalZeit) : null;
+    if (schon) return { doppelt: true, trade_id: schon.trade_id };
+    let order ={ trade_id: id, symbol, seite, wert: seite === "kauf" ? wertKauf : null, zustand: "erstellt", verlauf: [] };
     if (kerze) {
       const tag = new Date(kerze.t).toISOString().slice(0, 10);
       if (!p.tagesstart || p.tagesstart.datum !== tag) p.tagesstart = { datum: tag, wert: wert(p, kurse) };
     }
-    const risiko = risikoPruefen(p, order, limits, { jetzt: zeit, kurse });
+    const risiko = risikoPruefen(p, order, limits, { jetzt: zeit, kurse, annahmen });
     order = uebergang(order, risiko.bestanden ? "geprueft" : "abgelehnt");
     const basis = { trade_id: id, datensatz, symbol, seite, wert: order.wert, signal_zeit: signalZeit, zeit, simuliert: true, annahmen, risiko };
     if (!risiko.bestanden) { buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0 }); return { order, risiko }; }
     const fill = fillSimulieren(order, kerze, annahmen, { unklar });
+    // ab 11-05g: mit dem tatsächlichen Ausführungspreis nachrechnen – durch die Mengenrundung kann das Volumen um einen Cent über dem
+    // Orderwert liegen; auch dann keine Ausführung, die das Spielgeld ins Minus bringt
+    if (fill.zustand === "gefuellt" && seite === "kauf") {
+      // ab 11-06b: Menge nach Rundung 0 (winziger Orderwert, sehr hoher Kurs) → abgelehnt statt „gefuellt“ mit Einstand NaN
+      if (!(r6(wertKauf / fill.preis) > 0)) {
+        order = uebergang(order, "abgelehnt");
+        buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0, grund: "Stückzahl 0: Orderwert zu klein für den Ausführungspreis" });
+        return { order, risiko };
+      }
+      const v = r2(r6(wertKauf / fill.preis) * fill.preis);
+      if (r2(v + r2(v * annahmen.gebuehrPct / 100)) > p.bargeld) {
+        order = uebergang(order, "abgelehnt");
+        buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0, grund: "nicht genug Spielgeld für Orderwert plus Gebühr" });
+        return { order, risiko };
+      }
+    }
     order = uebergang(order, fill.zustand);
     if (fill.zustand !== "gefuellt") { buchen(p, { ...basis, zustand: order.zustand, verlauf: order.verlauf, menge: 0, preis: null, volumen: 0, gebuehr: 0, grund: fill.grund || "Ausführung unklar" }); return { order, risiko }; }
     const menge = seite === "kauf" ? r6(wertKauf / fill.preis) : p.positionen[symbol].menge;
@@ -150,11 +200,17 @@
     if (!gefunden) { e.zustand = o.zustand; e.verlauf = o.verlauf; return e; }
     const fill = fillSimulieren({ seite: e.seite }, kerze, e.annahmen);
     if (fill.zustand !== "gefuellt") throw new Error("Für „gefunden“ ist eine Ausführungskerze nötig.");
-    const i = p.ledger.indexOf(e);
-    p.ledger.splice(i, 1);
+    // ab 11-06b: alle Prüfungen vor dem Herausnehmen aus dem Ledger (vorher ging der unklare Eintrag bei einem Fehler verloren);
+    // ein Kauf wird nur geklärt, wenn Orderwert plus Gebühr ins Spielgeld passen (vorher konnte das Bargeld negativ werden)
     if (e.seite === "verkauf" && !p.positionen[e.symbol]) throw new Error("Keine simulierte Position mehr für diesen Verkauf.");
     const menge = e.seite === "kauf" ? r6(e.wert / fill.preis) : p.positionen[e.symbol].menge;
-    buchen(p, { ...e, zustand: "gefuellt", verlauf: o.verlauf, preis: fill.preis, menge, volumen: r2(menge * fill.preis), gebuehr: r2(menge * fill.preis * e.annahmen.gebuehrPct / 100) });
+    if (!(menge > 0)) throw new Error("Stückzahl 0: Orderwert zu klein für den Ausführungspreis – Order bleibt unklar.");
+    const volumen = r2(menge * fill.preis), gebuehr = r2(menge * fill.preis * e.annahmen.gebuehrPct / 100);
+    if (e.seite === "kauf" && r2(volumen + gebuehr) > p.bargeld) throw new Error("Nicht genug Spielgeld für Orderwert plus Gebühr – Order bleibt unklar.");
+    const i = p.ledger.indexOf(e);
+    p.ledger.splice(i, 1);
+    try { buchen(p, { ...e, zustand: "gefuellt", verlauf: o.verlauf, preis: fill.preis, menge, volumen, gebuehr }); }
+    catch (fehler) { p.ledger.splice(i, 0, e); throw fehler; }
     return p.ledger.find((x) => x.trade_id === tradeIdWert);
   }
 

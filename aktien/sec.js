@@ -91,14 +91,17 @@
     return bester ? werte[bester[1]] : null;
   }
 
-  // Python round(): halbe Werte zur geraden Ziffer – für gleiche Ergebnisse wie das Vorbild; vorher gegen Fließkomma-Rauschen glätten
+  // Python round(x, stellen) wie im Original (5189e79): korrekt gerundeter Dezimalwert des exakten Binärwerts, nur echte Gleichstände
+  // (exakt …5) zur geraden Ziffer. ab AJ4: vorher wurde erst auf 1e-6 geglättet – 9,9499… (Binärwert von 9,95) ergab 10,0 statt 9,9,
+  // 35,0500…04 ergab 35,0 statt 35,1 (Screener-Schwellen). toFixed rechnet mit dem exakten Wert; nur den echten Gleichstand selbst entscheiden.
   function runden(x, stellen) {
-    const f = 10 ** stellen;
-    const y = Math.round(x * f * 1e6) / 1e6;
-    const unten = Math.floor(y);
-    const rest = y - unten;
-    const gerundet = Math.abs(rest - 0.5) < 1e-9 ? (unten % 2 === 0 ? unten : unten + 1) : Math.round(y);
-    return gerundet / f;
+    if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
+    const genau = Math.abs(x).toFixed(100), punkt = genau.indexOf(".");
+    if (!/^50*$/.test(genau.slice(punkt + 1 + stellen))) return Number(x.toFixed(stellen));
+    let z = BigInt(genau.slice(0, punkt) + genau.slice(punkt + 1, punkt + 1 + stellen));
+    if (z % 2n === 1n) z += 1n;
+    const t = z.toString().padStart(stellen + 1, "0");
+    return (x < 0 ? -1 : 1) * Number(stellen ? t.slice(0, t.length - stellen) + "." + t.slice(-stellen) : t);
   }
   const prozent = (a, b) => (a === null || a === undefined || !b ? null : runden((100 * (a - b)) / Math.abs(b), 1));
   const marge = (teil, ganz) => (teil === null || teil === undefined || !ganz ? null : runden((100 * teil) / ganz, 1));
@@ -131,7 +134,33 @@
       if (letzte4.length === 4 && (datum(letzte4[3]) - datum(letzte4[0])) / TAG < 300) ttm[k] = letzte4.reduce((x, e) => x + s[k][e].wert, 0);
     }
     if ("eps" in ttm) ttm.eps = runden(ttm.eps, 2);
-    return { firma: companyfacts.entityName || null, cik: String(companyfacts.cik || "").padStart(10, "0"), zeilen, ttm, konzepte };
+    return { firma: companyfacts.entityName || null, cik: String(companyfacts.cik || "").padStart(10, "0"), zeilen, ttm, konzepte, bilanz: bilanz(companyfacts) };
+  }
+
+  // ---------- Bilanz-Stichtagswerte (ab 11-06i) ----------
+  // Eigenkapital (us-gaap StockholdersEquity, sonst …IncludingPortionAttributableToNoncontrollingInterest) und gemeldete Aktienzahl
+  // (dei EntityCommonStockSharesOutstanding). Stichtagswerte haben kein „start“. Nur aus 10-Q/10-K/20-F/40-F; jüngster Stichtag,
+  // bei gleichem Stichtag die spätere Meldung (Korrektur). Fehlt ein Wert → null (nie geschätzt). Ergebnis je Wert:
+  // { wert, stichtag, form, eingereicht, konzept }.
+  const BILANZ = {
+    eigenkapital: { ns: "us-gaap", konzepte: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"], einheit: "USD" },
+    aktien: { ns: "dei", konzepte: ["EntityCommonStockSharesOutstanding"], einheit: "shares" },
+  };
+  function stichtagWert(companyfacts, { ns, konzepte, einheit }) {
+    for (const konzept of konzepte) {
+      const knoten = companyfacts && companyfacts.facts && companyfacts.facts[ns] && companyfacts.facts[ns][konzept];
+      const liste = knoten && knoten.units ? knoten.units[einheit] || [] : [];
+      let best = null;
+      for (const f of liste) {
+        if (f.start || !f.end || !Number.isFinite(f.val) || !BERICHTE.includes(String(f.form || "").split("/")[0])) continue;
+        if (!best || f.end > best.end || (f.end === best.end && (f.filed || "") > (best.filed || ""))) best = f;
+      }
+      if (best) return { wert: best.val, stichtag: best.end, form: best.form, eingereicht: best.filed || null, konzept: ns + ":" + konzept };
+    }
+    return null;
+  }
+  function bilanz(companyfacts) {
+    return { eigenkapital: stichtagWert(companyfacts, BILANZ.eigenkapital), aktien: stichtagWert(companyfacts, BILANZ.aktien) };
   }
 
   // Neueste 10-Q/10-K und neueste 8-K mit Punkt 2.02 (Quartalszahlen) aus den submissions
@@ -176,7 +205,12 @@
     if (!z.length) return [];
     const a = z[0], v = z[1];
     const aus = [`Quartal bis ${a.ende}${a.abgeleitet ? " (aus dem 10-K abgeleitet)" : ""}: Umsatz ${mrd(a.umsatz)}${pz(a.umsatz_vj)}, Nettogewinn ${mrd(a.nettogewinn)}${pz(a.nettogewinn_vj)}${a.eps === null ? "" : `, verwässertes EPS ${a.eps.toFixed(2)} USD${pz(a.eps_vj)}`}.`];
-    if (a.bruttomarge !== null) aus.push(`Bruttomarge ${a.bruttomarge.toFixed(1)} %${v && v.bruttomarge !== null ? ` (${a.bruttomarge - v.bruttomarge >= 0 ? "+" : ""}${(a.bruttomarge - v.bruttomarge).toFixed(1)} Punkte zum Vorquartal)` : ""}.`);
+    // ab AJ5: alle drei Margen wie facts.py:318-325 (vorher nur die Bruttomarge); fehlende Marge → keine Zeile, nie 0 %
+    for (const [feld, name] of [["bruttomarge", "Bruttomarge"], ["betriebsmarge", "Betriebsmarge"], ["nettomarge", "Nettomarge"]]) {
+      if (a[feld] === null || a[feld] === undefined) continue;
+      const d = v && v[feld] !== null && v[feld] !== undefined ? runden(a[feld] - v[feld], 1) : null;
+      aus.push(`${name} ${a[feld].toFixed(1)} %${d === null ? "" : ` (${d >= 0 ? "+" : ""}${d.toFixed(1)} Punkte zum Vorquartal)`}.`);
+    }
     if (a.nettogewinn !== null && a.betriebsergebnis !== null && a.nettogewinn > a.betriebsergebnis) aus.push("Nettogewinn liegt über dem Betriebsergebnis – Sondereffekte außerhalb des Geschäfts (z. B. Beteiligungen, Steuern) sind enthalten.");
     if (v && a.umsatz !== null && v.umsatz) aus.push(`Umsatz ${prozent(a.umsatz, v.umsatz) > 0 ? "+" : ""}${prozent(a.umsatz, v.umsatz).toFixed(1)} % zum Vorquartal (viele Geschäfte sind saisonal – zuerst mit dem Vorjahr vergleichen).`);
     if (z.some((x) => x.abgeleitet)) aus.push("Abgeleitete Quartale = Geschäftsjahr minus drei 10-Q; abgeleitetes EPS ist nur ungefähr.");
@@ -206,5 +240,35 @@
     return { cik: ciks[0], name: treffer(alias)[0].title, sec_ticker: alias };
   }
 
-  global.AktienSec = { analysieren, meldungen, nachlaufHinweis, naechsteZahlenSchaetzung, aenderungen, cikFuer, secAlias, quartale, KONZEPTE };
+  // Sektor aus dem SIC-Code der SEC-Stammdaten (submissions: sic) – ab 11-06e. Grobe Einteilung nach den Divisionen der Standard
+  // Industrial Classification (Wertebereiche der ersten zwei Ziffern), mit eigenem Bereich für Software/Datenverarbeitung (737x)
+  // und Halbleiter/Elektronik (36xx). Ohne gültigen Code → null (Sektor unbekannt, nie geraten).
+  function sektorAusSic(sic) {
+    const s = String(sic === undefined || sic === null ? "" : sic).trim();
+    if (!/^\d{3,4}$/.test(s)) return null;
+    const n = Number(s.padStart(4, "0")), d = Math.floor(n / 100);
+    if (n >= 7370 && n <= 7379) return "Technologie (Software/IT-Dienste)";
+    if (d === 35 && n >= 3570 && n <= 3579) return "Technologie (Computer/Hardware)";
+    if (d === 36) return "Technologie (Elektronik/Halbleiter)";
+    if (d === 28 && n >= 2830 && n <= 2836) return "Gesundheit (Pharma/Biotech)";
+    if (d === 38 && n >= 3840 && n <= 3851) return "Gesundheit (Medizintechnik)";
+    if (d === 80) return "Gesundheit (Dienste)";
+    if (d === 13 || d === 29) return "Energie (Öl/Gas)";
+    if (d === 49) return "Versorger";
+    if (d === 48) return "Kommunikation";
+    if (d >= 60 && d <= 64) return "Finanzen";
+    if (d >= 65 && d <= 67) return "Immobilien/Beteiligungen";
+    if (d >= 52 && d <= 59) return "Einzelhandel";
+    if (d >= 50 && d <= 51) return "Großhandel";
+    if (d >= 40 && d <= 47) return "Transport";
+    if (d >= 20 && d <= 39) return "Industrie/Herstellung";
+    if (d >= 10 && d <= 14) return "Rohstoffe/Bergbau";
+    if (d >= 15 && d <= 17) return "Bau";
+    if (d >= 1 && d <= 9) return "Landwirtschaft";
+    if (d >= 70 && d <= 89) return "Dienstleistungen";
+    if (d >= 91 && d <= 99) return "Öffentlich/sonstiges";
+    return null;
+  }
+
+  global.AktienSec = { sektorAusSic, bilanz, analysieren, meldungen, nachlaufHinweis, naechsteZahlenSchaetzung, aenderungen, cikFuer, secAlias, quartale, KONZEPTE, runden };
 })(typeof window !== "undefined" ? window : globalThis);

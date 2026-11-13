@@ -56,14 +56,18 @@
 
   const cik10 = (x) => String(x || "").replace(/\D/g, "").padStart(10, "0").slice(-10);
   const tage = (von, bis) => Math.round((Date.parse(bis + "T00:00:00Z") - Date.parse(von + "T00:00:00Z")) / TAG);
-  // Python round(): halbe Werte zur geraden Ziffer (für gleiche Ergebnisse wie das Vorbild)
+  // Python round(x, stellen) wie im Original (5189e79): korrekt gerundeter Dezimalwert des exakten Binärwerts, nur echte Gleichstände
+  // (exakt …5) zur geraden Ziffer. ab AJ4: vorher wurde erst auf 1e-6 geglättet – 9,9499… (Binärwert von 9,95) ergab 10,0 statt 9,9,
+  // 35,0500…04 ergab 35,0 statt 35,1 (Screener-Schwellen). toFixed rechnet mit dem exakten Wert; nur den echten Gleichstand selbst entscheiden.
   function runden(x, stellen) {
-    const f = 10 ** stellen;
-    const y = Math.round(x * f * 1e6) / 1e6;
-    const unten = Math.floor(y);
-    return (Math.abs(y - unten - 0.5) < 1e-9 ? (unten % 2 === 0 ? unten : unten + 1) : Math.round(y)) / f;
+    if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
+    const genau = Math.abs(x).toFixed(100), punkt = genau.indexOf(".");
+    if (!/^50*$/.test(genau.slice(punkt + 1 + stellen))) return Number(x.toFixed(stellen));
+    let z = BigInt(genau.slice(0, punkt) + genau.slice(punkt + 1, punkt + 1 + stellen));
+    if (z % 2n === 1n) z += 1n;
+    const t = z.toString().padStart(stellen + 1, "0");
+    return (x < 0 ? -1 : 1) * Number(stellen ? t.slice(0, t.length - stellen) + "." + t.slice(-stellen) : t);
   }
-
   // ---------- Meldungen ----------
   function meldungenListe(submissions) {
     const r = (submissions && submissions.filings && submissions.filings.recent) || {};
@@ -99,7 +103,14 @@
     return { name: xml.find((n) => /info|table|13f/i.test(n)) || xml[0] };
   }
 
-  const wertFaktor = (eingereicht) => (String(eingereicht || "").slice(0, 10) >= DOLLAR_AB ? 1 : 1000);
+  // ab AJ5: Faktor nur aus einem gültigen Einreichungsdatum (JJJJ-MM-TT, echtes Kalenderdatum); sonst null = Einheit unklar.
+  // Vorher wurde ein fehlendes Datum still als Tausend (1000) gelesen; das Original (edgar13f.py:277-283) nimmt dann still Dollar (1).
+  const wertFaktor = (eingereicht) => {
+    const d = String(eingereicht || "").slice(0, 10);
+    const t = /^\d{4}-\d{2}-\d{2}$/.test(d) ? Date.parse(d + "T00:00:00Z") : NaN;
+    if (!Number.isFinite(t) || new Date(t).toISOString().slice(0, 10) !== d) return null;
+    return d >= DOLLAR_AB ? 1 : 1000;
+  };
 
   function xmlDokument(text) {
     const doc = new DOMParser().parseFromString(String(text || "").replace(/^﻿/, ""), "application/xml");
@@ -410,6 +421,34 @@
     return positionen;
   }
 
+  // CUSIP → Ticker aus einer AUFGEZEICHNETEN OpenFIGI-Antwort (trader-skill 5189e79: tests/fixtures/trader-copycat/openfigi.json, Antwort auf
+  // die Anfrage ["650111107", "47233W109"] laut tests/test_copycat.py:196-197; exchCode US, securityType Common Stock). Abfragedatum dort nicht angegeben.
+  // Nur für den lokalen 13F-Import (Status „bestätigt“); der Worker-Weg (kopierGewichte) bleibt unverändert.
+  const OPENFIGI_AUFZEICHNUNG = {
+    "650111107": { ticker: "NYT", figi_name: "NEW YORK TIMES CO-A" },
+    "47233W109": { ticker: "JEF", figi_name: "JEFFERIES FINANCIAL GROUP IN" },
+  };
+  const ZUORDNUNG_STATUS = ["bestätigt", "geschätzt", "nicht zugeordnet"];
+  // Zuordnungsstatus je Position (ab 14z, lokaler 13F-Import): „bestätigt“ nur bei belegtem CUSIP→Ticker (eigene Zuordnung, Aktienklassen-Tabelle,
+  // aufgezeichnete OpenFIGI-Antwort) mit gültiger CUSIP-Prüfziffer; ein Namensabgleich ist höchstens „geschätzt“ (Vorschlag); widersprechen sich
+  // Quellen → „geschätzt“ und mehrdeutig; ungültige CUSIP → „nicht zugeordnet“ (nicht korrigiert). Je Ergebnis: Quelle, Stand und Grund.
+  // Nur „bestätigt“ (und nur Aktienzeilen ohne Put/Call) darf in die Aktienanalyse übernommen werden.
+  function zuordnungsStatus(p) {
+    const cusip = String((p && p.cusip) || ""), nameTicker = p && p.ticker_quelle !== "manuell" && p.ticker_quelle !== "Aktienklassen-Tabelle" ? p.ticker : null;
+    if (!cusipGueltig(cusip)) return { status: "nicht zugeordnet", ticker: null, quelle: "keine", stand: null, grund: `CUSIP „${cusip.slice(0, 12)}“ ungültig (Format oder Prüfziffer) – nicht korrigiert, nicht zugeordnet` };
+    let beleg = null;
+    if (p.ticker_quelle === "manuell" && p.ticker) beleg = { ticker: p.ticker, quelle: "eigene CUSIP-Zuordnung (dieses Gerät)", stand: "vom Nutzer, ohne Datum" };
+    else if (AKTIENKLASSEN[cusip]) beleg = { ticker: AKTIENKLASSEN[cusip], quelle: "Aktienklassen-Tabelle trader-skill (OpenFIGI, exchCode US)", stand: "geprüft 2026-10-13" };
+    else if (OPENFIGI_AUFZEICHNUNG[cusip]) beleg = { ticker: OPENFIGI_AUFZEICHNUNG[cusip].ticker, quelle: `OpenFIGI-Antwort „${OPENFIGI_AUFZEICHNUNG[cusip].figi_name}“, aufgezeichnet in trader-skill 5189e79`, stand: "Abfragedatum nicht angegeben" };
+    if (beleg && nameTicker && tickerNorm(nameTicker) !== tickerNorm(beleg.ticker)) {
+      return { status: "geschätzt", ticker: beleg.ticker, quelle: beleg.quelle, stand: beleg.stand, mehrdeutig: true, grund: `Quellen widersprechen sich: ${beleg.ticker} per CUSIP, ${nameTicker} per Namensabgleich – mehrdeutig, nicht bestätigt` };
+    }
+    if (beleg) return { status: "bestätigt", ...beleg, grund: "CUSIP belegt (Prüfziffer gültig)" };
+    if (p.ticker) return { status: "geschätzt", ticker: p.ticker, quelle: "Namensabgleich mit der SEC-Tickerliste", stand: null, mehrdeutig: Boolean(p.ticker_pruefen),
+      grund: `nur Namensähnlichkeit${p.ticker_quelle === "name-praefix" ? " (Namensanfang)" : ""}${p.ticker_pruefen ? ", mehrere Ticker/Klassen möglich – mehrdeutig" : ""} – Vorschlag, nicht belegt` };
+    return { status: "nicht zugeordnet", ticker: null, quelle: "keine", stand: null, grund: "kein Eintrag in Klassen-Tabelle, OpenFIGI-Aufzeichnung oder Tickerliste" };
+  }
+
   // ---------- Auswertung ----------
   function quartalAufbauen(meta, zeilen, index, { eigene = {}, zusammen = true } = {}) {
     const { positionen, summe } = zusammenfassen(zeilen);
@@ -464,6 +503,8 @@
     return {
       gewichte: gewaehlt.map((p) => ({ ticker: p.ticker, name: p.name || p.emittent, gewicht: runden((100 * p.anteil) / basis, 2), anteil_13f: p.anteil, wert: p.wert, stueck: p.stueck,
         ...(p.ticker_manuell ? { manuell: true } : {}),
+        // ab 14t: geschätzte Zuordnung (Namensabgleich) ausdrücklich gekennzeichnet, wenn sie mitkopiert wird (edgar13f.py: check_ticker)
+        ...(p.ticker_pruefen ? { geschaetzt: true } : {}),
         ...(p.ticker_liste && p.ticker_liste.length > 1 ? { klassen: p.ticker_liste } : {}) })),
       ausgelassen,
     };
@@ -514,10 +555,160 @@
     return { treffer: treffer.slice(0, 20) };
   }
 
+  // ---------- Lokaler Import von SEC-13F-Dateien (ab 14w, ohne Worker und ohne Netz) ----------
+  // Streng: nur die Namensräume der SEC-Spezifikation für Form 13F (Informationstabelle bzw. Deckblatt), kein DOCTYPE/ENTITY, jede Zeile
+  // vollständig (Emittent, Klasse, CUSIP, value, sshPrnamt, sshPrnamtType). Eine fehlerhafte Zeile verwirft den ganzen Import (keine
+  // Teilübernahme) und wird mit Nummer benannt. Fehlende Werte werden nie zu 0, nichts wird aus anderen Quellen ergänzt.
+  const NS_INFOTABELLE = "http://www.sec.gov/edgar/document/thirteenf/informationtable";
+  const NS_DECKBLATT = "http://www.sec.gov/edgar/thirteenffiler";
+  const INFO_FELDER = new Set(["infoTable", "nameOfIssuer", "titleOfClass", "cusip", "figi", "value", "shrsOrPrnAmt", "sshPrnamt", "sshPrnamtType", "putCall",
+    "investmentDiscretion", "otherManager", "votingAuthority", "Sole", "Shared", "None"]);
+  const GANZZAHL = /^\d{1,16}$/;
+  const LOKAL_NAECHSTER = "Nächster Schritt: bei sec.gov in „Filing Detail“ die Datei „INFORMATION TABLE“ (.xml) bzw. primary_doc.xml unverändert speichern und erneut wählen.";
+  function lokalXml(text, was) {
+    const t = String(text || "").replace(/^﻿/, "");
+    if (!t.trim()) throw new Error(`${was}: Datei ist leer. ${LOKAL_NAECHSTER}`);
+    if (/<!DOCTYPE|<!ENTITY/i.test(t)) throw new Error(`${was}: enthält DOCTYPE/ENTITY-Angaben – aus Sicherheitsgründen nicht gelesen (SEC-Dateien enthalten so etwas nicht). ${LOKAL_NAECHSTER}`);
+    const doc = new DOMParser().parseFromString(t, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw new Error(`${was}: kein gültiges XML (Datei beschädigt oder unvollständig gespeichert). ${LOKAL_NAECHSTER}`);
+    return doc;
+  }
+  // Informationstabelle → { zeilen, zeilen_original, namespace, unbekannt, doppelte }
+  function infotabelleLokalLesen(xmlText) {
+    const doc = lokalXml(xmlText, "Informationstabelle"), wurzel = doc.documentElement;
+    if (wurzel.localName !== "informationTable") throw new Error(`Informationstabelle: Wurzelelement „${String(wurzel.localName).slice(0, 40)}“ statt „informationTable“ – keine 13F-Informationstabelle. ${LOKAL_NAECHSTER}`);
+    if (wurzel.namespaceURI !== NS_INFOTABELLE) throw new Error(`Informationstabelle: falscher Namensraum „${String(wurzel.namespaceURI || "keiner").slice(0, 80)}“ (erwartet ${NS_INFOTABELLE}). ${LOKAL_NAECHSTER}`);
+    const unbekannt = new Set(), fehler = [], zeilen = [];
+    const kinder = [...wurzel.children];
+    kinder.forEach((el, i) => {
+      const nr = i + 1;
+      if (el.localName !== "infoTable") { unbekannt.add(el.localName); return; }
+      const f = {}, stimmen = {};
+      for (const k of el.getElementsByTagName("*")) {
+        if (!INFO_FELDER.has(k.localName)) { unbekannt.add(k.localName); continue; }
+        if (k.childElementCount) continue;
+        const t = k.textContent.trim();
+        if (["Sole", "Shared", "None"].includes(k.localName)) stimmen[k.localName] = t; else if (!(k.localName in f)) f[k.localName] = t;
+      }
+      const name = (f.nameOfIssuer || "").slice(0, 80) || "ohne Emittent";
+      const fehlt = ["nameOfIssuer", "titleOfClass", "cusip", "value", "sshPrnamt", "sshPrnamtType"].filter((k) => !f[k]);
+      if (fehlt.length) { fehler.push(`Zeile ${nr} (${name}): ${fehlt.join(", ")} fehlt`); return; }
+      if (!/^[0-9A-Z*@#]{9}$/i.test(f.cusip)) { fehler.push(`Zeile ${nr} (${name}): CUSIP „${f.cusip.slice(0, 20)}“ hat nicht 9 Zeichen`); return; }
+      if (!GANZZAHL.test(f.value)) { fehler.push(`Zeile ${nr} (${name}): value „${f.value.slice(0, 20)}“ ist keine nicht-negative ganze Zahl`); return; }
+      if (!GANZZAHL.test(f.sshPrnamt)) { fehler.push(`Zeile ${nr} (${name}): sshPrnamt „${f.sshPrnamt.slice(0, 20)}“ ist keine nicht-negative ganze Zahl`); return; }
+      const art = f.sshPrnamtType.toUpperCase();
+      if (!["SH", "PRN"].includes(art)) { fehler.push(`Zeile ${nr} (${name}): sshPrnamtType „${f.sshPrnamtType.slice(0, 10)}“ ist weder SH noch PRN`); return; }
+      const pc = String(f.putCall || "").toUpperCase();
+      if (pc && !["PUT", "CALL"].includes(pc)) { fehler.push(`Zeile ${nr} (${name}): putCall „${f.putCall.slice(0, 10)}“ ist weder Put noch Call`); return; }
+      const st = {};
+      for (const k of ["Sole", "Shared", "None"]) { if (stimmen[k] === undefined || stimmen[k] === "") st[k.toLowerCase()] = null; else if (GANZZAHL.test(stimmen[k])) st[k.toLowerCase()] = Number(stimmen[k]); else { fehler.push(`Zeile ${nr} (${name}): Stimmrecht ${k} „${stimmen[k].slice(0, 20)}“ ungültig`); return; } }
+      const wertRoh = Number(f.value), stueck = Number(f.sshPrnamt);
+      if (!Number.isSafeInteger(wertRoh) || !Number.isSafeInteger(stueck)) { fehler.push(`Zeile ${nr} (${name}): Zahl zu groß für exakte Verarbeitung`); return; }
+      zeilen.push({ zeile: nr, emittent: f.nameOfIssuer, klasse: f.titleOfClass, cusip: f.cusip.toUpperCase(), wert_roh: wertRoh, stueck, art, putCall: pc,
+        diskretion: f.investmentDiscretion || null, andere_manager: f.otherManager || null, stimmen: st });
+    });
+    if (fehler.length) throw new Error(`Informationstabelle nicht übernommen – ${fehler.length} fehlerhafte Zeile(n): ${fehler.slice(0, 5).join("; ")}${fehler.length > 5 ? " …" : ""}. Es wurde nichts teilweise übernommen. ${LOKAL_NAECHSTER}`);
+    if (!zeilen.length) throw new Error(`Informationstabelle: keine infoTable-Zeilen. ${LOKAL_NAECHSTER}`);
+    const schluessel = new Map();
+    for (const z of zeilen) { const k = JSON.stringify([z.emittent, z.klasse, z.cusip, z.wert_roh, z.stueck, z.art, z.putCall, z.diskretion, z.andere_manager]); schluessel.set(k, (schluessel.get(k) || 0) + 1); }
+    return { zeilen, namespace: wurzel.namespaceURI, unbekannt: [...unbekannt].sort(), doppelte: [...schluessel.values()].filter((n) => n > 1).reduce((s, n) => s + n - 1, 0) };
+  }
+  const datumMtj = (s) => { const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(s || "").trim()); return m ? `${m[3]}-${m[1]}-${m[2]}` : (/^\d{4}-\d{2}-\d{2}$/.test(String(s || "").trim()) ? String(s).trim() : null); };
+  // Deckblatt primary_doc.xml → Manager, CIK, Formular, Berichtszeitraum, Änderungsangaben, Summary (Zeilenzahl, Gesamtwert wie gemeldet)
+  function deckblattLokalLesen(xmlText) {
+    const doc = lokalXml(xmlText, "Deckblatt"), w = doc.documentElement;
+    if (w.localName !== "edgarSubmission" || w.namespaceURI !== NS_DECKBLATT) throw new Error(`Deckblatt: kein 13F-Deckblatt (Wurzel „${String(w.localName).slice(0, 40)}“, Namensraum „${String(w.namespaceURI || "keiner").slice(0, 60)}“). ${LOKAL_NAECHSTER}`);
+    const eins = (pfad) => { let el = w; for (const teil of pfad) { el = el && [...el.children].find((c) => c.localName === teil); } return el ? el.textContent.trim() : null; };
+    const aus = {
+      schema: eins(["schemaVersion"]), formular: eins(["headerData", "submissionType"]), cik: eins(["headerData", "filerInfo", "filer", "credentials", "cik"]),
+      periode: datumMtj(eins(["headerData", "filerInfo", "periodOfReport"]) || eins(["formData", "coverPage", "reportCalendarOrQuarter"])),
+      ist_aenderung: eins(["formData", "coverPage", "isAmendment"]), aenderung_nr: eins(["formData", "coverPage", "amendmentNo"]),
+      aenderung_art: eins(["formData", "coverPage", "amendmentInfo", "amendmentType"]), manager: eins(["formData", "coverPage", "filingManager", "name"]),
+      berichtsart: eins(["formData", "coverPage", "reportType"]), unterschrift: datumMtj(eins(["formData", "signatureBlock", "signatureDate"])),
+      zeilen_soll: eins(["formData", "summaryPage", "tableEntryTotal"]), summe_soll: eins(["formData", "summaryPage", "tableValueTotal"]),
+    };
+    if (!aus.formular || !FORMEN.includes(aus.formular)) throw new Error(`Deckblatt: Formular „${String(aus.formular || "fehlt").slice(0, 20)}“ ist kein 13F-HR oder 13F-HR/A. ${LOKAL_NAECHSTER}`);
+    return aus;
+  }
+  // Filing-Detail-Seite (…-index.htm) → Formular, Einreichungsdatum, Berichtszeitraum, Akzessionsnummer, Filer, CIK
+  function filingIndexLesen(html) {
+    const t = new DOMParser().parseFromString(String(html || ""), "text/html").body.textContent.replace(/\s+/g, " ");
+    const g = (re) => { const m = re.exec(t); return m ? m[1].trim() : null; };
+    const aus = { formular: g(/Form (13F-HR(?:\/A)?)\b/), eingereicht: g(/Filing Date\s*(\d{4}-\d{2}-\d{2})/), periode: g(/Period of Report\s*(\d{4}-\d{2}-\d{2})/),
+      akz: g(/SEC Accession No\.?\s*(\d{10}-\d{2}-\d{6})/), cik: g(/CIK\s*:?\s*(\d{10})/), name: g(/([^()]{2,120}?)\s*\(Filer\)/) };
+    if (!aus.akz || !aus.formular) throw new Error(`Filing-Index: keine 13F-Filing-Detail-Seite (Formular oder Akzessionsnummer nicht gefunden). Nächster Schritt: in EDGAR beim 13F auf „Filing Detail“ klicken und diese Seite als „Webseite, nur HTML“ speichern.`);
+    return aus;
+  }
+  // Datei nach Inhalt einordnen: Informationstabelle, Deckblatt oder Filing-Index
+  function lokalArt(text) {
+    const t = String(text || "").slice(0, 4000);
+    if (/<informationTable\b/i.test(t) || /<(\w+:)?informationTable\b/.test(t)) return "infotabelle";
+    if (/<edgarSubmission\b/.test(t)) return "deckblatt";
+    if (/<html|<!DOCTYPE html/i.test(t)) return "index";
+    if (/^\s*\{/.test(t) && /"filings"\s*:/.test(t)) return "meldungsliste";
+    return "unbekannt";
+  }
+  // SEC-Meldungsliste (data.sec.gov/submissions/CIK….json) → Eintrag zur Einreichung: gleiche CIK, gleiches Formular, gleicher Stichtag.
+  // Nur bei genau einem Treffer; sonst bleibt das Einreichungsdatum unbekannt (nichts geraten).
+  function meldungslisteZuordnen(text, deck) {
+    let s; try { s = JSON.parse(String(text || "").replace(/^﻿/, "")); } catch (e) { throw new Error("Meldungsliste: kein gültiges JSON. Nächster Schritt: data.sec.gov/submissions/CIK….json unverändert speichern."); }
+    const cik = cik10(s && s.cik);
+    if (!deck) return { hinweis: "Meldungsliste ohne Deckblatt nicht zuordenbar (Stichtag und Formular fehlen)." };
+    if (!deck.cik || cik !== cik10(deck.cik)) throw new Error(`Meldungsliste gehört zu CIK ${cik}, das Deckblatt zu ${deck.cik || "?"} – nicht dieselbe Firma.`);
+    const treffer = meldungenListe(s).filter((m) => m.form === deck.formular && m.quartal === deck.periode);
+    if (treffer.length !== 1) return { hinweis: `Meldungsliste: ${treffer.length} Einreichungen ${deck.formular} zum Stichtag ${deck.periode} – Einreichungsdatum nicht eindeutig, bleibt unbekannt.` };
+    return { formular: treffer[0].form, eingereicht: treffer[0].eingereicht, periode: treffer[0].quartal, akz: treffer[0].akz, cik, name: s.name || null, quelle: "SEC-Meldungsliste" };
+  }
+  // Zusammenführen und gegeneinander prüfen. Einheit nur aus dem Einreichungsdatum des Filing-Index (ab 2023-01-03 Dollar, davor Tausend);
+  // ohne Index: Einheit unklar, Werte wie gemeldet. Abweichungen zwischen den Dateien verwerfen den Import (gemischte Einreichungen).
+  function lokalAuswerten({ info, deck = null, index = null }) {
+    if (!info) throw new Error(`Keine Informationstabelle gewählt. ${LOKAL_NAECHSTER}`);
+    const abw = [];
+    if (deck && index) {
+      if (deck.cik && index.cik && cik10(deck.cik) !== cik10(index.cik)) abw.push(`CIK Deckblatt ${deck.cik} ≠ Index ${index.cik}`);
+      if (deck.periode && index.periode && deck.periode !== index.periode) abw.push(`Berichtszeitraum Deckblatt ${deck.periode} ≠ Index ${index.periode}`);
+      if (deck.formular && index.formular && deck.formular !== index.formular) abw.push(`Formular Deckblatt ${deck.formular} ≠ Index ${index.formular}`);
+    }
+    if (abw.length) throw new Error(`Die Dateien gehören nicht zur selben Einreichung: ${abw.join("; ")}. Nächster Schritt: alle Dateien aus derselben „Filing Detail“-Seite speichern.`);
+    const eingereicht = index && index.eingereicht ? index.eingereicht : null;
+    const faktor = eingereicht ? wertFaktor(eingereicht) : null;
+    const zeilen = info.zeilen.map((z) => ({ ...z, wert: faktor === null ? z.wert_roh : z.wert_roh * faktor }));
+    const summeRoh = info.zeilen.reduce((s, z) => s + z.wert_roh, 0);
+    const pruefung = [];
+    if (deck && GANZZAHL.test(String(deck.zeilen_soll || ""))) pruefung.push(Number(deck.zeilen_soll) === info.zeilen.length ? `Zeilenzahl ${info.zeilen.length} = Deckblatt (tableEntryTotal)` : `Zeilenzahl ${info.zeilen.length} ≠ Deckblatt ${deck.zeilen_soll} (tableEntryTotal) – Tabelle unvollständig oder andere Einreichung`);
+    else pruefung.push("Deckblatt-Zeilenzahl nicht verfügbar – Vollständigkeit nicht geprüft");
+    if (deck && GANZZAHL.test(String(deck.summe_soll || ""))) pruefung.push(Number(deck.summe_soll) === summeRoh ? `Summe der Zeilen ${summeRoh} = Deckblatt (tableValueTotal, wie gemeldet)` : `Summe der Zeilen ${summeRoh} ≠ Deckblatt ${deck.summe_soll} (Differenz ${summeRoh - Number(deck.summe_soll)}, wie gemeldet)`);
+    else pruefung.push("Deckblatt-Summe nicht verfügbar – Summe nicht gegengeprüft");
+    const vollstaendig = Boolean(deck && Number(deck.zeilen_soll) === info.zeilen.length && Number(deck.summe_soll) === summeRoh);
+    const aenderung = deck && String(deck.ist_aenderung).toLowerCase() === "true" ? korrekturArt({ isAmendment: "true", amendmentType: deck.aenderung_art, amendmentNo: deck.aenderung_nr }) : null;
+    return {
+      meta: { quelle: "lokal eingelesene SEC-Dateien", formular: (index && index.formular) || (deck && deck.formular) || "unbekannt", manager: (deck && deck.manager) || (index && index.name) || null,
+        cik: (deck && deck.cik && cik10(deck.cik)) || (index && index.cik) || null, quartal: (deck && deck.periode) || (index && index.periode) || null, eingereicht, akz: index ? index.akz : null,
+        unterschrift: deck ? deck.unterschrift : null, schema: deck ? deck.schema : null, namespace: info.namespace, einheit: faktor === null ? "unklar" : faktor === 1 ? "USD" : "Tausend USD (umgerechnet ×1000)",
+        einheit_unklar: faktor === null, aenderung, pruefung, vollstaendig, unbekannt: info.unbekannt, doppelte: info.doppelte, zeilen_anzahl: info.zeilen.length, summe_roh: summeRoh },
+      zeilen,
+    };
+  }
+  // Zwei lokal eingelesene Stände desselben Managers vergleichen (gemeldete Bestandsänderung nach CUSIP, Klasse und Put/Call).
+  // Nur bei gleicher CIK, zwei verschiedenen Berichtszeiträumen und ohne Änderungsmeldungen; „nicht mehr gemeldet“ nur, wenn beide vollständig sind.
+  function lokalVergleichen(a, b) {
+    if (!a || !b) return { fehler: "Für einen Vergleich zwei eingelesene Stände nötig." };
+    if (!a.meta.cik || a.meta.cik !== b.meta.cik) return { fehler: `Verschiedene oder unbekannte Manager (CIK ${a.meta.cik || "?"} / ${b.meta.cik || "?"}) – kein Vergleich.` };
+    if (!a.meta.quartal || !b.meta.quartal || a.meta.quartal === b.meta.quartal) return { fehler: "Berichtszeiträume fehlen oder sind gleich – kein Vergleich." };
+    if (a.meta.aenderung || b.meta.aenderung || a.meta.formular !== "13F-HR" || b.meta.formular !== "13F-HR") return { fehler: "Änderungsmeldungen (13F-HR/A) werden nicht mit regulären Meldungen verglichen." };
+    const [alt, neu] = a.meta.quartal < b.meta.quartal ? [a, b] : [b, a];
+    const gruppe = (zeilen) => { const m = new Map(); for (const z of zeilen) { const k = `${z.cusip}|${z.klasse.toUpperCase()}|${z.putCall}`; const g = m.get(k) || { cusip: z.cusip, klasse: z.klasse, putCall: z.putCall, emittent: z.emittent, stueck: 0 }; g.stueck += z.stueck; m.set(k, g); } return m; };
+    const ga = gruppe(alt.zeilen), gb = gruppe(neu.zeilen), beide = alt.meta.vollstaendig && neu.meta.vollstaendig, aus = [];
+    for (const [k, p] of gb) { const q = ga.get(k); aus.push({ ...p, vorher: q ? q.stueck : 0, status: !q ? "neu gemeldet" : p.stueck > q.stueck ? "höher gemeldet" : p.stueck < q.stueck ? "niedriger gemeldet" : "unverändert" }); }
+    for (const [k, q] of ga) if (!gb.has(k)) aus.push({ ...q, vorher: q.stueck, stueck: 0, status: beide ? "nicht mehr gemeldet" : "nicht mehr gemeldet (unsicher: Tabelle nicht als vollständig belegt)" });
+    return { alt: alt.meta, neu: neu.meta, zeilen: aus, vollstaendig: beide };
+  }
+
   global.AktienCopycat = {
+    NS_INFOTABELLE, NS_DECKBLATT, infotabelleLokalLesen, deckblattLokalLesen, filingIndexLesen, lokalArt, lokalAuswerten, lokalVergleichen, meldungslisteZuordnen, zuordnungsStatus, ZUORDNUNG_STATUS, OPENFIGI_AUFZEICHNUNG,
     FILER, AKTIENKLASSEN, HINWEISE, cik10, meldungenListe, meldungWaehlen, archivPfad, infotabelleName, wertFaktor, infotabelleLesen, deckblattLesen,
     zusammenfassen, klassenZusammenfassen, nameSchluessel, tickerNorm, klassenBuchstabe, tickerIndex, tickerZuordnen, schoenerName,
-    quartalAufbauen, vergleich, kopierGewichte, aktualitaet, istAktie,
+    quartalAufbauen, vergleich, kopierGewichte, aktualitaet, istAktie, runden,
     cusipPruefziffer, cusipGueltig, zuordnungenLesen, quartalsName, vergleichGliedern, filerSuchen,
     korrekturArt, korrekturAnwenden, korrekturenListe, meldungenPruefen, geschaeftstage, form4Liste, OPENFIGI,
   };

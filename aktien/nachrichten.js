@@ -121,5 +121,26 @@
     return { meldungen: aus, zustand: { ids: Object.fromEntries(behalten) }, neu: aus.filter((m) => m.neu).length };
   }
 
-  global.AktienNachrichten = { einordnen, zusammenfassen, secMeldungen, gesehenLesen, gesehenAnwenden, ITEMS_8K, WICHTIG: [...WICHTIG], GESEHEN_TAGE, GESEHEN_MAX };
+  // ---------- Zeitfenster (ab 14t, Skill-Profil trader-news, news.py:331-344) ----------
+  // Behalten wird, was nicht älter als „stunden“ ist – die Grenze zählt mit (news.py:337: verworfen nur bei Zeit < Grenze). Ohne Zeit:
+  // bleibt („Zeit unbekannt“, wie im Original). SEC-Meldungen haben nur ein Datum (…T00:00:00Z): sie zählen bis zum Ende dieses Tages,
+  // sonst fiele ein 8-K vom Vortag bis zu 24 h zu früh heraus. Zeit mehr als 5 Minuten in der Zukunft: bleibt sichtbar, aber als ungültig
+  // markiert. Nichts wird still entfernt: die Zahl der ausgeblendeten Einträge wird zurückgegeben.
+  const FENSTER_STUNDEN = 48;
+  function fensterAnwenden(meldungen, { jetzt = Date.now(), stunden = FENSTER_STUNDEN } = {}) {
+    const grenze = jetzt - stunden * 3600000, zeigen = [];
+    let ausgeblendet = 0;
+    for (const m of meldungen || []) {
+      const t = m && m.zeit ? Date.parse(m.zeit) : NaN;
+      if (!Number.isFinite(t)) { zeigen.push({ ...m, zeit_unbekannt: true }); continue; }
+      const nurDatum = /T00:00:00(\.000)?Z$/.test(String(m.zeit)) && m.art === "meldung";
+      if (t > jetzt + 5 * 60000) { zeigen.push({ ...m, zeit_ungueltig: "Zeit in der Zukunft – ungültig" }); continue; }
+      const bis = nurDatum ? t + 86400000 - 1 : t;
+      if (bis < grenze) { ausgeblendet++; continue; }
+      zeigen.push(nurDatum ? { ...m, nur_datum: true } : m);
+    }
+    return { zeigen, ausgeblendet, grenze: new Date(grenze).toISOString(), stunden };
+  }
+
+  global.AktienNachrichten = { einordnen, zusammenfassen, secMeldungen, gesehenLesen, gesehenAnwenden, fensterAnwenden, FENSTER_STUNDEN, ITEMS_8K, WICHTIG: [...WICHTIG], GESEHEN_TAGE, GESEHEN_MAX };
 })(typeof window !== "undefined" ? window : globalThis);

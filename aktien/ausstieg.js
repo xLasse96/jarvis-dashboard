@@ -72,8 +72,14 @@
       }
     }
 
+    // ab 11-06e: Gebührenannahme (Prozent je Kauf und je Verkauf; nur wenn angegeben) – Ergebnis je Aktie und gesamt nach beiden
+    // Gebühren, Gewinnschwelle. Ändert Stop, Ziele und Aktionen nicht (die Regeln rechnen weiter auf dem Einstand).
+    const kosten = kostenRechnen({ einstand, menge, gebuehrPct: regelnRoh.gebuehrPct, stop: wirksamerStop, ziele });
+    if (kosten && kosten.fehler) hinweise.push(kosten.fehler);
+
     return {
       symbol: String(p.symbol || "").toUpperCase(),
+      kosten: kosten && !kosten.fehler ? kosten : null,
       einstand: r2(einstand),
       kurs: r2(kurs),
       stop: r2(stop),
@@ -91,5 +97,23 @@
     };
   }
 
-  global.AktienAusstieg = { planen, STANDARD, HINWEIS };
+  // Gebühren (ab 11-06e): g = gebuehrPct / 100 je Seite. Netto je Aktie bei Verkaufspreis x: x·(1−g) − einstand·(1+g);
+  // Gewinnschwelle: einstand·(1+g)/(1−g). Ohne Angabe → null (nichts angenommen).
+  function kostenRechnen({ einstand, menge, gebuehrPct, stop, ziele = [] }) {
+    if (gebuehrPct === undefined || gebuehrPct === null || gebuehrPct === "") return null;
+    const g = Number(gebuehrPct) / 100;
+    if (!Number.isFinite(g) || g < 0 || g >= 0.2) return { fehler: "Gebührenannahme ungültig (0 bis unter 20 %) – ohne Gebühren gerechnet." };
+    const netto = (x) => r2(x * (1 - g) - einstand * (1 + g));
+    return {
+      gebuehrPct: Number(gebuehrPct),
+      kaufGebuehr: r2(einstand * menge * g),
+      gewinnschwelle: r2((einstand * (1 + g)) / (1 - g)),
+      stopNettoJeAktie: Number.isFinite(stop) ? netto(stop) : null,
+      stopNettoGesamt: Number.isFinite(stop) ? r2(netto(stop) * menge) : null,
+      ziele: ziele.map((z) => ({ r: z.r, preis: z.preis, nettoJeAktie: netto(z.preis), nettoGesamtBeiVollverkauf: r2(netto(z.preis) * menge) })),
+      hinweis: `Annahme ${Number(gebuehrPct).toLocaleString("de-DE")} % Gebühr je Kauf und je Verkauf – Schätzung, keine Abrechnung des Brokers.`,
+    };
+  }
+
+  global.AktienAusstieg = { planen, kostenRechnen, STANDARD, HINWEIS };
 })(typeof window !== "undefined" ? window : globalThis);

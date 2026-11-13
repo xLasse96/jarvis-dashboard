@@ -99,6 +99,19 @@
     return zeilen.filter((z) => !gesehen.has(z.doc_id));
   }
 
+  // ab AJ5: Anzeige-Auswahl wie ptr.py:533-559 – alle neuen Meldungen werden gezeigt (vorher schnitt app/19 vor der Neu-Prüfung auf 60
+  // ab, neuere jenseits davon gingen verloren); ältere füllen bis „max“ auf. Als gesehen gilt die ganze Auswahl (wie das Original).
+  // Doppelte Kennungen (z. B. Jahres- und Vorjahresindex im Januar) nur einmal; Meldungen ohne Kennung bleiben sichtbar, werden aber
+  // nicht als gesehen gespeichert (sie wären sonst nie wieder erkennbar).
+  function anzeigeWaehlen(auswahl, zustand, heute, max = 60) {
+    const doppelt = new Set(), einmal = [];
+    for (const z of auswahl) { const id = z && z.doc_id ? String(z.doc_id) : ""; if (id && doppelt.has(id)) continue; if (id) doppelt.add(id); einmal.push(z); }
+    const neu = neueSeit(einmal, zustand, heute), neuSet = new Set(neu);
+    let platz = Math.max(0, max - neu.length);
+    const zeigen = einmal.filter((z) => neuSet.has(z) || (platz-- > 0));
+    return { zeigen, neu, gesehen: einmal.filter((z) => z.doc_id).map((z) => String(z.doc_id)), ausgeblendet: einmal.length - zeigen.length };
+  }
+
   // ---------- Bericht (Text aus dem PDF, Layout wie „pdftotext -layout“) ----------
   const ZEILE = /^\s*(?:(SP|JT|DC)\s+)?(.*?)\s+(S \(partial\)|P|S|E)\s+(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})\s+(\S.*?)\s*$/;
   const LABEL = [
@@ -303,5 +316,5 @@
     return kopf;
   }
 
-  global.AktienKongress = { zipXml, indexLesen, auswaehlen, mitgliedPasst, neueSeit, berichtLesen, manuellLesen, datumLesen, isoAusMdy, SPAET_TAGE, textPruefen, duplikateMarkieren, berichteZusammenfuehren, PDF_AUSWERTUNG, SENAT_AUTOMATISCH };
+  global.AktienKongress = { zipXml, indexLesen, auswaehlen, mitgliedPasst, neueSeit, anzeigeWaehlen,berichtLesen, manuellLesen, datumLesen, isoAusMdy, SPAET_TAGE, textPruefen, duplikateMarkieren, berichteZusammenfuehren, PDF_AUSWERTUNG, SENAT_AUTOMATISCH };
 })(typeof window !== "undefined" ? window : globalThis);

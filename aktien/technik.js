@@ -86,6 +86,28 @@
     return kerzen.map((_, i) => (i < n ? null : Math.min(...kerzen.slice(i - n, i).map((k) => k.l))));
   }
 
+  // ab 11-06e: MACD (12/26/9 auf Schlusskursen, EMA wie oben) und Bollinger-Bänder (SMA20 ± 2 Standardabweichungen der
+  // Grundgesamtheit). Beide fließen NICHT in die Punkte ein – nur zusätzliche Einordnung.
+  function macd(schluss, kurz = 12, lang = 26, signal = 9) {
+    const a = ema(schluss, kurz), b = ema(schluss, lang);
+    const linie = schluss.map((_, i) => (a[i] === null || b[i] === null ? null : a[i] - b[i]));
+    const sig = ema(linie, signal);
+    return { linie, signal: sig, histogramm: linie.map((x, i) => (x === null || sig[i] === null ? null : x - sig[i])) };
+  }
+  function bollinger(schluss, periode = 20, faktor = 2) {
+    const mitte = sma(schluss, periode);
+    const oben = new Array(schluss.length).fill(null), unten = new Array(schluss.length).fill(null);
+    for (let i = periode - 1; i < schluss.length; i++) {
+      const m = mitte[i];
+      let q = 0;
+      for (let j = i - periode + 1; j <= i; j++) q += (schluss[j] - m) ** 2;
+      const s = Math.sqrt(q / periode);
+      oben[i] = m + faktor * s;
+      unten[i] = m - faktor * s;
+    }
+    return { mitte, oben, unten };
+  }
+
   function pruefen(kerzen) {
     if (!Array.isArray(kerzen) || !kerzen.length) return "Keine Kerzendaten.";
     for (let i = 0; i < kerzen.length; i++) {
@@ -96,7 +118,20 @@
     return null;
   }
 
+  // ab 11-07j: dieselben Kerzen (gleiches Feld, gleiche Länge, gleiche letzte Kerze) werden nur einmal berechnet
+  const INDIKATOR_SPEICHER = typeof WeakMap === "function" ? new WeakMap() : null;
+  const RECHNUNGEN = { anzahl: 0 };
   function indikatoren(kerzen) {
+    const letzte = kerzen[kerzen.length - 1] || {};
+    const stempel = kerzen.length + ":" + letzte.t + ":" + letzte.c + ":" + letzte.h + ":" + letzte.l + ":" + letzte.v;
+    const alt = INDIKATOR_SPEICHER && INDIKATOR_SPEICHER.get(kerzen);
+    if (alt && alt.stempel === stempel) return alt.werte;
+    const werte = indikatorenRechnen(kerzen);
+    if (INDIKATOR_SPEICHER) INDIKATOR_SPEICHER.set(kerzen, { stempel, werte });
+    return werte;
+  }
+  function indikatorenRechnen(kerzen) {
+    RECHNUNGEN.anzahl++;
     const schluss = kerzen.map((k) => k.c);
     const vol20 = sma(kerzen.map((k) => k.v), 20);
     return {
@@ -157,7 +192,27 @@
     if (rs !== null && rs >= 70) plus("rsi", `RSI ${r(rs, 1)}: überkauft`, -1);
     if (rs !== null && rs <= 30) plus("rsi", `RSI ${r(rs, 1)}: überverkauft (allein kein Kaufgrund)`, 0);
 
+    // ab 11-06e: Zusatzindikatoren ohne Punkte
+    const schluss = kerzen.map((x) => x.c);
+    const m = macd(schluss), bb = bollinger(schluss);
+    const zusatz = { macd: r(m.linie[i], 3), macd_signal: r(m.signal[i], 3), macd_histogramm: r(m.histogramm[i], 3), bb_oben: r(bb.oben[i]), bb_mitte: r(bb.mitte[i]), bb_unten: r(bb.unten[i]),
+      bb_prozent: bb.oben[i] !== null && bb.oben[i] > bb.unten[i] ? r(((k.c - bb.unten[i]) / (bb.oben[i] - bb.unten[i])) * 100, 0) : null,
+      bb_breite_pct: bb.mitte[i] > 0 && bb.oben[i] !== null ? r(((bb.oben[i] - bb.unten[i]) / bb.mitte[i]) * 100, 1) : null };
+    const einordnung = [];
+    if (m.histogramm[i] !== null && m.histogramm[i - 1] !== null && m.histogramm[i - 1] !== undefined) {
+      if (m.histogramm[i - 1] <= 0 && m.histogramm[i] > 0) einordnung.push("MACD kreuzt die Signallinie nach oben");
+      else if (m.histogramm[i - 1] >= 0 && m.histogramm[i] < 0) einordnung.push("MACD kreuzt die Signallinie nach unten");
+      else einordnung.push(m.histogramm[i] > 0 ? "MACD über der Signallinie" : "MACD unter der Signallinie");
+    }
+    if (zusatz.bb_prozent !== null) {
+      if (k.c > bb.oben[i]) einordnung.push("Schluss über dem oberen Bollinger-Band");
+      else if (k.c < bb.unten[i]) einordnung.push("Schluss unter dem unteren Bollinger-Band");
+      else einordnung.push(`Schluss bei ${zusatz.bb_prozent} % der Bollinger-Spanne`);
+    }
+
     return {
+      zusatz,
+      einordnung,
       zeit: k.t,
       kerze_laufend_ausgelassen: Boolean(optionen.letzteLaufend && kerzen.length > 1),
       stand: { kurs: k.c, ema20: r(e20), ema50: r(e50), ema200: r(e200), rsi14: r(rs, 1), atr14: r(ind.atr14[i]), volumen_verhaeltnis: r(vv) },
@@ -167,11 +222,72 @@
     };
   }
 
+  // ---------- Chartlage (ab 11-07j) ----------
+  // Ergänzt scannen() um Zeitraumvergleich, Volatilität, Trend, widersprüchliche Indikatoren und eine neutrale Zusammenfassung.
+  // optionen.datenart: "synthetisch" | "historisch" | "tageskerzen" (Standard). Bei synthetischen oder veralteten Daten sagt die
+  // Zusammenfassung ausdrücklich, dass es kein aktuelles Signal ist. Keine Punkte, keine Empfehlung, keine Prognose.
+  const INDIKATOREN = {
+    ema: "EMA (exponentieller Durchschnitt) über 20, 50 bzw. 200 Tage: glättet den Kurs, jüngere Tage zählen stärker. Lage Kurs/EMA beschreibt den Trend der Vergangenheit.",
+    rsi: "RSI 14 (Relative-Stärke-Index): Verhältnis der Auf- zu den Abwärtsbewegungen der letzten 14 Tage, 0–100. Ab 70 gilt als überkauft, bis 30 als überverkauft – allein kein Signal.",
+    macd: "MACD: Abstand zwischen EMA12 und EMA26; die Signallinie ist dessen EMA9. Über bzw. unter der Signallinie beschreibt die jüngere Dynamik.",
+    bollinger: "Bollinger-Bänder: 20-Tage-Durchschnitt ± 2 Standardabweichungen. Die Breite zeigt die Schwankung; ein Schluss außerhalb der Bänder ist ungewöhnlich, aber kein Signal.",
+    atr: "ATR 14 (Average True Range): durchschnittliche Tagesspanne der letzten 14 Tage, hier auch in % des Kurses.",
+    zeitraum: "Zeitraumvergleich: Kursänderung und größter Rückgang vom Höchststand innerhalb von 1, 3, 6 und 12 Monaten (21/63/126/252 Tageskerzen), nur wenn genug Kerzen vorliegen.",
+  };
+  // Schwankung: ATR in % des Kurses < 1,5 ruhig, < 3 mittel, sonst unruhig (allgemeine Faustwerte)
+  function maxRueckgang(teil) {
+    let hoch = -Infinity, tief = 0;
+    for (const k of teil) { if (k.h > hoch) hoch = k.h; if (hoch > 0) tief = Math.min(tief, (k.l / hoch - 1) * 100); }
+    return r(tief, 2);
+  }
+  function chartAnalyse(kerzen, optionen = {}) {
+    const s = scannen(kerzen, optionen);
+    if (s.fehler) return { fehler: s.fehler };
+    const i = s.kerze_laufend_ausgelassen ? kerzen.length - 2 : kerzen.length - 1;
+    const c = kerzen[i].c;
+    const zeitraeume = [[21, "1 Monat"], [63, "3 Monate"], [126, "6 Monate"], [252, "12 Monate"]].map(([n, name]) => {
+      if (i - n < 0) return { name, kerzen: n, verfuegbar: false };
+      const teil = kerzen.slice(i - n, i + 1), vorher = kerzen[i - n].c;
+      return { name, kerzen: n, verfuegbar: vorher > 0, veraenderung_pct: vorher > 0 ? r((c / vorher - 1) * 100) : null, max_rueckgang_pct: maxRueckgang(teil),
+        hoch: r(Math.max(...teil.map((k) => k.h))), tief: r(Math.min(...teil.map((k) => k.l))) };
+    });
+    const atrWert = s.stand.atr14;
+    const atrPct = atrWert !== null && c > 0 ? r((atrWert / c) * 100) : null;
+    let schwankung = null;
+    if (i >= 20) {
+      const rend = [];
+      for (let j = i - 19; j <= i; j++) if (kerzen[j - 1].c > 0 && kerzen[j].c > 0) rend.push(Math.log(kerzen[j].c / kerzen[j - 1].c));
+      if (rend.length >= 2) { const m = rend.reduce((a, x) => a + x, 0) / rend.length; schwankung = r(Math.sqrt(rend.reduce((a, x) => a + (x - m) ** 2, 0) / (rend.length - 1)) * Math.sqrt(252) * 100); }
+    }
+    const volatilitaet = { atr_pct: atrPct, bb_breite_pct: s.zusatz.bb_breite_pct, schwankung_20t_pa: schwankung,
+      einordnung: atrPct === null ? null : atrPct < 1.5 ? "ruhig" : atrPct < 3 ? "mittel" : "unruhig" };
+    const trendSignal = s.signale.find((x) => x.art === "trend");
+    const trend = trendSignal ? (trendSignal.punkte > 0 ? "aufwärts" : "abwärts") : s.stand.ema200 === null ? "nicht bestimmbar (zu wenige Kerzen)" : "uneinheitlich (kein klarer Trend)";
+    const rsiWert = s.stand.rsi14, macdUeber = s.zusatz.macd_histogramm === null ? null : s.zusatz.macd_histogramm > 0;
+    const widersprueche = [];
+    if (trend === "aufwärts" && rsiWert !== null && rsiWert >= 70) widersprueche.push("Aufwärtstrend, aber RSI überkauft (" + rsiWert + ")");
+    if (trend === "abwärts" && rsiWert !== null && rsiWert <= 30) widersprueche.push("Abwärtstrend, aber RSI überverkauft (" + rsiWert + ")");
+    if (trend === "aufwärts" && macdUeber === false) widersprueche.push("Aufwärtstrend, aber MACD unter der Signallinie (nachlassende Dynamik)");
+    if (trend === "abwärts" && macdUeber === true) widersprueche.push("Abwärtstrend, aber MACD über der Signallinie");
+    if (s.signale.some((x) => x.art === "ausbruch" && x.punkte > 0) && rsiWert !== null && rsiWert >= 70) widersprueche.push("Ausbruch nach oben bei bereits überkauftem RSI");
+    const pos = s.signale.filter((x) => x.punkte > 0).length, neg = s.signale.filter((x) => x.punkte < 0).length;
+    if (pos && neg) widersprueche.push(`Gemischte Scanner-Signale (${pos} dafür, ${neg} dagegen)`);
+    const datum = new Date(kerzen[i].t).toISOString().slice(0, 10);
+    const veraltet = s.hinweise.some((h) => h.startsWith("Kursdaten veraltet"));
+    const datenart = optionen.datenart === "synthetisch" ? "synthetisch" : optionen.datenart === "historisch" || veraltet ? "historisch" : "tageskerzen";
+    const kopf = datenart === "synthetisch" ? "Synthetische Testdaten – keine echten Kurse, kein Signal." : datenart === "historisch" ? `Historische Kurse bis ${datum} – kein aktuelles Signal.` : `Tagesschlusskerzen bis ${datum} (keine Echtzeit).`;
+    const lage = [kopf, `Trend: ${trend}.`, rsiWert === null ? "RSI nicht berechenbar." : `RSI ${rsiWert} (${rsiWert >= 70 ? "überkauft" : rsiWert <= 30 ? "überverkauft" : "neutral"}).`,
+      macdUeber === null ? "MACD nicht berechenbar." : `MACD ${macdUeber ? "über" : "unter"} der Signallinie.`,
+      volatilitaet.einordnung ? `Schwankung ${volatilitaet.einordnung} (ATR ${atrPct} % des Kurses).` : "Schwankung nicht berechenbar.",
+      widersprueche.length ? "Widersprüchlich: " + widersprueche.join("; ") + "." : "Keine widersprüchlichen Indikatoren.", HINWEIS].join(" ");
+    return { ...s, zeitraeume, volatilitaet, trend, widersprueche, datenart, lage };
+  }
+
   // Mehrere Werte: { SYMBOL: kerzen } → nach Punkten sortierte Liste; Fehler je Wert bleiben sichtbar
   function scannenListe(jeSymbol, optionen = {}) {
     return Object.entries(jeSymbol).map(([symbol, kerzen]) => ({ symbol, ...scannen(kerzen, optionen) }))
       .sort((a, b) => (a.fehler ? 1 : 0) - (b.fehler ? 1 : 0) || (b.punkte || 0) - (a.punkte || 0) || a.symbol.localeCompare(b.symbol));
   }
 
-  global.AktienTechnik = { ema, sma, rsi, atr, indikatoren, pruefen, scannen, scannenListe, HINWEIS };
+  global.AktienTechnik = { ema, sma, rsi, atr, macd, bollinger, indikatoren, pruefen, scannen, scannenListe, HINWEIS, chartAnalyse, INDIKATOREN, RECHNUNGEN };
 })(typeof window !== "undefined" ? window : globalThis);

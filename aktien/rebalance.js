@@ -19,11 +19,17 @@
   const PUFFER_KOMPLETT = 0.995;
   const HINWEIS = "Nur Vorschläge nach deinen Zielgewichten – keine Prognose, keine automatische Ausführung. Jede Order braucht Risiko-Prüfung und deine Freigabe.";
 
+  // Python round(x, stellen) wie im Original (5189e79): korrekt gerundeter Dezimalwert des exakten Binärwerts, nur echte Gleichstände
+  // (exakt …5) zur geraden Ziffer. ab AJ4: vorher wurde erst auf 1e-6 geglättet – 9,9499… (Binärwert von 9,95) ergab 10,0 statt 9,9,
+  // 35,0500…04 ergab 35,0 statt 35,1 (Screener-Schwellen). toFixed rechnet mit dem exakten Wert; nur den echten Gleichstand selbst entscheiden.
   function runden(x, stellen) {
-    const f = 10 ** stellen;
-    const y = Math.round(x * f * 1e6) / 1e6;
-    const unten = Math.floor(y);
-    return (Math.abs(y - unten - 0.5) < 1e-9 ? (unten % 2 === 0 ? unten : unten + 1) : Math.round(y)) / f;
+    if (!Number.isFinite(x) || Math.abs(x) >= 1e21) return x;
+    const genau = Math.abs(x).toFixed(100), punkt = genau.indexOf(".");
+    if (!/^50*$/.test(genau.slice(punkt + 1 + stellen))) return Number(x.toFixed(stellen));
+    let z = BigInt(genau.slice(0, punkt) + genau.slice(punkt + 1, punkt + 1 + stellen));
+    if (z % 2n === 1n) z += 1n;
+    const t = z.toString().padStart(stellen + 1, "0");
+    return (x < 0 ? -1 : 1) * Number(stellen ? t.slice(0, t.length - stellen) + "." + t.slice(-stellen) : t);
   }
   const geld = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " USD";
 
@@ -143,5 +149,38 @@
     };
   }
 
-  global.AktienRebalance = { planen, zieleNormieren, gedeckelteZiele, STANDARD, HINWEIS };
+  // ---------- Portfolio-Risikoübersicht (ab 11-06e) ----------
+  // eingabe: { positionen: [{ symbol, wert (USD, ≥ 0), sektor? }], bargeld (USD), grenzen: { maxPositionPct, maxSektorPct } }
+  // Ergebnis: Gewichte je Position (am Gesamtwert), größte Position, Anteil Bargeld, Konzentration (Herfindahl-Index der Aktien,
+  // „effektive Anzahl“ = 1 ÷ HHI), Sektorverteilung (unbekannte Sektoren getrennt ausgewiesen, nie geraten) und Warnungen.
+  // Reine Beschreibung der Verteilung – keine Prognose, kein Value-at-Risk, keine Empfehlung.
+  const r2 = (x) => Math.round(x * 100) / 100;
+  function risikoUebersicht(eingabe) {
+    const e = eingabe || {};
+    const g = { maxPositionPct: 25, maxSektorPct: 40, ...(e.grenzen || {}) };
+    const liste = (Array.isArray(e.positionen) ? e.positionen : []).filter((p) => p && p.symbol && Number(p.wert) > 0).map((p) => ({ symbol: String(p.symbol).toUpperCase(), wert: Number(p.wert), sektor: p.sektor || null }));
+    const bargeld = Number(e.bargeld) > 0 ? Number(e.bargeld) : 0;
+    const aktien = liste.reduce((s, p) => s + p.wert, 0);
+    const gesamt = aktien + bargeld;
+    if (!(gesamt > 0)) return { fehler: "Kein Vermögen erfasst (weder Positionen noch Bargeld)." };
+    const pct = (x) => r2((x / gesamt) * 100);
+    const gewichte = liste.map((p) => ({ ...p, gewicht_pct: pct(p.wert), anteil_aktien_pct: aktien > 0 ? r2((p.wert / aktien) * 100) : 0 })).sort((a, b) => b.wert - a.wert || a.symbol.localeCompare(b.symbol));
+    const hhi = aktien > 0 ? liste.reduce((s, p) => s + (p.wert / aktien) ** 2, 0) : null;
+    const sektoren = new Map();
+    for (const p of gewichte) { const k = p.sektor || "unbekannt"; sektoren.set(k, (sektoren.get(k) || 0) + p.wert); }
+    const sektorListe = [...sektoren].map(([sektor, wert]) => ({ sektor, wert: r2(wert), gewicht_pct: pct(wert) })).sort((a, b) => b.wert - a.wert);
+    const warnungen = [];
+    for (const p of gewichte) if (p.gewicht_pct > g.maxPositionPct) warnungen.push(`${p.symbol} macht ${p.gewicht_pct.toLocaleString("de-DE")} % des Gesamtwerts aus (Grenze ${g.maxPositionPct} %).`);
+    for (const s of sektorListe) if (s.sektor !== "unbekannt" && s.gewicht_pct > g.maxSektorPct) warnungen.push(`Sektor „${s.sektor}“ macht ${s.gewicht_pct.toLocaleString("de-DE")} % aus (Grenze ${g.maxSektorPct} %).`);
+    if (liste.length > 0 && liste.length <= 2) warnungen.push(`Nur ${liste.length} Position(en) – wenig gestreut.`);
+    const unbekannt = sektoren.get("unbekannt") || 0;
+    return {
+      gesamt: r2(gesamt), aktien: r2(aktien), bargeld: r2(bargeld), bargeld_pct: pct(bargeld), anzahl: liste.length,
+      gewichte, groesste: gewichte[0] || null, hhi: hhi === null ? null : Math.round(hhi * 10000) / 10000, effektive_anzahl: hhi ? Math.round((1 / hhi) * 10) / 10 : null,
+      sektoren: sektorListe, sektor_unbekannt_pct: pct(unbekannt), warnungen,
+      hinweis: "Beschreibung der Verteilung, keine Prognose und keine Empfehlung." + (unbekannt > 0 ? " Sektor nur, wenn er aus SEC-Daten (SIC) bekannt ist – sonst „unbekannt“." : ""),
+    };
+  }
+
+  global.AktienRebalance = { planen, zieleNormieren, gedeckelteZiele, risikoUebersicht, STANDARD, HINWEIS, runden };
 })(typeof window !== "undefined" ? window : globalThis);

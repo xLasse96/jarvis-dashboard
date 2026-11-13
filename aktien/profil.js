@@ -330,11 +330,17 @@
     if (!(b.jetzt <= vorschlag.gueltig_bis)) return { fehler: "Bestätigung abgelaufen (15 Minuten) – Vorschlag neu erstellen." };
     if (b.notaus !== false) return { fehler: b.notaus === true ? "NOT-AUS aktiv – auch keine Paper-Buchung." : "Not-Aus-Zustand unbekannt – keine Paper-Buchung." };
     if (!b.portfolio || b.portfolio.art !== "simulation") return { fehler: "Kein Simulations-Portfolio." };
-    const risiko = P.risikoPruefen(b.portfolio, { seite: vorschlag.richtung, symbol: vorschlag.symbol, wert: vorschlag.betrag_geschaetzt }, b.limits, { jetzt: b.jetzt, kurse: b.kurse || { [vorschlag.symbol]: vorschlag.preisannahme } });
+    // ab 11-05g: Annahmen mitgeben – der Paper-Kern prüft beim Kauf Orderwert plus Gebühr gegen das Spielgeld (wie im Vorschlag)
+    const risiko = P.risikoPruefen(b.portfolio, { seite: vorschlag.richtung, symbol: vorschlag.symbol, wert: vorschlag.betrag_geschaetzt }, b.limits, { jetzt: b.jetzt, kurse: b.kurse || { [vorschlag.symbol]: vorschlag.preisannahme }, annahmen: b.annahmen });
     if (risiko.bestanden !== vorschlag.risiko.bestanden || JSON.stringify(risiko.gruende) !== JSON.stringify(vorschlag.risiko.gruende)) return { fehler: "Risikostatus hat sich geändert – neuer Vorschlag und neue Bestätigung nötig.", risiko };
     if (!risiko.bestanden) return { fehler: "Risikoprüfung nicht bestanden: " + risiko.gruende.join("; ") };
     const r = P.orderAusfuehren(b.portfolio, buchungsParameter(vorschlag, b));
     if (r.doppelt) return { fehler: "Dieser Vorschlag wurde schon gebucht." };
+    // ab 11-05g: hat der Paper-Kern nicht ausgeführt (z. B. Orderwert plus Gebühr über dem Spielgeld), nie als Erfolg melden
+    if (!r.order || r.order.zustand !== "gefuellt") {
+      const e = b.portfolio.ledger.find((x) => r.order && x.trade_id === r.order.trade_id);
+      return { fehler: "Nicht ausgeführt: " + ((e && e.grund) || (r.risiko && r.risiko.gruende.join("; ")) || "Zustand " + (r.order ? r.order.zustand : "unbekannt")) + "." };
+    }
     return { ok: true, trade_id: r.order.trade_id, zustand: r.order.zustand, hinweis: "SIMULATION – im lokalen Paper-Kern gebucht, keine Order an einen Broker." };
   }
 

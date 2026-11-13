@@ -14,6 +14,14 @@
   // Großbuchstaben-Folge als möglicher Ticker. Nicht \b: In JavaScript ist „ä“ kein Wortzeichen, sonst würde aus „März“ das Symbol „M“.
   const BUCHSTABE = "A-Za-z0-9ÄÖÜäöüß";
   const TICKER_IM_TEXT = (flags = "") => new RegExp(`(?<![${BUCHSTABE}])[A-Z]{1,10}(?:\\.[A-Z]{1,2})?(?![${BUCHSTABE}])`, flags);
+  // ab 11-06f: buchstabierte Symbole aus der Spracherkennung („A A P L“, „i. b. m.“) zusammensetzen – erst ab 3 Einzelbuchstaben,
+  // damit Abkürzungen wie „z. B.“, „u. a.“ oder „d. h.“ nicht zu Symbolen werden. Zweibuchstabige Symbole bitte in einem Wort nennen.
+  const BUCHSTABIERT = new RegExp(`(?<![${BUCHSTABE}])[A-Za-z](?:[ .-]+[A-Za-z]){2,4}(?![${BUCHSTABE}])\\.?`, "g");
+  // Füllwörter, die nach „analysiere …“ oder „Aktie …“ stehen können und nie als Symbol vorgeschlagen werden
+  const FUELLWORT = new Set(["der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "mal", "mir", "uns", "bitte", "jetzt", "noch", "auch", "heute", "mein", "meine", "bei", "von", "zu", "für", "fuer", "aktie", "kurz", "genau", "von", "vom", "seit", "nach", "über", "ueber", "unter", "stop"]);
+  // Gängige Abkürzungen vorher entfernen – vorher wurde aus „z. B.“ das Symbol „B“ (Rückfrage „Mehrere Symbole“)
+  const ABKUERZUNG = /(?<![A-Za-zÄÖÜäöüß])(?:z\.\s?B|u\.\s?a|d\.\s?h|u\.\s?U|o\.\s?ä|v\.\s?a|s\.\s?o|s\.\s?u)\.(?![A-Za-zÄÖÜäöüß])/g;
+  const buchstabiertZusammen = (s) => s.replace(ABKUERZUNG, " ").replace(BUCHSTABIERT, (m) => m.replace(/[^A-Za-z]/g, "").toUpperCase());
 
   // ---------- Intents ----------
   // Ergebnis: { intent, symbol, zeitraum, wert, art, rueckfrage, fehler }
@@ -38,9 +46,11 @@
   // optionen.watchlist: Einträge der lokalen Aktien-Watchlist. Firmennamen werden NIE automatisch einem Ticker zugeordnet; passt ein
   // Wort zu einem selbst vergebenen Anzeigenamen, wird das Symbol nur als Auswahl angeboten (vorschlaege), nichts wird ausgeführt.
   function intentErkennen(text, { watchlist = [] } = {}) {
-    const roh = String(text || "").trim();
+    const roh = buchstabiertZusammen(String(text || "").trim());
     const t = roh.toLowerCase().replace(/^\s*(hey\s+)?jarvis[,\s]+/, "");
-    const bezugAktie = /\b(aktie|aktien|symbol|ticker|watch\s?list|budget|rebalanc\w*|13f|form ?4|insider|pelosi|kongress)\b/.test(t) || TICKER_IM_TEXT().test(roh.replace(/^\s*(hey\s+)?jarvis[,\s]+/i, ""));
+    const wlSymbole = new Set((Array.isArray(watchlist) ? watchlist : []).map((x) => String(x && x.symbol || "").toUpperCase()).filter((s) => s.length >= 2));
+    const wlKlein = [...new Set(t.split(/[^a-zäöüß0-9.-]+/).map((w) => w.replace(/\.$/, "").toUpperCase()).filter((w) => wlSymbole.has(w)))];
+    const bezugAktie = /\b(aktie|aktien|symbol|ticker|watch\s?list|budget|rebalanc\w*|13f|form ?4|insider|pelosi|kongress)\b/.test(t) || TICKER_IM_TEXT().test(roh.replace(/^\s*(hey\s+)?jarvis[,\s]+/i, "")) || wlKlein.length > 0;
     let intent = null;
     for (const [name, rx] of MUSTER) if (rx.test(t)) { intent = name; break; }
     if (!intent) return { intent: null };
@@ -50,6 +60,8 @@
     // bis 10 Großbuchstaben erfassen, damit zu lange „Symbole“ als ungültig gemeldet statt übergangen werden
     const kandidaten = [...new Set((roh.match(TICKER_IM_TEXT("g")) || []).filter((x) => !KEIN_TICKER.has(x)))];
     const e = { intent, symbol: null, zeitraum: null, wert: null, art: null, rueckfrage: null, fehler: null, vorschlaege: [] };
+    // ab 11-06f: kleingeschriebenes Symbol (häufig bei Spracheingabe) nur, wenn es genau so in deiner Watchlist steht – sonst Rückfrage
+    if (!kandidaten.length && wlKlein.length === 1) { kandidaten.push(wlKlein[0]); e.aus_watchlist = true; }
     if (intent === "hilfe") { if (kandidaten.length === 1) e.symbol = kandidaten[0]; return e; }
     if (intent === "budget") {
       // Symbol optional (sonst Sitzungssymbol); ein genannter Zeitraum wird erkannt und in der Antwort als „gilt nicht für Budget“ erklärt
@@ -64,9 +76,14 @@
     if (!kandidaten.length) {
       const wort = (t.match(/\b(?:aktie|zu|für|fuer|von)\s+([a-zäöü][\wäöü.-]{1,20})/) || [])[1];
       const woerter = t.split(/[^a-zäöüß0-9.-]+/).filter((w) => w.length >= 3);
+      // ein kurzes Wort direkt nach dem Befehlswort, das wie ein Symbol aussieht („analysiere msft“) → nur als Rückfrage vorschlagen
+      const kurz = [(t.match(/\baktie\s+([a-z]{2,5})(?![a-zäöüß])/) || [])[1], (t.match(/\b(?:analys\w*|nachrichten zu|news zu|meldungen zu|alarm(?: für| fuer)?|watch\s?list)\s+([a-z]{2,5})(?![a-zäöüß])/) || [])[1]]
+        .find((w) => w && !FUELLWORT.has(w)) || null;
       e.vorschlaege = (Array.isArray(watchlist) ? watchlist : []).filter((x) => x && x.anzeigename && woerter.some((w) => String(x.anzeigename).toLowerCase().split(/\s+/).includes(w))).map((x) => x.symbol).slice(0, 5);
       e.rueckfrage = e.vorschlaege.length ? `Kein Börsensymbol genannt. Laut deinen Watchlist-Namen kämen in Frage: ${e.vorschlaege.join(", ")} – bitte das Symbol ausdrücklich nennen. Es wurde nichts ausgeführt.`
-        : wort ? `„${wort}“ ist kein Börsensymbol, eine Zuordnung zum Ticker ist nicht belegt. Bitte das US-Symbol nennen, z. B. „analysiere AAPL“. Es wurde nichts ausgeführt.` : "Für welches US-Aktiensymbol? Bitte z. B. „analysiere AAPL“ sagen. Es wurde nichts ausgeführt.";
+        : kurz ? `„${kurz}“ ist so kein Börsensymbol, eine Zuordnung zum Ticker ist nicht belegt. Falls ein Symbol gemeint ist: in Großbuchstaben („${kurz.toUpperCase()}“) oder buchstabiert („${kurz.toUpperCase().split("").join(" ")}“) nennen – kleingeschriebene Symbole gelten nur aus deiner Watchlist, Firmennamen werden nicht zugeordnet. Es wurde nichts ausgeführt.`
+          : wort ? `„${wort}“ ist kein Börsensymbol, eine Zuordnung zum Ticker ist nicht belegt. Bitte das US-Symbol nennen, z. B. „analysiere AAPL“. Es wurde nichts ausgeführt.`
+            : "Für welches US-Aktiensymbol? Bitte z. B. „analysiere AAPL“ sagen. Es wurde nichts ausgeführt.";
       return e;
     }
     // Krypto-Paar (…USDT) bei Watchlist-Befehlen: auf die getrennte Krypto-Kursliste verweisen statt nur „ungültig“ (ab 11-02g)
@@ -88,20 +105,27 @@
     if (z.zeitraum) e.zeitraum = z.zeitraum;
     if (intent === "alarm") {
       // kein \b vor „über“: „ü“ ist in JavaScript-Regex kein Wortzeichen
-      const m = t.match(/(?:^|\s)(über|ueber|unter|stop)\s+(\d+(?:[.,]\d{1,2})?)(?![\d.,])/);
+      // ab 11-06b: Tausenderpunkt („über 1.000“) wie zahlLesen – vorher „Wert fehlt“
+      const m = t.match(/(?:^|\s)(über|ueber|unter|stop)\s+(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?![\d.,]\d)/);
       if (!m) { e.rueckfrage = `Für den Alarm fehlt der Wert: z. B. „Alarm ${e.symbol} über 210“. Es gibt keinen Vorgabewert. Es wurde nichts angelegt.`; return e; }
       e.art = { "über": "ueber", ueber: "ueber", unter: "unter", stop: "stop" }[m[1]];
-      e.wert = Number(m[2].replace(",", "."));
+      e.wert = zahlLesen(m[2]);
     }
     return e;
   }
 
   const DATUM = "(\\d{4}-\\d{2}-\\d{2}|\\d{1,2}\\.\\d{1,2}\\.\\d{4})";
-  const ZEIT_HINWEIS = /\b(seit|bis|vom|ab dem|letzte[nrms]?|vergangene[nrms]?|gestern|vorgestern|woche\w*|monat\w*|jahr\w*|quartal\w*|ytd|januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember)\b|\d{1,2}\.\d{1,2}\.(\d{2}\b)?|\d{4}-\d{2}-\d{2}/;
+  // ab 11-06b: „heute“ ergänzt (wurde still ignoriert, die Analyse lief über alle Kerzen); Datum nur mit Monat 1–12 („über 21.50.“ ist kein Datum)
+  const ZEIT_HINWEIS = /\b(seit|bis|vom|ab dem|letzte[nrms]?|vergangene[nrms]?|heute|gestern|vorgestern|woche\w*|monat\w*|jahr\w*|quartal\w*|ytd|januar|februar|märz|maerz|april|mai|juni|juli|august|september|oktober|november|dezember)\b|\d{1,2}\.(?:0?[1-9]|1[0-2])\.(\d{2}\b)?|\d{4}-\d{2}-\d{2}/;
   const ZEIT_BEISPIEL = "„letzte 30 Tage“, „seit 15.01.2026“ oder „vom 01.01.2026 bis 30.06.2026“";
   function isoDatum(s) { if (/^\d{4}-/.test(s)) return s; const [d, m, y] = s.split("."); return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`; }
   // t: kleingeschriebener Befehl. Ergebnis: { zeitraum } | { rueckfrage } | {} (keine Zeitangabe)
-  function zeitraumErkennen(t) {
+  // ab 11-06f: Zahlwörter vor Tag/Woche („letzten zwei Wochen“, „vergangene dreißig Tage“) in Ziffern; Monate bleiben Rückfrage
+  const ZAHLWORT = { ein: 1, eine: 1, einen: 1, einem: 1, zwei: 2, drei: 3, vier: 4, "fünf": 5, fuenf: 5, sechs: 6, sieben: 7, acht: 8, neun: 9, zehn: 10, elf: 11, "zwölf": 12, zwoelf: 12,
+    vierzehn: 14, "fünfzehn": 15, fuenfzehn: 15, zwanzig: 20, "dreißig": 30, dreissig: 30, vierzig: 40, "fünfzig": 50, fuenfzig: 50, sechzig: 60, neunzig: 90, hundert: 100 };
+  const ZAHLWORT_RE = new RegExp(`(^|[^a-zäöüß])(${Object.keys(ZAHLWORT).sort((a, b) => b.length - a.length).join("|")})\\s+(tag|tage|tagen|woche|wochen)\\b`, "g");
+  function zeitraumErkennen(tRoh) {
+    const t = tRoh.replace(ZAHLWORT_RE, (m, vor, wort, einheit) => `${vor}${ZAHLWORT[wort]} ${einheit}`);
     const vonBis = t.match(new RegExp(`\\b(?:vom|von|seit)\\s+(?:dem\\s+)?${DATUM}\\s+bis\\s+(?:zum\\s+)?${DATUM}(?!\\d|\\.\\d)`));
     const seit = !vonBis && t.match(new RegExp(`\\bseit\\s+(?:dem\\s+)?${DATUM}(?!\\d|\\.\\d)`));
     const letzte = t.match(/\b(?:letzte[nrm]?|vergangene[nrm]?)\s+(\d{1,4})\s+(tag|tage|tagen|woche|wochen)\b/);
