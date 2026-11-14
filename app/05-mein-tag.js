@@ -233,6 +233,22 @@ function simAutoZeigen() {
   const k = simEl("sim-notaus");
   if (k) { k.textContent = SIMAUTO.simNotaus ? "Simulations-Not-Aus ausschalten" : "Simulations-Not-Aus aktivieren"; k.setAttribute("aria-pressed", String(!SIMAUTO.simNotaus)); }
   simStandZeigen();
+  simStatusMarke();
+}
+// ab 14zc: gut sichtbarer Laufstatus aus denselben Zuständen wie die Zustandszeile (nur Anzeige): Läuft, Pausiert, Gestoppt, Fehler;
+// sonst „Aus“ mit Grund – Datenfehler (keine gültigen Kurse), Not-Aus aktiv oder bereit (startet nur per Klick)
+function simStatusMarke() {
+  const el = simEl("sim-status-marke"); if (!el) return;
+  const z = SIMAUTO.zustand, n = simAutoNotaus();
+  const [art, text] = z === "laeuft" ? ["laeuft", "Läuft – bucht Paper-Trades automatisch ohne Einzelbestätigung"]
+    : z === "pausiert" ? ["pausiert", "Pausiert – keine Buchung, fortsetzen mit „Paper-Automatik starten“"]
+    : z === "gestoppt" ? ["gestoppt", "Gestoppt" + (SIMAUTO.grund ? " – " + SIMAUTO.grund : "")]
+    : z === "fehler" ? ["fehler", "Fehler" + (SIMAUTO.grund ? " – " + SIMAUTO.grund : "")]
+    : !SIM.datensatz || !SIM.datenStatus || !SIM.datenStatus.ok ? ["datenfehler", "Aus – Datenfehler oder keine gültigen Kurse, Start gesperrt"]
+    : n === "aktiv" ? ["notaus", "Aus – Not-Aus des Workers aktiv, Start gesperrt"]
+    : n === "sim-aktiv" ? ["notaus", "Aus – Simulations-Not-Aus aktiv, Start gesperrt"]
+    : ["bereit", "Aus – bereit, startet nur nach Klick auf „Paper-Automatik starten“"];
+  el.dataset.zustand = art; el.textContent = text;
 }
 // Stand der Spielgeld-Simulation (ab 15b): Bargeld, Positionen mit letztem Kurs des Datensatzes, realisiert (Ledger) und nicht realisiert
 function simStandZeigen() {
@@ -514,6 +530,76 @@ function simLedgerCsv(p = SIM.portfolio) {
     e.annahmen && e.annahmen.gebuehrPct, e.annahmen && e.annahmen.slippagePct, e.annahmen && e.annahmen.quelle, e.risiko ? e.risiko.bestanden : "", e.risiko ? (e.risiko.gruende || []).join(" | ") : "", e.grund].map(feld).join(";"));
   return "# SIMULATION – Spielgeld, keine Order, kein Konto\n" + kopf.join(";") + "\n" + zeilen.join("\n") + (zeilen.length ? "\n" : "");
 }
+// ab 14zc: Datenqualitätsbericht zu echten Tageskursen (Datei oder Worker) – nur Anzeige, ändert keine Werte. Größter Schluss-zu-Schluss-Sprung
+// mit Datum als Hinweis auf mögliche Splits/Sondereffekte (ab 10 % markiert); Lücken über 4 Kalendertage lehnt die Kerzenprüfung ohnehin ab.
+function simDatenbericht(ds) {
+  const el = simEl("sim-datenbericht"); if (!el) return;
+  if (!ds || ds.synthetisch !== false || !ds.kerzen || ds.kerzen.length < 2) { el.hidden = true; el.replaceChildren(); return; }
+  const k = ds.kerzen, n = k.length, z2 = (x) => x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  let sprung = { pct: -1 }, vierTage = 0, ohneVolumen = 0;
+  for (let i = 1; i < n; i++) {
+    const pct = Math.abs(k[i].c / k[i - 1].c - 1) * 100;
+    if (pct > sprung.pct) sprung = { pct, datum: simDatum(k[i].t), von: k[i - 1].c, bis: k[i].c };
+    if (Math.round((k[i].t - k[i - 1].t) / 86400000) === 4) vierTage++;
+  }
+  for (const x of k) if (!(x.v > 0)) ohneVolumen++;
+  const zeilen = [
+    `Herkunft: ${ds.quelle}`,
+    `${ds.symbol} · ${n.toLocaleString("de-DE")} Tageskerzen · ${simDatum(k[0].t)} bis ${simDatum(k[n - 1].t)} (Handelstage laut Quelle) · ${simDatenalter(ds).art} · historisch, keine Live-Kurse`,
+    `Geprüft: Reihenfolge, Doppelte, Lücken über 4 Kalendertage, OHLC-Plausibilität, Preise über 0, keine Kerze nach heute; Tagessprünge über ${SIM.ausreisser.maxSprungPct} % oder Spannen über ${SIM.ausreisser.maxSpannePct} % sperren den Lauf`,
+    `Größter Schluss-zu-Schluss-Sprung: ${sprung.pct.toFixed(1).replace(".", ",")} % am ${sprung.datum} (${z2(sprung.von)} → ${z2(sprung.bis)})` + (sprung.pct >= 10 ? " – ungewöhnlich groß: möglicher Split oder Sondereffekt; JARVIS ändert historische Werte nicht" : " – unauffällig"),
+    `Lücken von 4 Kalendertagen (Feiertag + Wochenende): ${vierTage} · Kerzen ohne Volumen: ${ohneVolumen}`,
+    ...(ds.kodierung ? [`Kodierung der Datei: ${ds.kodierung}`] : []),
+    ...(ds.gekuerzt ? [`Gekürzt: Datei hatte ${ds.gekuerzt.gesamt.toLocaleString("de-DE")} Datenzeilen, verwendet ab ${ds.gekuerzt.ab} (${ds.gekuerzt.weg.toLocaleString("de-DE")} ältere Zeilen nicht verwendet)`] : []),
+  ];
+  el.replaceChildren(...zeilen.map((t) => Object.assign(document.createElement("li"), { textContent: t })));
+  el.hidden = false;
+}
+// ab 14zc: Replay-Bericht (Markdown) – Datenquelle, Zeitraum, Kursart, SEC-Stand, Regel, Annahmen, Grenzen, Ergebnis, Ledger und Laufprotokoll.
+// Exportiert nur vorhandene Daten; rückblickende Auswertung, keine Prognose, keine Anlageberatung.
+function simReplayBerichtText() {
+  const ds = SIM.datensatz, p = SIM.portfolio, L = (p && p.ledger) || [], f = SIM.limits.frequenz;
+  const z2 = (x) => (Number.isFinite(x) ? x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "–");
+  const gef = L.filter((e) => e.zustand === "gefuellt"), echt = ds && ds.synthetisch === false;
+  const realisiert = gef.filter((e) => e.seite === "verkauf" && Number.isFinite(e.ergebnis)).reduce((s, e) => s + e.ergebnis, 0);
+  const gebuehren = gef.reduce((s, e) => s + (Number.isFinite(e.gebuehr) ? e.gebuehr : 0), 0);
+  const zelle = (x) => String(x === undefined || x === null ? "" : x).replace(/\|/g, "/").replace(/\s+/g, " ");
+  return [
+    "# JARVIS Replay-Bericht – Paper-Trading mit Spielgeld", "",
+    `Erstellt ${new Date().toLocaleString("de-DE")} (Ortszeit) · ${JARVIS_STAND || "Stand unbekannt"}`, "",
+    "> Simulation mit Spielgeld: keine Order, kein Konto, kein Echtgeld. Rückblickende Auswertung historischer bzw. synthetischer Kurse – keine Prognose, kein Gewinnversprechen, keine Anlageberatung.", "",
+    "## Datenquelle",
+    `- Kursart: ${SIM_KURSART_TEXT[simKursart(ds)]}`,
+    `- Datensatz: ${ds ? ds.name : "keiner"}`,
+    ...(ds ? [`- Quelle: ${ds.quelle}`, `- Zeitraum: ${ds.kerzen.length} Tageskerzen ${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}`] : []),
+    ...(echt ? [`- Datenalter: ${simDatenalter(ds).art}`, `- ${simSecZeile(ds)}`] : []),
+    `- Datenprüfung: ${SIM.datenStatus ? SIM.datenStatus.text : "nicht geprüft"}`, "",
+    "## Regel",
+    simModus() === "jarvis" ? `- JARVIS-Signale im Replay: Kauf ${SIM.orderWert} USD nur bei Systemeinschätzung „Kaufkandidat“ UND Entry-Timer „jetzt“; Verkauf der ganzen Position nur bei Stop, Zeit-Stop oder Ziel 2 des Exit-Planers (Teilverkäufe nicht implementiert)`
+      : `- EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}-Kreuzung: Kauf ${SIM.orderWert} USD, Verkauf der ganzen Position; Ausführung zur Eröffnung der nächsten Kerze`, "",
+    "## Annahmen und Grenzen (Testwerte der Simulation)",
+    `- Gebühr ${SIM.annahmen.gebuehrPct} %, Slippage ${SIM.annahmen.slippagePct} % je Ausführung`,
+    `- höchstens ${SIM.limits.maxOrderWert} USD je Order, ${SIM.limits.maxPositionen} Positionen, Tagesverlust bis ${SIM.limits.maxTagesverlust} USD, ${f.max} Orders in ${Math.round(f.fensterMs / 86400000)} Tagen`, "",
+    "## Ergebnis (Spielgeld, rückblickend)",
+    `- Startkapital ${z2(SIM.startkapital)} USD · Bargeld ${z2(p ? p.bargeld : SIM.startkapital)} USD · realisiert ${z2(realisiert)} USD · Gebühren gesamt ${z2(gebuehren)} USD`,
+    `- Orders: ${gef.length} ausgeführt (${gef.filter((e) => e.seite === "kauf").length} Käufe, ${gef.filter((e) => e.seite === "verkauf").length} Verkäufe), ${L.filter((e) => e.zustand !== "gefuellt" && e.zustand !== "unklar").length} abgelehnt, ${L.filter((e) => e.zustand === "unklar").length} unklar`,
+    `- ${(simEl("sim-stand") || {}).textContent || ""}`, "",
+    "## Ledger",
+    "| Datum | Seite | Symbol | Zustand | Stück | Preis | Volumen USD | Gebühr USD | Ergebnis USD | Ledger-ID |",
+    "|---|---|---|---|---|---|---|---|---|---|",
+    ...(L.length ? L.map((e) => "| " + [Number.isFinite(e.zeit) ? simDatum(e.zeit) : "", e.seite, e.symbol, e.zustand, e.menge, e.preis, z2(e.volumen), z2(e.gebuehr), Number.isFinite(e.ergebnis) ? z2(e.ergebnis) : "", e.trade_id].map(zelle).join(" | ") + " |") : ["| – | keine Buchung | | | | | | | | |"]), "",
+    "## Laufprotokoll (älteste zuerst)",
+    ...(SIMAUTO.protokoll.length ? SIMAUTO.protokoll.map((x) => "- " + zelle(simAutoProtokollText(x))) : ["- Noch kein Lauf."]), "",
+  ].join("\n");
+}
+document.getElementById("sim-bericht").addEventListener("click", () => {
+  if (!SIM.datensatz) { simEl("sim-detail").textContent = "Kein gültiger Datensatz – kein Replay-Bericht exportiert. Nächster Schritt: Datenquelle wählen bzw. Kurse laden."; return; }
+  try {
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([simReplayBerichtText()], { type: "text/markdown;charset=utf-8" })), download: "jarvis-replay-bericht-" + new Date().toISOString().slice(0, 10) + ".md" });
+    document.body.append(a); a.click(); a.remove();
+  } catch (e) { simEl("sim-detail").textContent = "Bericht-Export fehlgeschlagen: " + ((e && e.message) || e) + " – keine Datei erstellt."; return; }
+  simEl("sim-detail").textContent = `Replay-Bericht exportiert (${(SIM.portfolio && SIM.portfolio.ledger || []).length} Ledger-Einträge, ${SIMAUTO.protokoll.length} Protokollzeilen).`;
+});
 document.getElementById("sim-ledger-csv").addEventListener("click", () => {
   if (!SIM.portfolio || !(SIM.portfolio.ledger || []).length) { simEl("sim-detail").textContent = "Kein Ledger vorhanden – nichts exportiert."; return; }
   // ab 11-13w: scheitert das Erzeugen der Datei, Fehler melden – vorher blieb eine frühere Erfolgsmeldung stehen (unbehandelter Fehler)
@@ -599,7 +685,19 @@ async function simDateiGewaehlt() {
   SIM.dateiDatensatz = null;
   if (f.size > JarvisDaten.CSV_GRENZEN.maxZeichen) { st.textContent = `Nicht übernommen: „${name}“ ist zu groß. Nächster Schritt: kürzeren Zeitraum speichern.`; simVorschau(); return; }
   let text;
-  try { text = await f.text(); } catch (e) { st.textContent = `Nicht übernommen: „${name}“ nicht lesbar. Nächster Schritt: Datei erneut speichern und wählen.`; simVorschau(); return; }
+  // ab 14zc: Kodierung – gültiges UTF-8 (auch mit BOM), sonst Windows-1252 (z. B. aus Excel gespeichert); nie geraten, beides wird angezeigt
+  let kodierung = "UTF-8";
+  try { const roh = await f.arrayBuffer(); try { text = new TextDecoder("utf-8", { fatal: true }).decode(roh); } catch (x) { text = new TextDecoder("windows-1252").decode(roh); kodierung = "Windows-1252"; } }
+  catch (e) { st.textContent = `Nicht übernommen: „${name}“ nicht lesbar. Nächster Schritt: Datei erneut speichern und wählen.`; simVorschau(); return; }
+  // ab 14zc: lange Dateien (z. B. vollständige Stooq-Historie) – nur bei eindeutig aufsteigender ISO-Datumsspalte am Zeilenanfang die jüngsten
+  // CSV_GRENZEN.maxZeilen Zeilen übernehmen und das sichtbar melden; sonst lehnt die strenge Prüfung die Datei ab (nie still gekürzt)
+  let gekuerzt = null;
+  const MAXZ = JarvisDaten.CSV_GRENZEN.maxZeilen, zl = text.replace(/^\uFEFF/, "").split(/\r\n|\n|\r/), kopfI = zl.findIndex((z) => z.trim());
+  const datenZ = kopfI < 0 ? [] : zl.slice(kopfI + 1).filter((z) => z.trim()), isoAm = (z) => (z.match(/^\s*(\d{4}-\d{2}-\d{2})\s*[,;]/) || [])[1];
+  if (datenZ.length > MAXZ && isoAm(datenZ[0]) && isoAm(datenZ[datenZ.length - 1]) && isoAm(datenZ[0]) < isoAm(datenZ[datenZ.length - 1])) {
+    gekuerzt = { gesamt: datenZ.length, weg: datenZ.length - MAXZ, ab: isoAm(datenZ[datenZ.length - MAXZ]) };
+    text = [zl[kopfI], ...datenZ.slice(-MAXZ)].join("\n");
+  }
   const r = JarvisDaten.csvKerzenLesen(text, { symbol: sym });
   if (!r.ok) { st.textContent = `Nicht übernommen („${name}“): ${r.fehler.join(" ")} Nächster Schritt: ${r.rueckfrage ? "Datei mit Komma als Trennzeichen und Punkt als Dezimalzeichen speichern" : "Symbol eintragen bzw. Datei prüfen"} und erneut wählen – nichts gebucht.`; simVorschau(); return; }
   // ab 13z: Kerzen nach dem heutigen Tag gibt es nicht (Datumsfehler oder falsche Datei) → ungültig, nichts übernommen, Bot bleibt gesperrt
@@ -608,8 +706,8 @@ async function simDateiGewaehlt() {
   const von = simDatum(r.info.von), bis = simDatum(r.info.bis), gespeichert = new Date(f.lastModified).toISOString().slice(0, 16).replace("T", " ");
   SIM.dateiDatensatz = { name: `Datei ${r.info.symbol} ${von}–${bis}`, symbol: r.info.symbol, intervall: "1d", kalender: "boerse", synthetisch: false,
     quelle: `Kursdatei „${name}“ (gespeichert ${gespeichert} UTC, gelesen ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC) – Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft`,
-    kerzen: r.kerzen.map((k) => ({ ...k, v: Number.isFinite(k.v) ? k.v : 0 })) };
-  st.textContent = `Gelesen: ${r.info.symbol} · ${r.info.zeilen} Tageskerzen ${von} bis ${bis} · Datei „${name}“, gespeichert ${gespeichert} UTC · Datenalter: ${simDatenalter(SIM.dateiDatensatz).art} · ${r.info.sortierung}. Kurse laut Datei – JARVIS prüft die Herkunft nicht gegen den Anbieter.`;
+    kodierung, gekuerzt, kerzen: r.kerzen.map((k) => ({ ...k, v: Number.isFinite(k.v) ? k.v : 0 })) };
+  st.textContent = `Gelesen: ${r.info.symbol} · ${r.info.zeilen} Tageskerzen ${von} bis ${bis} · Datei „${name}“, gespeichert ${gespeichert} UTC (Ortszeit ${new Date(f.lastModified).toLocaleString("de-DE")}) · Kodierung ${kodierung} · Datenalter: ${simDatenalter(SIM.dateiDatensatz).art} · ${r.info.sortierung}${gekuerzt ? ` · Datei hat ${gekuerzt.gesamt.toLocaleString("de-DE")} Datenzeilen – übernommen die jüngsten ${MAXZ.toLocaleString("de-DE")} ab ${gekuerzt.ab}, ${gekuerzt.weg.toLocaleString("de-DE")} ältere Zeilen nicht verwendet` : ""}. Kurse laut Datei – JARVIS prüft die Herkunft nicht gegen den Anbieter.`;
   simVorschau();
 }
 simEl("sim-datei").addEventListener("change", simDateiGewaehlt);

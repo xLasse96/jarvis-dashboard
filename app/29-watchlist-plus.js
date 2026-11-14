@@ -107,7 +107,8 @@ function scrVerlaufMerken(r, symbole, sec, jetzt = Date.now()) {
   const d = scrLesen();
   if (speicherBeschaedigt(SCR.schluessel)) return null;
   const e = { zeit: new Date(jetzt).toISOString(), regeln: String(r.name || "eigene").slice(0, 80), symbole: symbole.slice(0, 10),
-    bestanden: r.ergebnisse.filter((x) => x.bestanden_alle).map((x) => x.ticker), anzahl: r.ergebnisse.length,
+    // ab 14zc (trader-screener screen.py:282, 289): mit Regel „top“ nur die besten top Bestandenen speichern, Rest als Anzahl
+    bestanden: r.ergebnisse.filter((x) => x.bestanden_alle).map((x) => x.ticker).slice(0, r.top || undefined), ...(r.mehr_bestanden ? { mehr_bestanden: r.mehr_bestanden } : {}), anzahl: r.ergebnisse.length,
     kurs_stand: [...new Set(r.ergebnisse.map((x) => x.kennzahlen && x.kennzahlen.kurs_stand).filter(Boolean))].sort().slice(-1)[0] || null,
     sec_stand: sec ? [...new Set(r.ergebnisse.map((x) => x.kennzahlen && x.kennzahlen.period_end).filter(Boolean))].sort().slice(-1)[0] || null : null };
   d.verlauf = [e, ...d.verlauf].slice(0, SCR.maxVerlauf);

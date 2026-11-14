@@ -817,7 +817,8 @@ async function wzScreenen(ev) {
       saetze.push(S.datensatz(s, technisch, fundamental));
     }
     const r = S.screenen(saetze, spec);
-    liste.replaceChildren(...r.ergebnisse.map((e) => {
+    // ab 14zc: Regel „top“ (eigene Regeln) – nur die besten top Bestandenen anzeigen, Rest als Zeile „… N weitere bestanden“
+    liste.replaceChildren(...(r.angezeigt || r.ergebnisse).map((e) => {
       const k = e.kennzahlen;
       const timer = wzKnoten("button", { type: "button", klasse: "knopf zweit", text: "Entry-Timer für " + e.ticker });
       timer.addEventListener("click", () => { wzEl("wz-ein-symbol").value = e.ticker; wzZeigen("einstieg"); wzEinstieg(); });
@@ -827,7 +828,7 @@ async function wzScreenen(ev) {
         wzKnoten("div", { klasse: "klein", text: `Stand: Kurs ${k.kurs_stand || "nicht verfügbar"}${sec ? " · SEC-Quartal bis " + (k.period_end || "nicht verfügbar") : ""}` }),
         ...e.hinweise.map((h) => wzKnoten("div", { klasse: "klein", text: h })),
         e.bestanden_alle ? timer : null);
-    }));
+    }), ...(r.mehr_bestanden ? [wzKnoten("li", { "data-ergebnis": "mehr", klasse: "klein", text: `… ${r.mehr_bestanden} weitere bestanden (nicht angezeigt – Regel „top“: ${r.top})` })] : []));
     status.textContent = `${r.name}: ${r.ergebnisse.filter((e) => e.bestanden_alle).length} von ${r.ergebnisse.length} bestanden. Quelle: Alpaca IEX${sec ? " und SEC XBRL (unbestätigte externe Daten)" : ""}. Keine Empfehlung.`;
     if (typeof scrVerlaufMerken === "function") scrVerlaufMerken(r, symbole, sec); // ab 11-07k
   } catch (e) {

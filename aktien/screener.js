@@ -137,6 +137,7 @@
     }
     for (const [i, k] of (spec.rank || []).entries()) if (!k || !k.metric || !["asc", "desc", undefined].includes(k.order)) return `Rangfolge ${i + 1} braucht metric und order asc/desc.`;
     if (!["fail", "skip", undefined].includes(spec.missing)) return 'missing muss "fail" oder "skip" sein.';
+    if (spec.top !== undefined && spec.top !== null && !(Number.isInteger(spec.top) && spec.top >= 1)) return "top muss eine ganze Zahl ab 1 sein.";
     return null;
   }
 
@@ -177,7 +178,12 @@
     });
     rangfolge(ergebnisse, spec.rank || []);
     ergebnisse.sort((a, b) => (a.bestanden_alle ? 0 : 1) - (b.bestanden_alle ? 0 : 1) || (b.punkte || 0) - (a.punkte || 0) || a.durchgefallen.length - b.durchgefallen.length || a.ticker.localeCompare(b.ticker));
-    return { ergebnisse, name: spec.name || "eigene Regeln" };
+    // ab 14zc (trader-screener, screen.py:241, 251-252, 282): „top“ begrenzt die angezeigten Bestandenen, der Rest erscheint als „… N weitere
+    // bestanden“. ergebnisse bleibt vollständig (Analyseablauf, Verlauf); angezeigt = beste top Bestandene plus alle Nicht-Bestandenen.
+    const top = spec.top || null, bestandene = ergebnisse.filter((e) => e.bestanden_alle);
+    const mehr_bestanden = top && bestandene.length > top ? bestandene.length - top : 0;
+    const angezeigt = top ? ergebnisse.filter((e) => !e.bestanden_alle || bestandene.indexOf(e) < top) : ergebnisse;
+    return { ergebnisse, name: spec.name || "eigene Regeln", top, mehr_bestanden, angezeigt };
   }
 
   function rangfolge(ergebnisse, schluessel) {

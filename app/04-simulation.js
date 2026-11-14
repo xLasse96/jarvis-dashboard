@@ -53,6 +53,7 @@ function simVorschau() {
   if (!ds) {
     simEl("sim-vorschau").textContent = "Modus: SIMULATION – kein Konto, keine Order.\nDatenquelle: echte Tageskurse – noch keine gültigen Kurse gelesen. Symbol eintragen und eine CSV mit Tageskursen wählen oder Kurse über deinen Worker laden; bis dahin ist der Bot gesperrt.";
     simEl("sim-start").disabled = true;
+    if (typeof simDatenbericht === "function") simDatenbericht(null);
     SIM.datenStatus = { ok: false, text: "keine Kursdatei gelesen → Bot gesperrt. Nächster Schritt: Symbol eintragen und eine CSV mit Tageskursen wählen oder Kurse über deinen Worker laden." };
     if (typeof simAutoZeigen === "function") simAutoZeigen();
     return false;
@@ -80,6 +81,8 @@ function simVorschau() {
         : `gültig – ${ds.kerzen.length} historische Tageskurse ${ds.symbol} aus Datei (${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}; ${simDatenalter(ds).art}; Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft`)
       : `gültig – ${ds.kerzen.length} synthetische Testkurse (Tageskerzen, künstliche Kalenderdaten ${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}, keine Marktdaten); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft` }
     : { ok: false, text: "UNGÜLTIG – " + (q.ok ? a.fehler.text : q.fehler.text) + " → Bot gesperrt, nichts gebucht. Nächster Schritt: anderen Testdatensatz wählen oder die Seite neu laden." };
+  // ab 14zc: Datenqualitätsbericht (nur echte Kurse; Funktion aus 05-mein-tag.js, später geladen)
+  if (typeof simDatenbericht === "function") simDatenbericht(ds);
   // ab 15a: Zustandszeile der Paper-Automatik mit Datenquelle und Not-Aus aktuell halten (Funktion aus 05-mein-tag.js, später geladen)
   if (typeof simAutoZeigen === "function") simAutoZeigen();
   return gueltig;
