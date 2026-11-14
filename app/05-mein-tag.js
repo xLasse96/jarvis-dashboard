@@ -218,8 +218,8 @@ function simAutoZeigen() {
   simEl("sim-zustand").textContent = [
     `Paper-Automatik: ${SIMAUTO_TEXT[z] || "Fehler: unbekannter Zustand"}${SIMAUTO.seit ? " (seit " + SIMAUTO.seit.toLocaleTimeString("de-DE") + ")" : ""}${SIMAUTO.grund ? " – " + SIMAUTO.grund : ""}`,
     `Modus: ${simModus() === "jarvis" ? "JARVIS-Signale im Replay (Analyse + Entry-Timer + Exit-Planer) – kauft mit synthetischen Testkursen nach den bestehenden Regeln nicht" : "automatische Paper-Demo mit EMA 5/20 (kein vollständig integrierter Trader-Skill)"} · Daten: ${SIM.datenStatus ? SIM.datenStatus.text : "werden geprüft …"}`,
-    (simModus() === "jarvis" ? `Regel: JARVIS-Signale – Kauf nur bei Systemeinschätzung „Kaufkandidat“ UND Entry-Timer „jetzt“ (Kauf ${SIM.orderWert} USD); Verkauf der ganzen Position nur bei Stop, Zeit-Stop oder Ziel 2 des Exit-Planers (Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? "Replay " + ds.name + " – synthetische Testkurse, simulierte Börsenzeit" : "–"}`
-      : `Regel: Strategie EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}-Kreuzung (Regelquelle: Simulationseinstellungen, Kauf ${SIM.orderWert} USD, Verkauf immer der ganzen Position – Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? ds.name + " – synthetische Testkurse" : "–"}`)
+    (simModus() === "jarvis" ? `Regel: JARVIS-Signale – Kauf nur bei Systemeinschätzung „Kaufkandidat“ UND Entry-Timer „jetzt“ (Kauf ${SIM.orderWert} USD); Verkauf der ganzen Position nur bei Stop, Zeit-Stop oder Ziel 2 des Exit-Planers (Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? "Replay " + ds.name + (ds.synthetisch === false ? " – historische Kurse aus Datei" : " – synthetische Testkurse") + ", simulierte Börsenzeit" : "–"}`
+      : `Regel: Strategie EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}-Kreuzung (Regelquelle: Simulationseinstellungen, Kauf ${SIM.orderWert} USD, Verkauf immer der ganzen Position – Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? ds.name + (ds.synthetisch === false ? " – historische Kurse aus Datei" : " – synthetische Testkurse") : "–"}`)
       + `${ds && z !== "aus" ? ` · Kerze ${SIM.pos} von ${ende} (${simDatum(ds.kerzen[Math.max(0, Math.min(SIM.pos, ds.kerzen.length) - 1)].t)})` : ""}`,
     (n === "aktiv" ? "Not-Aus (Worker): AKTIV – die Automatik startet nicht bzw. stoppt vor dem nächsten Schritt."
       : n === "sim-aktiv" ? "Simulations-Not-Aus: AKTIV – die Automatik startet nicht bzw. stoppt vor dem nächsten Schritt (nach jedem Laden aktiv; ausschalten per Knopf)."
@@ -227,6 +227,9 @@ function simAutoZeigen() {
       + " Worker-Not-Aus: " + ({ aktiv: "aktiv", aus: "aus (bestätigt)", unbekannt: "unbekannt (kein Worker verbunden) – schützt diese lokale Simulation nicht" })[simAutoWorkerNotaus()] + ".",
   ].join("\n");
   simEl("sim-abbruch").disabled = z !== "laeuft" && z !== "pausiert";
+  // ab 14a: Kennzeichnung nach Datenart (synthetische Testkurse oder historische Kurse aus Datei)
+  const kz = simEl("sim-kennzeichnung");
+  if (kz) { const b = document.createElement("b"); const echt = ds && ds.synthetisch === false; b.textContent = echt ? "Paper-Trading – Spielgeld – historische Kurse aus Datei (keine Live-Kurse)." : "Paper-Trading – Spielgeld – synthetische Daten."; kz.replaceChildren(b, echt ? " Der Bot spielt die Tageskurse der gewählten Datei ab: kein Broker, keine Order, kein Echtgeld; Kurse laut Datei, nicht gegen den Anbieter geprüft. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist." : " Der Bot handelt nur mit simulierten Testkursen im Browser: keine echten Kurse, kein Broker, keine Order, kein Echtgeld. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist."); }
   const k = simEl("sim-notaus");
   if (k) { k.textContent = SIMAUTO.simNotaus ? "Simulations-Not-Aus ausschalten" : "Simulations-Not-Aus aktivieren"; k.setAttribute("aria-pressed", String(!SIMAUTO.simNotaus)); }
   simStandZeigen();
@@ -243,7 +246,7 @@ function simStandZeigen() {
     const kurs = ds && sym === ds.symbol ? kursDs : null;
     if (kurs === null) { offenBekannt = false; return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })} (Kurs im Datensatz unbekannt)`; }
     const nr = (kurs - x.einstand) * x.menge; offen += nr;
-    return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })}, letzter synthetischer Kurs ${kurs.toLocaleString("de-DE")}, nicht realisiert ${simUsd(nr)}`;
+    return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })}, letzter ${ds.synthetisch === false ? "Kurs laut Datei" : "synthetischer Kurs"} ${kurs.toLocaleString("de-DE")}, nicht realisiert ${simUsd(nr)}`;
   });
   el.textContent = `Stand (Spielgeld): Bargeld ${simUsd(p.bargeld)} · Positionen: ${pos.length ? pos.join("; ") : "keine"} · realisiert ${simUsd(realisiert)} · nicht realisiert ${pos.length ? (offenBekannt ? simUsd(offen) : "teilweise unbekannt") : simUsd(0)} · Bot: ${SIMAUTO_TEXT[SIMAUTO.zustand] || SIMAUTO.zustand}`;
 }
@@ -259,11 +262,12 @@ function simAutoProtokollText(p) {
   const signal = p.seite === "kauf" ? `Signal: EMA ${SIM.strategie.kurz} kreuzt EMA ${SIM.strategie.lang} nach oben → Kauf ${SIM.orderWert} USD` : `Signal: EMA ${SIM.strategie.kurz} kreuzt EMA ${SIM.strategie.lang} nach unten → Verkauf der Position`;
   const sig = p.signal || signal;
   const z2 = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const emaText = Number.isFinite(p.ema_kurz) && Number.isFinite(p.ema_lang) ? ` · Kurs am Signal: Schluss ${z2(p.schluss)} (Testkerze ${p.signal_kerze}, Testdatum ${p.signal_datum}), EMA ${SIM.strategie.kurz} ${z2(p.ema_kurz)} ${p.seite === "kauf" ? ">" : "<"} EMA ${SIM.strategie.lang} ${z2(p.ema_lang)}` : "";
-  if (p.art === "ausgefuehrt") return `${zeit} · ausgeführt (${sig}): ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} ${p.menge.toLocaleString("de-DE")} Stück zu ${p.preis.toLocaleString("de-DE", { maximumFractionDigits: 4 })} (Eröffnung Testkerze ${p.kerze})${emaText} · Betrag ${z2(p.volumen)} USD + Gebühr ${z2(p.gebuehr)} USD${p.seite === "verkauf" && Number.isFinite(p.ergebnis) ? " · Ergebnis " + z2(p.ergebnis) + " USD (nach Gebühren)" : ""} · Ledger ${p.trade_id} · SIMULATION, synthetische Testkurse`;
+  const echt = p.kursart === "datei", kWort = echt ? "Kerze" : "Testkerze", dWort = echt ? "Datum" : "Testdatum", art = echt ? "historische Kurse aus Datei" : "synthetische Testkurse";
+  const emaText = Number.isFinite(p.ema_kurz) && Number.isFinite(p.ema_lang) ? ` · Kurs am Signal: Schluss ${z2(p.schluss)} (${kWort} ${p.signal_kerze}, ${dWort} ${p.signal_datum}), EMA ${SIM.strategie.kurz} ${z2(p.ema_kurz)} ${p.seite === "kauf" ? ">" : "<"} EMA ${SIM.strategie.lang} ${z2(p.ema_lang)}` : "";
+  if (p.art === "ausgefuehrt") return `${zeit} · ausgeführt (${sig}): ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} ${p.menge.toLocaleString("de-DE")} Stück zu ${p.preis.toLocaleString("de-DE", { maximumFractionDigits: 4 })} (Eröffnung ${kWort} ${p.kerze})${emaText} · Betrag ${z2(p.volumen)} USD + Gebühr ${z2(p.gebuehr)} USD${p.seite === "verkauf" && Number.isFinite(p.ergebnis) ? " · Ergebnis " + z2(p.ergebnis) + " USD (nach Gebühren)" : ""} · Ledger ${p.trade_id} · SIMULATION, ${art}`;
   if (p.art === "abgelehnt") return `${zeit} · abgelehnt (${sig}): ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} (Kerze ${p.kerze}) – ${p.grund} · Ledger ${p.trade_id} · nichts gebucht`;
   if (p.art === "unklar") return `${zeit} · unklar: ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} (Kerze ${p.kerze}) – Ausführung nicht bestätigt · Ledger ${p.trade_id}`;
-  if (p.art === "kein-signal") return `${zeit} · kein Signal: Testkerzen ${p.von} bis ${p.bis} (synthetische Testkurse) verarbeitet, keine EMA-Kreuzung mit ausführbarer Order`;
+  if (p.art === "kein-signal") return `${zeit} · kein Signal: ${kWort}n ${p.von} bis ${p.bis} (${art}) verarbeitet, keine EMA-Kreuzung mit ausführbarer Order`;
   return `${zeit} · ${p.text}`;
 }
 function simAutoProtokollZeigen() {
@@ -293,11 +297,11 @@ function simAutoSchrittProtokoll(vorher, ds, posAlt, posNeu) {
   const neu = (SIM.portfolio && SIM.portfolio.ledger ? SIM.portfolio.ledger.slice(vorher) : []);
   const kerzeNr = (t) => ds.kerzen.findIndex((k) => k.t === t) + 1;
   for (const e of neu) {
-    if (e.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", seite: e.seite, symbol: e.symbol, menge: e.menge, preis: e.preis, volumen: e.volumen, gebuehr: e.gebuehr, ergebnis: e.ergebnis, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), ...simAutoEmaAm(ds, e.signal_zeit) });
+    if (e.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: ds.synthetisch === false ? "datei" : "synthetisch", seite: e.seite, symbol: e.symbol, menge: e.menge, preis: e.preis, volumen: e.volumen, gebuehr: e.gebuehr, ergebnis: e.ergebnis, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), ...simAutoEmaAm(ds, e.signal_zeit) });
     else if (e.zustand === "unklar") simAutoProtokoll({ art: "unklar", seite: e.seite, symbol: e.symbol, trade_id: e.trade_id, kerze: kerzeNr(e.zeit) });
     else simAutoProtokoll({ art: "abgelehnt", seite: e.seite, symbol: e.symbol, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), grund: e.grund || (e.risiko && e.risiko.gruende && e.risiko.gruende.join("; ")) || "vom Paper-Kern abgelehnt (" + e.zustand + ")" });
   }
-  if (!neu.length) simAutoProtokoll({ art: "kein-signal", von: posAlt + 1, bis: posNeu });
+  if (!neu.length) simAutoProtokoll({ art: "kein-signal", kursart: ds.synthetisch === false ? "datei" : "synthetisch", von: posAlt + 1, bis: posNeu });
 }
 function simStoppen(grund, zustand) {
   clearInterval(SIM.uhr);
@@ -421,10 +425,10 @@ function simSignalSchritt() {
       if (e.teilziel) SIMAUTO.ziele[zielKey] = [...(SIMAUTO.ziele[zielKey] || []), e.teilziel];
       const plan = b.plan ? ((b.plan.aktionen || [])[0] ? b.plan.aktionen[0].text : `halten – wirksamer Stop ${b.plan.wirksamerStop} (${b.plan.stopGrund})`) : "keine Position";
       const einText = !b.einstieg ? "kein Ergebnis" : b.einstieg.urteil === "jetzt" ? "„jetzt“ – " + String(b.einstieg.text || "").slice(0, 120) : `kein Einstieg (${b.einstieg.urteil || b.einstieg.status}) – ${String(b.einstieg.text || "").slice(0, 140)}`;
-      simAutoProtokoll({ art: "entscheidung", text: `Testkerze ${i + 2} (Testdatum ${datum}, ${b.quelle}, Kurs ${Number(b.kurs).toLocaleString("de-DE")}): Analyse: ${b.einschaetzung ? b.einschaetzung.kategorie : "nicht verfügbar"} · Entry-Timer: ${einText} · Exit-Planer: ${plan} → Entscheidung: ${e.grund}` });
+      simAutoProtokoll({ art: "entscheidung", text: `${ds.synthetisch === false ? "Kerze" : "Testkerze"} ${i + 2} (${ds.synthetisch === false ? "Datum" : "Testdatum"} ${datum}, ${b.quelle}, Kurs ${Number(b.kurs).toLocaleString("de-DE")}): Analyse: ${b.einschaetzung ? b.einschaetzung.kategorie : "nicht verfügbar"} · Entry-Timer: ${einText} · Exit-Planer: ${plan} → Entscheidung: ${e.grund}` });
       const kerzeNr = (t) => ds.kerzen.findIndex((k) => k.t === t) + 1;
       for (const x of SIM.portfolio.ledger.slice(vorher)) {
-        if (x.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", signal: e.grund, seite: x.seite, symbol: x.symbol, menge: x.menge, preis: x.preis, volumen: x.volumen, gebuehr: x.gebuehr, ergebnis: x.ergebnis, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
+        if (x.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: ds.synthetisch === false ? "datei" : "synthetisch", signal: e.grund, seite: x.seite, symbol: x.symbol, menge: x.menge, preis: x.preis, volumen: x.volumen, gebuehr: x.gebuehr, ergebnis: x.ergebnis, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
         else if (x.zustand === "unklar") simAutoProtokoll({ art: "unklar", signal: e.grund, seite: x.seite, symbol: x.symbol, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
         else simAutoProtokoll({ art: "abgelehnt", signal: e.grund, seite: x.seite, symbol: x.symbol, trade_id: x.trade_id, kerze: kerzeNr(x.zeit), grund: x.grund || (x.risiko && x.risiko.gruende && x.risiko.gruende.join("; ")) || "vom Paper-Kern abgelehnt (" + x.zustand + ")" });
       }
@@ -482,7 +486,7 @@ function simLedgerZeigen() {
     if (!e) { li.textContent = SIM.dbFehler ? "⚠ " + simSperrgrund() : !SIM.bereit ? "Simulationsstand wird geladen …" : SIM.beschaedigt ? "⚠ " + SIM_BESCHAEDIGT : "Noch keine simulierten Orders."; return li; }
     li.dataset.tradeId = e.trade_id;
     const k = Object.assign(document.createElement("button"), { type: "button" });
-    k.textContent = (/^(Synthetisch |JARVIS-Signale )/.test(String(e.datensatz || "")) ? "Testdatum " : "") + simDatum(e.zeit) + " · " + (e.seite === "kauf" ? "KAUF " : "VERKAUF ") + e.symbol + " · " + (text[e.zustand] || e.zustand)
+    k.textContent = (/^(JARVIS-Signale )?Synthetisch /.test(String(e.datensatz || "")) ? "Testdatum " : "") + simDatum(e.zeit) + " · " + (e.seite === "kauf" ? "KAUF " : "VERKAUF ") + e.symbol + " · " + (text[e.zustand] || e.zustand)
       + (e.zustand === "gefuellt" ? " · " + e.menge.toLocaleString("de-DE") + " Stück zu " + e.preis.toLocaleString("de-DE", { maximumFractionDigits: 4 }) : "") + " · SIMULATION";
     k.addEventListener("click", () => simDetail(e));
     li.append(k);
@@ -580,6 +584,27 @@ function simDetail(e) {
 }
 simEl("sim-start").addEventListener("click", simStarten);
 simEl("sim-stopp").addEventListener("click", () => { if (SIMAUTO.zustand !== "laeuft") return; simStoppen("Angehalten – fortsetzen mit „Paper-Automatik starten“ (bereits verarbeitete Kerzen werden nicht erneut gebucht).", "pausiert"); simEl("sim-start").focus(); });
+// ab 14a: eigene Kursdatei (CSV, Tageskurse) – nur lokal gelesen; strenge Prüfung (JarvisDaten.csvKerzenLesen): Symbol Pflicht, jede fehlerhafte
+// Zeile, doppelte Tage oder Lücken → nichts übernommen; danach dieselbe Daten- und Ausreißerprüfung wie die Testdatensätze (simVorschau)
+async function simDateiGewaehlt() {
+  const inp = simEl("sim-datei"), st = simEl("sim-datei-status"), f = inp.files && inp.files[0];
+  if (!f) return;
+  if (SIM.uhr) { st.textContent = "Nicht gelesen: Während eines Laufs wird keine neue Kursdatei übernommen – erst pausieren oder stoppen."; return; }
+  const sym = String(simEl("sim-datei-symbol").value || "").trim().toUpperCase(), name = String(f.name).slice(0, 60);
+  SIM.dateiDatensatz = null;
+  if (f.size > JarvisDaten.CSV_GRENZEN.maxZeichen) { st.textContent = `Nicht übernommen: „${name}“ ist zu groß. Nächster Schritt: kürzeren Zeitraum speichern.`; simVorschau(); return; }
+  let text;
+  try { text = await f.text(); } catch (e) { st.textContent = `Nicht übernommen: „${name}“ nicht lesbar. Nächster Schritt: Datei erneut speichern und wählen.`; simVorschau(); return; }
+  const r = JarvisDaten.csvKerzenLesen(text, { symbol: sym });
+  if (!r.ok) { st.textContent = `Nicht übernommen („${name}“): ${r.fehler.join(" ")} Nächster Schritt: ${r.rueckfrage ? "Datei mit Komma als Trennzeichen und Punkt als Dezimalzeichen speichern" : "Symbol eintragen bzw. Datei prüfen"} und erneut wählen – nichts gebucht.`; simVorschau(); return; }
+  const von = simDatum(r.info.von), bis = simDatum(r.info.bis), gespeichert = new Date(f.lastModified).toISOString().slice(0, 16).replace("T", " ");
+  SIM.dateiDatensatz = { name: `Datei ${r.info.symbol} ${von}–${bis}`, symbol: r.info.symbol, intervall: "1d", kalender: "boerse", synthetisch: false,
+    quelle: `Kursdatei „${name}“ (gespeichert ${gespeichert} UTC, gelesen ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC) – Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft`,
+    kerzen: r.kerzen.map((k) => ({ ...k, v: Number.isFinite(k.v) ? k.v : 0 })) };
+  st.textContent = `Gelesen: ${r.info.symbol} · ${r.info.zeilen} Tageskerzen ${von} bis ${bis} · Datei „${name}“, gespeichert ${gespeichert} UTC · Datenalter: ${simDatenalter(SIM.dateiDatensatz).art} · ${r.info.sortierung}. Kurse laut Datei – JARVIS prüft die Herkunft nicht gegen den Anbieter.`;
+  simVorschau();
+}
+simEl("sim-datei").addEventListener("change", simDateiGewaehlt);
 simEl("sim-abbruch").addEventListener("click", simSofortStoppen);
 simEl("sim-notaus").addEventListener("click", simAutoSimNotausUmschalten);
 simEl("sim-signalquelle").addEventListener("change", () => simAutoZeigen());

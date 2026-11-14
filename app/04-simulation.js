@@ -20,13 +20,31 @@ const simEl = (id) => document.getElementById(id);
 const simDatum = (t) => new Date(t).toISOString().slice(0, 10);
 const simUsd = (x) => (Number.isFinite(x) ? x.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " USD (Spielgeld)" : "–");
 function simOptionen() { return { strategie: SIM.strategie, orderWert: SIM.orderWert, annahmen: SIM.annahmen, limits: SIM.limits, ausreisser: SIM.ausreisser, startkapital: SIM.startkapital }; }
+// ab 14a (14.11.): dritte Datenquelle „eigene Kursdatei“ – historische Tageskurse aus einer vom Nutzer gewählten CSV (JarvisDaten.csvKerzenLesen),
+// gekennzeichnet als Kurse laut Datei (Herkunft nicht gegen den Anbieter geprüft); ohne gelesene Datei ist der Bot gesperrt
+SIM.dateiDatensatz = null;
 function simDatensatz() {
-  return simEl("sim-datensatz").value === "B" ? PaperKern.testdatensatz({ name: "Synthetisch B", saat: 7 }) : PaperKern.testdatensatz({ name: "Synthetisch A", saat: 42 });
+  const v = simEl("sim-datensatz").value;
+  if (v === "datei") return SIM.dateiDatensatz;
+  return v === "B" ? PaperKern.testdatensatz({ name: "Synthetisch B", saat: 7 }) : PaperKern.testdatensatz({ name: "Synthetisch A", saat: 42 });
+}
+// Datenalter in ganzen Tagen seit der letzten Kerze (UTC-Tag) und Einordnung: höchstens 5 Tage (Regel der Analyse) = „bis <Datum>, Tagesschluss“, sonst historisch
+function simDatenalter(ds) {
+  const tage = Math.floor((Date.now() - ds.kerzen[ds.kerzen.length - 1].t) / 86400000);
+  return { tage, art: tage <= 5 ? `Tagesschluss bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)} (${tage} Tage alt, keine Echtzeitkurse)` : `historisch – letzte Kerze ${tage} Tage alt, keine aktuellen Kurse` };
 }
 // Vor dem Lauf: Datenquelle, Datenzeitpunkt, Qualität, Modus, Annahmen und Grenzen anzeigen; ungültige Daten sperren den Start
 function simVorschau() {
   const ds = simDatensatz();
   SIM.datensatz = ds;
+  if (simEl("sim-datei-bereich")) simEl("sim-datei-bereich").hidden = simEl("sim-datensatz").value !== "datei";
+  if (!ds) {
+    simEl("sim-vorschau").textContent = "Modus: SIMULATION – kein Konto, keine Order.\nDatenquelle: eigene Kursdatei – noch keine gültige Datei gelesen. Symbol eintragen und eine CSV mit Tageskursen wählen; bis dahin ist der Bot gesperrt.";
+    simEl("sim-start").disabled = true;
+    SIM.datenStatus = { ok: false, text: "keine Kursdatei gelesen → Bot gesperrt. Nächster Schritt: Symbol eintragen und eine CSV mit Tageskursen wählen." };
+    if (typeof simAutoZeigen === "function") simAutoZeigen();
+    return false;
+  }
   const q = JarvisDaten.kerzenPruefen(ds.kerzen, { intervall: ds.intervall, kalender: ds.kalender });
   const a = q.ok ? JarvisDaten.ausreisserPruefen(q.kerzen, SIM.ausreisser) : null;
   const gueltig = Boolean(q.ok && a && a.ok);
@@ -34,7 +52,7 @@ function simVorschau() {
   simEl("sim-vorschau").textContent = [
     "Modus: SIMULATION – kein Konto, keine Order, keine Verbindung zu Worker oder Broker.",
     "Datenquelle: " + ds.name + " – " + ds.quelle + ".",
-    "Datenzeitpunkt: " + ds.kerzen.length + " Tageskerzen " + simDatum(ds.kerzen[0].t) + " bis " + simDatum(ds.kerzen[ds.kerzen.length - 1].t) + " (historische Testdaten, nicht aktuell).",
+    "Datenzeitpunkt: " + ds.kerzen.length + " Tageskerzen " + simDatum(ds.kerzen[0].t) + " bis " + simDatum(ds.kerzen[ds.kerzen.length - 1].t) + (ds.synthetisch === false ? " – " + simDatenalter(ds).art + "." : " (historische Testdaten, nicht aktuell)."),
     gueltig ? "Datenqualität: gültig (Reihenfolge, Doppelte, Lücken, Ausreißer geprüft)." : "⚠ Datenqualität UNGÜLTIG: " + (q.ok ? a.fehler.text : q.fehler.text) + " – Simulation gesperrt.",
     "Annahmen (Testannahme, keine Live-Werte): Gebühr " + SIM.annahmen.gebuehrPct + " %, Slippage " + SIM.annahmen.slippagePct + " % je Ausführung.",
     "Grenzen (Testwerte der Simulation): " + SIM.orderWert + " USD je Kauf (höchstens " + SIM.limits.maxOrderWert + "), höchstens " + SIM.limits.maxPositionen + " Positionen, Tagesverlust bis "
@@ -43,7 +61,9 @@ function simVorschau() {
   ].join("\n");
   simEl("sim-start").disabled = !gueltig || Boolean(SIM.uhr);
   // ab 13y: Datenstatus für die Zustandszeile der Paper-Automatik (ungültige Daten sperren den Start, Grund und nächster Schritt sichtbar)
-  SIM.datenStatus = gueltig ? { ok: true, text: `gültig – ${ds.kerzen.length} synthetische Testkurse (Tageskerzen, künstliche Kalenderdaten ${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}, keine Marktdaten); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft` }
+  SIM.datenStatus = gueltig ? { ok: true, text: ds.synthetisch === false
+      ? `gültig – ${ds.kerzen.length} historische Tageskurse ${ds.symbol} aus Datei (${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}; ${simDatenalter(ds).art}; Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft`
+      : `gültig – ${ds.kerzen.length} synthetische Testkurse (Tageskerzen, künstliche Kalenderdaten ${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}, keine Marktdaten); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft` }
     : { ok: false, text: "UNGÜLTIG – " + (q.ok ? a.fehler.text : q.fehler.text) + " → Bot gesperrt, nichts gebucht. Nächster Schritt: anderen Testdatensatz wählen oder die Seite neu laden." };
   // ab 15a: Zustandszeile der Paper-Automatik mit Datenquelle und Not-Aus aktuell halten (Funktion aus 05-mein-tag.js, später geladen)
   if (typeof simAutoZeigen === "function") simAutoZeigen();

@@ -21,9 +21,10 @@
     if (!naechste) return null;
     const tag = naechste.t - (naechste.t % TAG), jetzt = tag + 15 * 60 * MIN;
     return {
-      name: `Replay ${ds.name} (synthetische Testkurse)`,
+      name: `Replay ${ds.name} (${ds.synthetisch === false ? "historische Kurse aus Datei" : "synthetische Testkurse"})`,
       beschreibung: `${ds.quelle || "Testdatensatz"} – Replay bis ${new Date(ds.kerzen[i].t).toISOString().slice(0, 10)}; ${ZEITHINWEIS}`,
-      synthetisch: true, replay: true, arten: ["kerzen", "kurs"], jetzt,
+      // ab 14a: synthetisch nur, wenn der Datensatz synthetisch ist (Kursdatei = echte historische Kurse laut Datei); Börsenzeit und Kurs bleiben simuliert
+      synthetisch: ds.synthetisch !== false, replay: true, arten: ["kerzen", "kurs"], jetzt,
       async kerzen() { return ds.kerzen.slice(0, i + 1).map((k) => ({ ...k })); },
       async kurs() { return { symbol: ds.symbol, preis: naechste.o, waehrung: "USD", zeit: new Date(jetzt - 5 * MIN).toISOString() }; },
       async uhr() { return { offen: true, naechste_schliessung: new Date(tag).toISOString().slice(0, 10) + "T16:00:00-05:00", simuliert: true }; },
