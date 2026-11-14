@@ -292,7 +292,8 @@ window.addEventListener("storage", (e) => { if (e.key === SIM.schluessel) simFre
 // Zuverlässig erkennbar sind nur zwei Fälle: (1) Tabs ab 11-06d melden ihren Stand über BroadcastChannel „jarvis-version“ – weicht er ab,
 // zeigen beide einen Hinweis. (2) Versionen vor 11-06c schreiben die Simulation nur in localStorage: ändert sich dort der Text, ohne
 // dass IndexedDB ihn enthält, schreibt ein älterer Tab – seine Buchungen gelten nicht. Ältere Tabs selbst können nichts anzeigen.
-const JARVIS_STAND = (((document.getElementById("stand-kennung") || {}).textContent || "").match(/v[\d.]+-\d{4}-\d{2}-\d{2}[a-z]?/) || [""])[0];
+// ab 14za (Hotfix 14.11.2026): Kennung mit bis zu zwei Buchstaben (nach „z“ folgt „za“) – der Zeichenkettenvergleich unten bleibt sortierrichtig
+const JARVIS_STAND = (((document.getElementById("stand-kennung") || {}).textContent || "").match(/v[\d.]+-\d{4}-\d{2}-\d{2}[a-z]{0,2}/) || [""])[0];
 const VERSION_KANAL = typeof BroadcastChannel === "function" ? new BroadcastChannel("jarvis-version") : null;
 const VERSION_HINWEISE = new Map();
 function versionHinweisSetzen(art, text) {
@@ -303,7 +304,7 @@ function versionHinweisSetzen(art, text) {
 }
 // Versionskennungen gleichen Aufbaus sind als Text vergleichbar (v0.9-2026-11-06c < v0.9-2026-11-06d)
 function versionVergleichen(fremd) {
-  if (!JARVIS_STAND || typeof fremd !== "string" || !/^v[\d.]+-\d{4}-\d{2}-\d{2}[a-z]?$/.test(fremd) || fremd === JARVIS_STAND) return;
+  if (!JARVIS_STAND || typeof fremd !== "string" || !/^v[\d.]+-\d{4}-\d{2}-\d{2}[a-z]{0,2}$/.test(fremd) || fremd === JARVIS_STAND) return;
   versionHinweisSetzen("fremd", fremd > JARVIS_STAND
     ? `⚠ In einem anderen Tab ist die neuere JARVIS-Version ${fremd} geöffnet (dieser Tab: ${JARVIS_STAND}). Bitte diesen Tab neu laden, damit alle Tabs dieselben Regeln und denselben Speicher nutzen.`
     : `⚠ In einem anderen Tab läuft noch die ältere JARVIS-Version ${fremd} (dieser Tab: ${JARVIS_STAND}). Bitte den anderen Tab neu laden.`);

@@ -335,7 +335,7 @@ function simSchritt() {
     // inzwischen angehalten: Schritt ist gespeichert, die Meldung „Angehalten …“ bleibt stehen
     if (!SIM.uhr) { simLedgerZeigen(); return; }
     simAnzeigen(r.bericht);
-    if (SIM.pos >= ende) simStoppen(ende < ds.kerzen.length ? `Fertig – Zeitraum bis ${simDatum(ds.kerzen[ende - 1].t)} abgespielt.` : "Fertig – Testdatensatz vollständig abgespielt.", "aus");
+    if (SIM.pos >= ende) simStoppen(ende < ds.kerzen.length ? `Fertig – Zeitraum bis ${simDatum(ds.kerzen[ende - 1].t)} abgespielt.` : (ds.synthetisch === false ? "Fertig – Kursdatei vollständig abgespielt." : "Fertig – Testdatensatz vollständig abgespielt."), "aus");
   }).finally(() => { SIM.arbeit = null; });
   return SIM.arbeit;
 }
@@ -597,6 +597,9 @@ async function simDateiGewaehlt() {
   try { text = await f.text(); } catch (e) { st.textContent = `Nicht übernommen: „${name}“ nicht lesbar. Nächster Schritt: Datei erneut speichern und wählen.`; simVorschau(); return; }
   const r = JarvisDaten.csvKerzenLesen(text, { symbol: sym });
   if (!r.ok) { st.textContent = `Nicht übernommen („${name}“): ${r.fehler.join(" ")} Nächster Schritt: ${r.rueckfrage ? "Datei mit Komma als Trennzeichen und Punkt als Dezimalzeichen speichern" : "Symbol eintragen bzw. Datei prüfen"} und erneut wählen – nichts gebucht.`; simVorschau(); return; }
+  // ab 13z: Kerzen nach dem heutigen Tag gibt es nicht (Datumsfehler oder falsche Datei) → ungültig, nichts übernommen, Bot bleibt gesperrt
+  const heute = new Date().toISOString().slice(0, 10);
+  if (simDatum(r.info.bis) > heute) { st.textContent = `Nicht übernommen („${name}“): Die Datei enthält Kerzen nach heute (letzte ${simDatum(r.info.bis)}, heute ${heute} UTC) – Kurse aus der Zukunft gibt es nicht. Nächster Schritt: Datumsangaben prüfen oder die Datei erneut beim Anbieter speichern und wählen – nichts gebucht.`; simVorschau(); return; }
   const von = simDatum(r.info.von), bis = simDatum(r.info.bis), gespeichert = new Date(f.lastModified).toISOString().slice(0, 16).replace("T", " ");
   SIM.dateiDatensatz = { name: `Datei ${r.info.symbol} ${von}–${bis}`, symbol: r.info.symbol, intervall: "1d", kalender: "boerse", synthetisch: false,
     quelle: `Kursdatei „${name}“ (gespeichert ${gespeichert} UTC, gelesen ${new Date().toISOString().slice(0, 16).replace("T", " ")} UTC) – Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft`,
