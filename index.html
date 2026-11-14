@@ -1859,14 +1859,18 @@
           <select class="feld" id="sim-datensatz">
             <option value="A">Testdatensatz „Synthetisch A“ (Saat 42)</option>
             <option value="B">Testdatensatz „Synthetisch B“ (Saat 7)</option>
-            <option value="datei">Eigene Kursdatei (CSV, historische Tageskurse)</option>
+            <option value="datei">Echte Tageskurse: eigene Kursdatei (CSV) oder dein Worker</option>
           </select>
         </div>
         <div class="order-zeile" id="sim-datei-bereich" hidden>
           <label for="sim-datei-symbol">Symbol der Datei:</label> <input class="feld" id="sim-datei-symbol" maxlength="8" size="8" spellcheck="false" autocomplete="off" placeholder="z. B. AAPL" aria-describedby="sim-datei-hinweis">
           <label>Kursdatei wählen <input class="feld" type="file" id="sim-datei" accept=".csv,text/csv" aria-describedby="sim-datei-hinweis sim-datei-status"></label>
-          <p class="klein" id="sim-datei-hinweis">CSV mit Kopfzeile Date,Open,High,Low,Close[,Volume], Tageskerzen (z. B. von stooq.com als „aapl_us_d.csv“ gespeichert). Nur lokal gelesen, keine Abfrage. Das Symbol wird nie aus Dateiname oder Inhalt geraten. Herkunft und Richtigkeit der Kurse prüft JARVIS nicht gegen den Anbieter.</p>
+          <button type="button" class="knopf zweit" id="sim-worker-laden" aria-describedby="sim-datei-hinweis sim-datei-status">oder Tageskurse über deinen Worker laden</button>
+          <p class="klein" id="sim-datei-hinweis">CSV mit Kopfzeile Date,Open,High,Low,Close[,Volume], Tageskerzen (z. B. von stooq.com als „aapl_us_d.csv“ gespeichert). Nur lokal gelesen, keine Abfrage. Das Symbol wird nie aus Dateiname oder Inhalt geraten. Herkunft und Richtigkeit der Kurse prüft JARVIS nicht gegen den Anbieter. Über deinen Worker (Zugangscode im Cockpit) kommen Tageskurse von Alpaca (Feed IEX); eine noch laufende Tageskerze wird nicht verwendet.</p>
           <p class="info" id="sim-datei-status" role="status" aria-live="polite">Noch keine Kursdatei gelesen.</p>
+          <label>SEC-Kennzahlen (optional, companyfacts-JSON) <input class="feld" type="file" id="sim-sec-datei" accept=".json,application/json" aria-describedby="sim-sec-hinweis sim-sec-status"></label>
+          <p class="klein" id="sim-sec-hinweis">Datei „companyfacts“ der SEC zum selben Unternehmen, im Browser unverändert gespeichert von data.sec.gov/api/xbrl/companyfacts/CIK##########.json (z. B. CIK0000320193 für Apple). Nur lokal gelesen, keine Abfrage. Im Replay zählt je Kerze nur, was bis zu diesem Tag bei der SEC eingereicht war (Feld „filed“) – kein Blick in spätere Meldungen. SEC-Dateien sind keine Kurse.</p>
+          <p class="info" id="sim-sec-status" role="status" aria-live="polite">Keine SEC-Datei gelesen – JARVIS-Signale ohne Kernkennzahlen (kein Kauf).</p>
         </div>
         <div class="order-zeile">
           <label for="sim-signalquelle">Signalquelle:</label>
@@ -1940,7 +1944,7 @@
 
 <!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
 <p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
-<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-14za</span></footer>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-14zb</span></footer>
 
 <script src="app/01-uhr.js"></script>
 <script src="app/02-chat-ki.js"></script>

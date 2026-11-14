@@ -217,9 +217,9 @@ function simAutoZeigen() {
   const ende = ds ? Math.min(ds.kerzen.length, SIMAUTO.bisPos || ds.kerzen.length) : 0;
   simEl("sim-zustand").textContent = [
     `Paper-Automatik: ${SIMAUTO_TEXT[z] || "Fehler: unbekannter Zustand"}${SIMAUTO.seit ? " (seit " + SIMAUTO.seit.toLocaleTimeString("de-DE") + ")" : ""}${SIMAUTO.grund ? " – " + SIMAUTO.grund : ""}`,
-    `Modus: ${simModus() === "jarvis" ? "JARVIS-Signale im Replay (Analyse + Entry-Timer + Exit-Planer) – kauft mit synthetischen Testkursen nach den bestehenden Regeln nicht" : "automatische Paper-Demo mit EMA 5/20 (kein vollständig integrierter Trader-Skill)"} · Daten: ${SIM.datenStatus ? SIM.datenStatus.text : "werden geprüft …"}`,
-    (simModus() === "jarvis" ? `Regel: JARVIS-Signale – Kauf nur bei Systemeinschätzung „Kaufkandidat“ UND Entry-Timer „jetzt“ (Kauf ${SIM.orderWert} USD); Verkauf der ganzen Position nur bei Stop, Zeit-Stop oder Ziel 2 des Exit-Planers (Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? "Replay " + ds.name + (ds.synthetisch === false ? " – historische Kurse aus Datei" : " – synthetische Testkurse") + ", simulierte Börsenzeit" : "–"}`
-      : `Regel: Strategie EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}-Kreuzung (Regelquelle: Simulationseinstellungen, Kauf ${SIM.orderWert} USD, Verkauf immer der ganzen Position – Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? ds.name + (ds.synthetisch === false ? " – historische Kurse aus Datei" : " – synthetische Testkurse") : "–"}`)
+    `Modus: ${simModus() === "jarvis" ? "JARVIS-Signale im Replay (Analyse + Entry-Timer + Exit-Planer) – " + (simKursart(ds) === "synthetisch" ? "kauft mit synthetischen Testkursen nach den bestehenden Regeln nicht" : "Kauf nur bei gültigem Signal; ohne SEC-Kennzahlen keine belastbare Einschätzung") : "automatische Paper-Demo mit EMA 5/20 (kein vollständig integrierter Trader-Skill)"} · Daten: ${SIM.datenStatus ? SIM.datenStatus.text : "werden geprüft …"}`,
+    (simModus() === "jarvis" ? `Regel: JARVIS-Signale – Kauf nur bei Systemeinschätzung „Kaufkandidat“ UND Entry-Timer „jetzt“ (Kauf ${SIM.orderWert} USD); Verkauf der ganzen Position nur bei Stop, Zeit-Stop oder Ziel 2 des Exit-Planers (Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? "Replay " + ds.name + " – " + SIM_KURSART_TEXT[simKursart(ds)] + ", simulierte Börsenzeit" : "–"}`
+      : `Regel: Strategie EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}-Kreuzung (Regelquelle: Simulationseinstellungen, Kauf ${SIM.orderWert} USD, Verkauf immer der ganzen Position – Teilverkäufe nicht implementiert) · Datenquelle: ${ds ? ds.name + " – " + SIM_KURSART_TEXT[simKursart(ds)] : "–"}`)
       + `${ds && z !== "aus" ? ` · Kerze ${SIM.pos} von ${ende} (${simDatum(ds.kerzen[Math.max(0, Math.min(SIM.pos, ds.kerzen.length) - 1)].t)})` : ""}`,
     (n === "aktiv" ? "Not-Aus (Worker): AKTIV – die Automatik startet nicht bzw. stoppt vor dem nächsten Schritt."
       : n === "sim-aktiv" ? "Simulations-Not-Aus: AKTIV – die Automatik startet nicht bzw. stoppt vor dem nächsten Schritt (nach jedem Laden aktiv; ausschalten per Knopf)."
@@ -229,7 +229,7 @@ function simAutoZeigen() {
   simEl("sim-abbruch").disabled = z !== "laeuft" && z !== "pausiert";
   // ab 14a: Kennzeichnung nach Datenart (synthetische Testkurse oder historische Kurse aus Datei)
   const kz = simEl("sim-kennzeichnung");
-  if (kz) { const b = document.createElement("b"); const echt = ds && ds.synthetisch === false; b.textContent = echt ? "Paper-Trading – Spielgeld – historische Kurse aus Datei (keine Live-Kurse)." : "Paper-Trading – Spielgeld – synthetische Daten."; kz.replaceChildren(b, echt ? " Der Bot spielt die Tageskurse der gewählten Datei ab: kein Broker, keine Order, kein Echtgeld; Kurse laut Datei, nicht gegen den Anbieter geprüft. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist." : " Der Bot handelt nur mit simulierten Testkursen im Browser: keine echten Kurse, kein Broker, keine Order, kein Echtgeld. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist."); }
+  if (kz) { const b = document.createElement("b"); const echt = ds && ds.synthetisch === false; const wk = simKursart(ds) === "worker"; b.textContent = wk ? "Paper-Trading – Spielgeld – historische Tageskurse über deinen Worker (Alpaca, Feed IEX; keine Live-Kurse)." : echt ? "Paper-Trading – Spielgeld – historische Kurse aus Datei (keine Live-Kurse)." : "Paper-Trading – Spielgeld – synthetische Daten."; kz.replaceChildren(b, wk ? " Der Bot spielt die über deinen Worker geladenen Tageskurse ab: keine Broker-Order, kein Echtgeld; IEX ist nur eine Börse, Kurse können vom Gesamtmarkt abweichen. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist." : echt ? " Der Bot spielt die Tageskurse der gewählten Datei ab: kein Broker, keine Order, kein Echtgeld; Kurse laut Datei, nicht gegen den Anbieter geprüft. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist." : " Der Bot handelt nur mit simulierten Testkursen im Browser: keine echten Kurse, kein Broker, keine Order, kein Echtgeld. Ergebnisse sagen nichts über Gewinnchancen. Er läuft nur, solange diese Seite offen ist."); }
   const k = simEl("sim-notaus");
   if (k) { k.textContent = SIMAUTO.simNotaus ? "Simulations-Not-Aus ausschalten" : "Simulations-Not-Aus aktivieren"; k.setAttribute("aria-pressed", String(!SIMAUTO.simNotaus)); }
   simStandZeigen();
@@ -246,7 +246,7 @@ function simStandZeigen() {
     const kurs = ds && sym === ds.symbol ? kursDs : null;
     if (kurs === null) { offenBekannt = false; return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })} (Kurs im Datensatz unbekannt)`; }
     const nr = (kurs - x.einstand) * x.menge; offen += nr;
-    return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })}, letzter ${ds.synthetisch === false ? "Kurs laut Datei" : "synthetischer Kurs"} ${kurs.toLocaleString("de-DE")}, nicht realisiert ${simUsd(nr)}`;
+    return `${sym} ${x.menge.toLocaleString("de-DE")} Stück, Einstand ${x.einstand.toLocaleString("de-DE", { maximumFractionDigits: 4 })}, letzter ${simKursart(ds) === "worker" ? "Kurs laut Worker (Alpaca)" : ds.synthetisch === false ? "Kurs laut Datei" : "synthetischer Kurs"} ${kurs.toLocaleString("de-DE")}, nicht realisiert ${simUsd(nr)}`;
   });
   el.textContent = `Stand (Spielgeld): Bargeld ${simUsd(p.bargeld)} · Positionen: ${pos.length ? pos.join("; ") : "keine"} · realisiert ${simUsd(realisiert)} · nicht realisiert ${pos.length ? (offenBekannt ? simUsd(offen) : "teilweise unbekannt") : simUsd(0)} · Bot: ${SIMAUTO_TEXT[SIMAUTO.zustand] || SIMAUTO.zustand}`;
 }
@@ -262,7 +262,7 @@ function simAutoProtokollText(p) {
   const signal = p.seite === "kauf" ? `Signal: EMA ${SIM.strategie.kurz} kreuzt EMA ${SIM.strategie.lang} nach oben → Kauf ${SIM.orderWert} USD` : `Signal: EMA ${SIM.strategie.kurz} kreuzt EMA ${SIM.strategie.lang} nach unten → Verkauf der Position`;
   const sig = p.signal || signal;
   const z2 = (x) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const echt = p.kursart === "datei", kWort = echt ? "Kerze" : "Testkerze", dWort = echt ? "Datum" : "Testdatum", art = echt ? "historische Kurse aus Datei" : "synthetische Testkurse";
+  const echt = p.kursart === "datei" || p.kursart === "worker", kWort = echt ? "Kerze" : "Testkerze", dWort = echt ? "Datum" : "Testdatum", art = SIM_KURSART_TEXT[p.kursart] || SIM_KURSART_TEXT.synthetisch;
   const emaText = Number.isFinite(p.ema_kurz) && Number.isFinite(p.ema_lang) ? ` · Kurs am Signal: Schluss ${z2(p.schluss)} (${kWort} ${p.signal_kerze}, ${dWort} ${p.signal_datum}), EMA ${SIM.strategie.kurz} ${z2(p.ema_kurz)} ${p.seite === "kauf" ? ">" : "<"} EMA ${SIM.strategie.lang} ${z2(p.ema_lang)}` : "";
   if (p.art === "ausgefuehrt") return `${zeit} · ausgeführt (${sig}): ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} ${p.menge.toLocaleString("de-DE")} Stück zu ${p.preis.toLocaleString("de-DE", { maximumFractionDigits: 4 })} (Eröffnung ${kWort} ${p.kerze})${emaText} · Betrag ${z2(p.volumen)} USD + Gebühr ${z2(p.gebuehr)} USD${p.seite === "verkauf" && Number.isFinite(p.ergebnis) ? " · Ergebnis " + z2(p.ergebnis) + " USD (nach Gebühren)" : ""} · Ledger ${p.trade_id} · SIMULATION, ${art}`;
   if (p.art === "abgelehnt") return `${zeit} · abgelehnt (${sig}): ${p.seite === "kauf" ? "KAUF" : "VERKAUF"} ${p.symbol} (Kerze ${p.kerze}) – ${p.grund} · Ledger ${p.trade_id} · nichts gebucht`;
@@ -297,11 +297,11 @@ function simAutoSchrittProtokoll(vorher, ds, posAlt, posNeu) {
   const neu = (SIM.portfolio && SIM.portfolio.ledger ? SIM.portfolio.ledger.slice(vorher) : []);
   const kerzeNr = (t) => ds.kerzen.findIndex((k) => k.t === t) + 1;
   for (const e of neu) {
-    if (e.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: ds.synthetisch === false ? "datei" : "synthetisch", seite: e.seite, symbol: e.symbol, menge: e.menge, preis: e.preis, volumen: e.volumen, gebuehr: e.gebuehr, ergebnis: e.ergebnis, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), ...simAutoEmaAm(ds, e.signal_zeit) });
+    if (e.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: simKursart(ds), seite: e.seite, symbol: e.symbol, menge: e.menge, preis: e.preis, volumen: e.volumen, gebuehr: e.gebuehr, ergebnis: e.ergebnis, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), ...simAutoEmaAm(ds, e.signal_zeit) });
     else if (e.zustand === "unklar") simAutoProtokoll({ art: "unklar", seite: e.seite, symbol: e.symbol, trade_id: e.trade_id, kerze: kerzeNr(e.zeit) });
     else simAutoProtokoll({ art: "abgelehnt", seite: e.seite, symbol: e.symbol, trade_id: e.trade_id, kerze: kerzeNr(e.zeit), grund: e.grund || (e.risiko && e.risiko.gruende && e.risiko.gruende.join("; ")) || "vom Paper-Kern abgelehnt (" + e.zustand + ")" });
   }
-  if (!neu.length) simAutoProtokoll({ art: "kein-signal", kursart: ds.synthetisch === false ? "datei" : "synthetisch", von: posAlt + 1, bis: posNeu });
+  if (!neu.length) simAutoProtokoll({ art: "kein-signal", kursart: simKursart(ds), von: posAlt + 1, bis: posNeu });
 }
 function simStoppen(grund, zustand) {
   clearInterval(SIM.uhr);
@@ -382,7 +382,7 @@ function simStarten() {
   simEl("sim-datensatz").disabled = true;
   simEl("sim-signalquelle").disabled = true;
   simAutoZustand("laeuft", "gestartet durch dich");
-  simAutoProtokoll({ art: "start", text: `Start: ${ds.name} (synthetisch), EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}, ab Kerze ${SIM.pos + 1}${vorlauf ? " (Beginn " + simEl("sim-von").value + ")" : ""} bis ${ende}, Not-Aus ${simAutoNotaus()}` });
+  simAutoProtokoll({ art: "start", text: `Start: ${ds.name} (${simKursart(ds) === "synthetisch" ? "synthetisch" : SIM_KURSART_TEXT[simKursart(ds)]}), EMA ${SIM.strategie.kurz}/${SIM.strategie.lang}, ab Kerze ${SIM.pos + 1}${vorlauf ? " (Beginn " + simEl("sim-von").value + ")" : ""} bis ${ende}, Not-Aus ${simAutoNotaus()}` });
   simEl("sim-stopp").focus();
   SIM.uhr = setInterval(simSchritt, SIM.taktMs);
   simSchritt();
@@ -393,6 +393,11 @@ function simStarten() {
 // Verarbeitete Kerzen stehen in portfolio.abgespielt["JARVIS:<Datensatz>"] und werden nie erneut bewertet oder gebucht.
 function simModus() { const s = simEl("sim-signalquelle"); return s && s.value === "jarvis" ? "jarvis" : "ema"; }
 function simSignalSchluessel(ds) { return "JARVIS:" + ds.name; }
+// ab 15c: SEC-Stand eines Replay-Schritts für das Protokoll (nur Kursdatei)
+function simSecKurz(s) {
+  if (!s) return "SEC: keine Datei (Kernkennzahlen fehlen)";
+  return `SEC (eingereicht bis ${s.bis}): ${s.quartal ? "Quartal bis " + s.quartal : "noch keine verwertbaren Quartalswerte"}`;
+}
 SIMAUTO.ziele = {};
 function simSignalSchritt() {
   if (SIM.arbeit) return SIM.arbeit;
@@ -425,10 +430,10 @@ function simSignalSchritt() {
       if (e.teilziel) SIMAUTO.ziele[zielKey] = [...(SIMAUTO.ziele[zielKey] || []), e.teilziel];
       const plan = b.plan ? ((b.plan.aktionen || [])[0] ? b.plan.aktionen[0].text : `halten – wirksamer Stop ${b.plan.wirksamerStop} (${b.plan.stopGrund})`) : "keine Position";
       const einText = !b.einstieg ? "kein Ergebnis" : b.einstieg.urteil === "jetzt" ? "„jetzt“ – " + String(b.einstieg.text || "").slice(0, 120) : `kein Einstieg (${b.einstieg.urteil || b.einstieg.status}) – ${String(b.einstieg.text || "").slice(0, 140)}`;
-      simAutoProtokoll({ art: "entscheidung", text: `${ds.synthetisch === false ? "Kerze" : "Testkerze"} ${i + 2} (${ds.synthetisch === false ? "Datum" : "Testdatum"} ${datum}, ${b.quelle}, Kurs ${Number(b.kurs).toLocaleString("de-DE")}): Analyse: ${b.einschaetzung ? b.einschaetzung.kategorie : "nicht verfügbar"} · Entry-Timer: ${einText} · Exit-Planer: ${plan} → Entscheidung: ${e.grund}` });
+      simAutoProtokoll({ art: "entscheidung", text: `${ds.synthetisch === false ? "Kerze" : "Testkerze"} ${i + 2} (${ds.synthetisch === false ? "Datum" : "Testdatum"} ${datum}, ${b.quelle}, Kurs ${Number(b.kurs).toLocaleString("de-DE")}): Analyse: ${b.einschaetzung ? b.einschaetzung.kategorie : "nicht verfügbar"} · Entry-Timer: ${einText} · Exit-Planer: ${plan}${ds.synthetisch === false ? " · " + simSecKurz(b.sec) : ""} → Entscheidung: ${e.grund}` });
       const kerzeNr = (t) => ds.kerzen.findIndex((k) => k.t === t) + 1;
       for (const x of SIM.portfolio.ledger.slice(vorher)) {
-        if (x.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: ds.synthetisch === false ? "datei" : "synthetisch", signal: e.grund, seite: x.seite, symbol: x.symbol, menge: x.menge, preis: x.preis, volumen: x.volumen, gebuehr: x.gebuehr, ergebnis: x.ergebnis, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
+        if (x.zustand === "gefuellt") simAutoProtokoll({ art: "ausgefuehrt", kursart: simKursart(ds), signal: e.grund, seite: x.seite, symbol: x.symbol, menge: x.menge, preis: x.preis, volumen: x.volumen, gebuehr: x.gebuehr, ergebnis: x.ergebnis, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
         else if (x.zustand === "unklar") simAutoProtokoll({ art: "unklar", signal: e.grund, seite: x.seite, symbol: x.symbol, trade_id: x.trade_id, kerze: kerzeNr(x.zeit) });
         else simAutoProtokoll({ art: "abgelehnt", signal: e.grund, seite: x.seite, symbol: x.symbol, trade_id: x.trade_id, kerze: kerzeNr(x.zeit), grund: x.grund || (x.risiko && x.risiko.gruende && x.risiko.gruende.join("; ")) || "vom Paper-Kern abgelehnt (" + x.zustand + ")" });
       }
@@ -608,6 +613,54 @@ async function simDateiGewaehlt() {
   simVorschau();
 }
 simEl("sim-datei").addEventListener("change", simDateiGewaehlt);
+// ab 15c: SEC-Kennzahlen (companyfacts-JSON der SEC) zur Kursdatei – nur lokal gelesen. Strenge Prüfung (AktienSignalBot.secDateiPruefen),
+// Symbol Pflicht. Die Offline-Tickerliste (Stand unbekannt) bestätigt nie eine Zuordnung, sie kann nur einen Widerspruch zeigen: steht das
+// Symbol dort mit anderer CIK → nicht übernommen. Im Replay filtert der Signal-Bot je Kerze nach dem Einreichungsdatum (filed).
+async function simSecDateiGewaehlt() {
+  const inp = simEl("sim-sec-datei"), st = simEl("sim-sec-status"), f = inp.files && inp.files[0];
+  if (!f) return;
+  if (SIM.uhr) { st.textContent = "Nicht gelesen: Während eines Laufs wird keine neue SEC-Datei übernommen – erst pausieren oder stoppen."; return; }
+  const sym = String(simEl("sim-datei-symbol").value || "").trim().toUpperCase(), name = String(f.name).slice(0, 60);
+  SIM.secDatei = null;
+  const nein = (grund, schritt) => { st.textContent = `Nicht übernommen („${name}“): ${grund} Nächster Schritt: ${schritt} – nichts gebucht.`; simVorschau(); };
+  if (!sym) return nein("Symbol fehlt.", "Symbol der Kursdatei eintragen und die SEC-Datei erneut wählen");
+  if (f.size > 60e6) return nein("Datei größer als 60 MB.", "die companyfacts-Datei des Unternehmens unverändert speichern");
+  let cf;
+  try { cf = JSON.parse(await f.text()); } catch (e) { return nein("kein gültiges JSON.", "die companyfacts-Datei unverändert (Rohdaten, nicht als Webseite) speichern und erneut wählen"); }
+  const r = AktienSignalBot.secDateiPruefen(cf);
+  if (!r.ok) return nein(r.fehler, "die companyfacts-Datei der SEC (data.sec.gov/api/xbrl/companyfacts/CIK….json) wählen");
+  const T = window.AktienTickerOffline, eintrag = T ? Object.values(T.daten).find((x) => String(x.ticker).toUpperCase() === sym) : null;
+  if (eintrag && Number(eintrag.cik_str) !== r.cik) return nein(`Symbol ${sym} steht in der Offline-Tickerliste mit CIK ${eintrag.cik_str} (${eintrag.title}), die Datei gehört zu CIK ${r.cik} (${r.firma}).`, "die Datei des richtigen Unternehmens wählen oder das Symbol prüfen");
+  const zuordnung = eintrag ? "passt zur Offline-Tickerliste (Stand unbekannt, kein Beleg)" : "Symbol ↔ CIK nicht geprüft (nicht in der Offline-Tickerliste)";
+  SIM.secDatei = { symbol: sym, daten: cf, name, cik: r.cik, firma: r.firma, fakten: r.fakten, filedVon: r.filedVon, filedBis: r.filedBis, zuordnung };
+  st.textContent = `Gelesen: ${r.firma} (CIK ${r.cik}) für ${sym} · ${r.fakten} Werte, eingereicht ${r.filedVon} bis ${r.filedBis}${r.ohneFiled ? ` (${r.ohneFiled} ohne Einreichungsdatum, nie verwendet)` : ""} · Datei „${name}“ · Zuordnung: ${zuordnung}. Im Replay zählt je Kerze nur, was bis zum Kerzentag eingereicht war (filed).`;
+  simVorschau();
+}
+simEl("sim-sec-datei").addEventListener("change", simSecDateiGewaehlt);
+// ab 15c: echte Tageskurse über den eigenen Worker (GET /aktien/kerzen: Alpaca-Marktdaten, Feed IEX) – derselbe geprüfte Weg wie die Werkzeuge
+// (wzKerzenGeprueft: ungültige Werte, Reihenfolge, Doppelte, Lücken, Kerzen aus der Zukunft, Frische). Ohne Verbindung oder bei Fehlern wird
+// nichts übernommen (Grund und nächster Schritt). Eine noch laufende Kerze (Ende = Beginn + 1 Tag liegt nach jetzt, wie JarvisDaten.kerzenDatenzeit)
+// wird nie verwendet: ihr Schluss ist unfertig.
+async function simWorkerLaden() {
+  const st = simEl("sim-datei-status"), sym = String(simEl("sim-datei-symbol").value || "").trim().toUpperCase();
+  if (SIM.uhr) { st.textContent = "Nicht geladen: Während eines Laufs werden keine neuen Kurse übernommen – erst pausieren oder stoppen."; return; }
+  if (!/^[A-Z][A-Z0-9.\-]{0,9}$/.test(sym)) { st.textContent = "Nicht geladen: Symbol fehlt oder ist ungültig. Nächster Schritt: US-Ticker eintragen (z. B. AAPL) – nichts gebucht."; return; }
+  if (typeof verbunden !== "function" || !verbunden()) { st.textContent = "Nicht geladen: kein Worker verbunden – echte Kurse kommen hier nur über deinen Worker (Alpaca-Marktdaten). Nächster Schritt: im Cockpit die Verbindung mit deinem Zugangscode einrichten oder eine Kursdatei wählen – nichts gebucht."; return; }
+  SIM.dateiDatensatz = null; st.textContent = `Lade Tageskurse ${sym} über deinen Worker …`; simVorschau();
+  let d;
+  try { d = await wzKerzenGeprueft(sym, 500); } catch (e) { st.textContent = `Nicht geladen: ${String((e && e.message) || e).slice(0, 220)} Nächster Schritt: Worker-Verbindung und Symbol prüfen oder eine Kursdatei wählen – nichts gebucht.`; simVorschau(); return; }
+  if (SIM.uhr) return;
+  const jetzt = Date.now(), abgerufen = new Date(jetzt).toISOString().slice(0, 16).replace("T", " ");
+  const kerzen = d.kerzen.filter((k) => k.t + 86400000 <= jetzt).map((k) => ({ t: k.t, o: k.o, h: k.h, l: k.l, c: k.c, v: Number.isFinite(k.v) ? k.v : 0 }));
+  const ohneHeute = d.kerzen.length - kerzen.length;
+  if (kerzen.length < 30) { st.textContent = `Nicht übernommen: nur ${kerzen.length} abgeschlossene Tageskerzen für ${sym} geliefert. Nächster Schritt: Symbol prüfen oder eine Kursdatei wählen – nichts gebucht.`; simVorschau(); return; }
+  const von = simDatum(kerzen[0].t), bis = simDatum(kerzen[kerzen.length - 1].t), quelle = String(d.quelle || "Alpaca-Marktdaten").slice(0, 120);
+  SIM.dateiDatensatz = { name: `Worker ${sym} ${von}–${bis}`, symbol: sym, intervall: "1d", kalender: "boerse", synthetisch: false, herkunft: "worker",
+    quelle: `${quelle}, abgerufen ${abgerufen} UTC über deinen Worker${Array.isArray(d.hinweise) && d.hinweise.length ? " – " + d.hinweise.join(" ").slice(0, 240) : ""}`, kerzen };
+  st.textContent = `Geladen: ${sym} · ${kerzen.length} Tageskerzen ${von} bis ${bis} · Quelle: ${quelle} · abgerufen ${abgerufen} UTC über deinen Worker · Datenalter: ${simDatenalter(SIM.dateiDatensatz).art}${ohneHeute ? " · noch laufende Tageskerze nicht verwendet" : ""}.`;
+  simVorschau();
+}
+simEl("sim-worker-laden").addEventListener("click", simWorkerLaden);
 simEl("sim-abbruch").addEventListener("click", simSofortStoppen);
 simEl("sim-notaus").addEventListener("click", simAutoSimNotausUmschalten);
 simEl("sim-signalquelle").addEventListener("change", () => simAutoZeigen());

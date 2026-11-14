@@ -23,9 +23,14 @@ function simOptionen() { return { strategie: SIM.strategie, orderWert: SIM.order
 // ab 14a (14.11.): dritte Datenquelle „eigene Kursdatei“ – historische Tageskurse aus einer vom Nutzer gewählten CSV (JarvisDaten.csvKerzenLesen),
 // gekennzeichnet als Kurse laut Datei (Herkunft nicht gegen den Anbieter geprüft); ohne gelesene Datei ist der Bot gesperrt
 SIM.dateiDatensatz = null;
+// ab 15c: Kursart echter Datensätze – Kursdatei oder eigener Worker (Alpaca-Marktdaten); synthetisch bleibt „synthetische Testkurse“
+function simKursart(ds) { return !ds || ds.synthetisch !== false ? "synthetisch" : ds.herkunft === "worker" ? "worker" : "datei"; }
+const SIM_KURSART_TEXT = { datei: "historische Kurse aus Datei", worker: "historische Tageskurse über deinen Worker (Alpaca, Feed IEX)", synthetisch: "synthetische Testkurse" };
+// ab 15c: SEC-Kennzahlen (companyfacts) zur Kursdatei – nur angehängt, wenn das beim Lesen eingetragene Symbol zur Kursdatei passt
+SIM.secDatei = null;
 function simDatensatz() {
   const v = simEl("sim-datensatz").value;
-  if (v === "datei") return SIM.dateiDatensatz;
+  if (v === "datei") return SIM.dateiDatensatz && SIM.secDatei && SIM.secDatei.symbol === SIM.dateiDatensatz.symbol ? { ...SIM.dateiDatensatz, secFakten: SIM.secDatei } : SIM.dateiDatensatz;
   return v === "B" ? PaperKern.testdatensatz({ name: "Synthetisch B", saat: 7 }) : PaperKern.testdatensatz({ name: "Synthetisch A", saat: 42 });
 }
 // Datenalter in ganzen Tagen seit der letzten Kerze (UTC-Tag) und Einordnung: höchstens 5 Tage (Regel der Analyse) = „bis <Datum>, Tagesschluss“, sonst historisch
@@ -33,15 +38,22 @@ function simDatenalter(ds) {
   const tage = Math.floor((Date.now() - ds.kerzen[ds.kerzen.length - 1].t) / 86400000);
   return { tage, art: tage <= 5 ? `Tagesschluss bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)} (${tage} Tage alt, keine Echtzeitkurse)` : `historisch – letzte Kerze ${tage} Tage alt, keine aktuellen Kurse` };
 }
+// ab 15c: Zeile zu den SEC-Kennzahlen der Kursdatei (Vorschau und Zustandszeile)
+function simSecZeile(ds) {
+  const s = SIM.secDatei;
+  if (!s) return "SEC-Kennzahlen: keine Datei – JARVIS-Signale ohne Kernkennzahlen (kein Kauf möglich).";
+  if (!ds || s.symbol !== ds.symbol) return `SEC-Kennzahlen: Datei gehört zu ${s.symbol}, Kursdatei zu ${ds ? ds.symbol : "–"} – nicht verwendet.`;
+  return `SEC-Kennzahlen: ${s.firma} (CIK ${s.cik}) aus „${s.name}“, eingereicht ${s.filedVon} bis ${s.filedBis}; im Replay je Kerze nur, was bis zum Kerzentag eingereicht war (filed).`;
+}
 // Vor dem Lauf: Datenquelle, Datenzeitpunkt, Qualität, Modus, Annahmen und Grenzen anzeigen; ungültige Daten sperren den Start
 function simVorschau() {
   const ds = simDatensatz();
   SIM.datensatz = ds;
   if (simEl("sim-datei-bereich")) simEl("sim-datei-bereich").hidden = simEl("sim-datensatz").value !== "datei";
   if (!ds) {
-    simEl("sim-vorschau").textContent = "Modus: SIMULATION – kein Konto, keine Order.\nDatenquelle: eigene Kursdatei – noch keine gültige Datei gelesen. Symbol eintragen und eine CSV mit Tageskursen wählen; bis dahin ist der Bot gesperrt.";
+    simEl("sim-vorschau").textContent = "Modus: SIMULATION – kein Konto, keine Order.\nDatenquelle: echte Tageskurse – noch keine gültigen Kurse gelesen. Symbol eintragen und eine CSV mit Tageskursen wählen oder Kurse über deinen Worker laden; bis dahin ist der Bot gesperrt.";
     simEl("sim-start").disabled = true;
-    SIM.datenStatus = { ok: false, text: "keine Kursdatei gelesen → Bot gesperrt. Nächster Schritt: Symbol eintragen und eine CSV mit Tageskursen wählen." };
+    SIM.datenStatus = { ok: false, text: "keine Kursdatei gelesen → Bot gesperrt. Nächster Schritt: Symbol eintragen und eine CSV mit Tageskursen wählen oder Kurse über deinen Worker laden." };
     if (typeof simAutoZeigen === "function") simAutoZeigen();
     return false;
   }
@@ -52,6 +64,7 @@ function simVorschau() {
   simEl("sim-vorschau").textContent = [
     "Modus: SIMULATION – kein Konto, keine Order, keine Verbindung zu Worker oder Broker.",
     "Datenquelle: " + ds.name + " – " + ds.quelle + ".",
+    ...(ds.synthetisch === false ? [simSecZeile(ds)] : []),
     "Datenzeitpunkt: " + ds.kerzen.length + " Tageskerzen " + simDatum(ds.kerzen[0].t) + " bis " + simDatum(ds.kerzen[ds.kerzen.length - 1].t) + (ds.synthetisch === false ? " – " + simDatenalter(ds).art + "." : " (historische Testdaten, nicht aktuell)."),
     gueltig ? "Datenqualität: gültig (Reihenfolge, Doppelte, Lücken, Ausreißer geprüft)." : "⚠ Datenqualität UNGÜLTIG: " + (q.ok ? a.fehler.text : q.fehler.text) + " – Simulation gesperrt.",
     "Annahmen (Testannahme, keine Live-Werte): Gebühr " + SIM.annahmen.gebuehrPct + " %, Slippage " + SIM.annahmen.slippagePct + " % je Ausführung.",
@@ -62,7 +75,9 @@ function simVorschau() {
   simEl("sim-start").disabled = !gueltig || Boolean(SIM.uhr);
   // ab 13y: Datenstatus für die Zustandszeile der Paper-Automatik (ungültige Daten sperren den Start, Grund und nächster Schritt sichtbar)
   SIM.datenStatus = gueltig ? { ok: true, text: ds.synthetisch === false
-      ? `gültig – ${ds.kerzen.length} historische Tageskurse ${ds.symbol} aus Datei (${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}; ${simDatenalter(ds).art}; Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft`
+      ? (simKursart(ds) === "worker"
+        ? `gültig – ${ds.kerzen.length} historische Tageskurse ${ds.symbol} über deinen Worker (${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}; ${simDatenalter(ds).art}; ${ds.quelle}); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft`
+        : `gültig – ${ds.kerzen.length} historische Tageskurse ${ds.symbol} aus Datei (${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}; ${simDatenalter(ds).art}; Kurse laut Datei, Herkunft nicht gegen den Anbieter geprüft); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft`)
       : `gültig – ${ds.kerzen.length} synthetische Testkurse (Tageskerzen, künstliche Kalenderdaten ${simDatum(ds.kerzen[0].t)} bis ${simDatum(ds.kerzen[ds.kerzen.length - 1].t)}, keine Marktdaten); Reihenfolge, Doppelte, Lücken und Ausreißer geprüft` }
     : { ok: false, text: "UNGÜLTIG – " + (q.ok ? a.fehler.text : q.fehler.text) + " → Bot gesperrt, nichts gebucht. Nächster Schritt: anderen Testdatensatz wählen oder die Seite neu laden." };
   // ab 15a: Zustandszeile der Paper-Automatik mit Datenquelle und Not-Aus aktuell halten (Funktion aus 05-mein-tag.js, später geladen)

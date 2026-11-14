@@ -15,19 +15,59 @@
   const ZEITHINWEIS = "simulierte Börsenzeit: Entscheidung am Folgetag 15:00 UTC (Sitzung bis 16:00 New York, ohne Sommerzeit), Kurs = Eröffnung des Folgetags";
   const MIN_KERZEN = 201; // EMA200 des Entry-Timers braucht 200 Kerzen; ab hier gibt es einen Trend-Befund
 
+  // ab 15c: SEC-Kennzahlen (companyfacts) im Replay ohne Blick nach vorn. faktenBis liefert eine Kopie, die je Wert nur Einträge enthält,
+  // die bis einschließlich „bis“ (JJJJ-MM-TT) bei der SEC eingereicht waren (Feld „filed“); Einträge ohne gültiges filed-Datum zählen nie
+  // (Zeitpunkt unbekannt). Spätere Korrekturen (10-K/A) erscheinen damit erst ab ihrem eigenen Einreichungstag.
+  const FILED = /^\d{4}-\d{2}-\d{2}$/;
+  function faktenBis(cf, bis) {
+    const facts = {};
+    for (const [ns, konzepte] of Object.entries((cf && cf.facts) || {})) {
+      facts[ns] = {};
+      for (const [k, knoten] of Object.entries(konzepte || {})) {
+        const units = {};
+        for (const [u, liste] of Object.entries((knoten && knoten.units) || {})) units[u] = (Array.isArray(liste) ? liste : []).filter((f) => f && FILED.test(f.filed || "") && f.filed <= bis);
+        facts[ns][k] = { ...knoten, units };
+      }
+    }
+    return { ...cf, facts };
+  }
+  // Prüfung einer companyfacts-Datei vor der Übernahme: facts mit us-gaap, CIK, mindestens ein Wert mit filed-Datum, kein filed nach heute
+  function secDateiPruefen(cf, { heute = new Date().toISOString().slice(0, 10) } = {}) {
+    if (!cf || typeof cf !== "object" || !cf.facts || typeof cf.facts !== "object") return { ok: false, fehler: "Feld „facts“ fehlt – keine companyfacts-Datei der SEC." };
+    if (!cf.facts["us-gaap"]) return { ok: false, fehler: "keine us-gaap-Werte in der Datei." };
+    const cik = Number(cf.cik);
+    if (!Number.isInteger(cik) || cik <= 0) return { ok: false, fehler: "CIK fehlt oder ist ungültig." };
+    let n = 0, ohne = 0, von = null, bis = null;
+    for (const konzepte of Object.values(cf.facts)) for (const knoten of Object.values(konzepte || {})) for (const liste of Object.values((knoten && knoten.units) || {})) {
+      for (const f of Array.isArray(liste) ? liste : []) {
+        if (!f || !FILED.test(f.filed || "")) { ohne++; continue; }
+        n++;
+        if (!von || f.filed < von) von = f.filed;
+        if (!bis || f.filed > bis) bis = f.filed;
+      }
+    }
+    if (!n) return { ok: false, fehler: "keine Werte mit Einreichungsdatum (filed)." };
+    if (bis > heute) return { ok: false, fehler: `Einreichungsdatum nach heute (${bis}) – die Datei ist fehlerhaft.` };
+    return { ok: true, cik, firma: String(cf.entityName || "unbekannt").slice(0, 80), fakten: n, ohneFiled: ohne, filedVon: von, filedBis: bis };
+  }
+
   // Replay-Provider für AktienWorkflow.analysieren: zum Schritt i nur die Kerzen 0..i und ein simulierter Kurs/Börsenstand des Folgetags
   function provider(ds, i) {
     const naechste = ds && ds.kerzen && ds.kerzen[i + 1];
     if (!naechste) return null;
     const tag = naechste.t - (naechste.t % TAG), jetzt = tag + 15 * 60 * MIN;
+    // ab 15c: SEC-Werte nur zu echten Kursen (Kursdatei) und nur, was bis zum Tag der letzten abgeschlossenen Kerze i eingereicht war –
+    // vorsichtig: eine Meldung vom Entscheidungstag selbst zählt erst am nächsten Schritt
+    const secBis = new Date(ds.kerzen[i].t).toISOString().slice(0, 10), sec = ds.synthetisch === false && ds.secFakten && ds.secFakten.daten ? ds.secFakten : null;
     return {
-      name: `Replay ${ds.name} (${ds.synthetisch === false ? "historische Kurse aus Datei" : "synthetische Testkurse"})`,
-      beschreibung: `${ds.quelle || "Testdatensatz"} – Replay bis ${new Date(ds.kerzen[i].t).toISOString().slice(0, 10)}; ${ZEITHINWEIS}`,
+      name: `Replay ${ds.name} (${ds.synthetisch === false ? (ds.herkunft === "worker" ? "historische Tageskurse über deinen Worker (Alpaca, Feed IEX)" : "historische Kurse aus Datei") : "synthetische Testkurse"})`,
+      beschreibung: `${ds.quelle || "Testdatensatz"} – Replay bis ${secBis}; ${ZEITHINWEIS}` + (sec ? `; SEC-Kennzahlen aus „${sec.name}“ (CIK ${sec.cik}), nur bis ${secBis} eingereicht` : ""),
       // ab 14a: synthetisch nur, wenn der Datensatz synthetisch ist (Kursdatei = echte historische Kurse laut Datei); Börsenzeit und Kurs bleiben simuliert
-      synthetisch: ds.synthetisch !== false, replay: true, arten: ["kerzen", "kurs"], jetzt,
+      synthetisch: ds.synthetisch !== false, replay: true, arten: ["kerzen", "kurs"], jetzt, secBis: sec ? secBis : null,
       async kerzen() { return ds.kerzen.slice(0, i + 1).map((k) => ({ ...k })); },
       async kurs() { return { symbol: ds.symbol, preis: naechste.o, waehrung: "USD", zeit: new Date(jetzt - 5 * MIN).toISOString() }; },
       async uhr() { return { offen: true, naechste_schliessung: new Date(tag).toISOString().slice(0, 10) + "T16:00:00-05:00", simuliert: true }; },
+      ...(sec ? { async secFakten() { return faktenBis(sec.daten, secBis); } } : {}),
     };
   }
 
@@ -49,7 +89,10 @@
       plan = A.planen({ symbol: ds.symbol, einstand: position.einstand, menge: position.menge, kurs: ds.kerzen[i + 1].o, atr: atr[atr.length - 1],
         hoechstkurs: Math.max(position.einstand, ...seit.map((k) => k.h)), tageGehalten: seit.length, erledigteZiele: position.erledigteZiele || [] });
     }
-    return { r, einschaetzung, einstieg, plan, jetzt: pv.jetzt, quelle: pv.name, kurs: ds.kerzen[i + 1].o };
+    // ab 15c: SEC-Stand dieses Schritts (nur mit SEC-Datei): Stichtag der Einreichungen, letztes Quartal, Status des SEC-Schritts
+    const s6 = (r.schritte || []).find((x) => x.id === "sec");
+    const sec = pv.secBis ? { bis: pv.secBis, status: s6 ? s6.status : null, quartal: s6 && s6.details && s6.details.period_end ? s6.details.period_end : null, text: s6 ? s6.text : null } : null;
+    return { r, einschaetzung, einstieg, plan, jetzt: pv.jetzt, quelle: pv.name, kurs: ds.kerzen[i + 1].o, sec };
   }
 
   // Entscheidungstabelle (keine neuen Schwellen): { aktion: "kauf" | "verkauf" | "keine", quelle, grund, teilziel? }
@@ -76,5 +119,5 @@
       signalZeit: ds.kerzen[i].t + TAG, kerze: n, annahmen: P.annahmenNormal(annahmen), limits, kurse: { [ds.symbol]: n.o } });
   }
 
-  global.AktienSignalBot = { provider, bewerten, entscheiden, buchen, ZEITHINWEIS, MIN_KERZEN };
+  global.AktienSignalBot = { provider, bewerten, entscheiden, buchen, faktenBis, secDateiPruefen, ZEITHINWEIS, MIN_KERZEN };
 })(typeof window !== "undefined" ? window : globalThis);
