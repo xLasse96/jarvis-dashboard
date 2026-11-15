@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+<script>window.JARVIS_START={fehler:[],ablehnungen:0};addEventListener("error",e=>{const t=e.target;if(t===window)JARVIS_START.fehler.push(String(e.message)+(e.filename?" ("+e.filename.split("/").pop()+":"+e.lineno+")":""));else if(t&&t.tagName=="SCRIPT")JARVIS_START.fehler.push("⛔ "+t.src.split("/").pop())},true);addEventListener("unhandledrejection",()=>{JARVIS_START.ablehnungen++});addEventListener("load",()=>{const f=JARVIS_START.fehler.filter(x=>x[0]=="⛔"),h=document.getElementById("version-hinweis");if(f[0]){h.hidden=false;h.textContent=f.join(" ")+" fehlt – Seite unvollständig, neu laden."}});</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#020912">
+  <title>JARVIS</title>
+  <!-- Installierbar als Web-App (Manifest + Symbole). Bewusst ohne Service Worker/Offline-Cache, damit jede neue Version sofort gilt. -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/jarvis-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/jarvis-192.png">
+  <link rel="stylesheet" href="app/dashboard.css">
+</head>
+<body>
+
+<!-- Einrichtungsassistent: öffnet sich nur beim allerersten Start; speichert nie Zugangscodes oder Tokens im Fortschritt -->
+<dialog id="einrichtung" class="einrichtung" aria-labelledby="einrichtung-titel">
+  <h2 id="einrichtung-titel" tabindex="-1">Einrichtung</h2>
+  <div data-einrichtung-bereich="adresse">
+    <p class="klein">Adresse des eigenen JARVIS-Workers (Cloudflare) und Zugangscode. Beides wird nur auf diesem Gerät gespeichert; der Code wird nie angezeigt.</p>
+    <label class="einrichtung-feld">Worker-Adresse <input class="feld" type="url" id="einrichtung-url" placeholder="https://jarvis.NAME.workers.dev" autocomplete="off"></label>
+    <label class="einrichtung-feld">Zugangscode <input class="feld" type="password" id="einrichtung-code" placeholder="leer lassen = bisherigen behalten" autocomplete="off"></label>
+  </div>
+  <div data-einrichtung-bereich="verbindung" hidden><p class="klein">Nur lesende Prüfung (Worker-Status). Es wird nichts geändert und keine KI-Anfrage gestellt.</p></div>
+  <div data-einrichtung-bereich="stimme" hidden>
+    <p class="klein">Stimmenquelle wählen Sie unter „Stimme“ im Cockpit. Die Probe nutzt nur die kostenlose Browserstimme.</p>
+    <button type="button" class="schalter" id="einrichtung-stimmprobe">Stimmprobe (Browser)</button>
+  </div>
+  <div data-einrichtung-bereich="sprache" hidden><p class="klein">Die Spracherkennung nutzt den Dienst des Browseranbieters. Das Mikrofon startet nur per Klick, Druck oder Aktivierungswort.</p></div>
+  <div data-einrichtung-bereich="optional" hidden><p class="klein">Optional und jederzeit später: PC-Helfer, Home Assistant, Paper-Trading, Recherche.</p></div>
+  <div data-einrichtung-bereich="zusammenfassung" hidden><p class="klein">Übersicht aller Prüfpunkte. Übersprungenes können Sie später unter „Verbindung“ → „Einrichtungsassistent“ fortsetzen.</p></div>
+  <ul id="einrichtung-liste" class="einrichtung-liste"></ul>
+  <p id="einrichtung-meldung" class="info" role="alert"></p>
+  <div class="order-zeile">
+    <button type="button" class="knopf zweit" id="einrichtung-zurueck">Zurück</button>
+    <button type="button" class="knopf" id="einrichtung-weiter">Weiter</button>
+    <button type="button" class="knopf zweit" id="einrichtung-ueberspringen">Überspringen</button>
+    <button type="button" class="knopf" id="einrichtung-fertig" hidden>Fertig</button>
+    <button type="button" class="knopf zweit" id="einrichtung-spaeter">Später fortsetzen</button>
+  </div>
+</dialog>
+
+<header class="kopf">
+  <div class="marke">
+    <h1 class="logo" aria-label="JARVIS">J.A.R.V.I.S.</h1>
+    <span class="kopf-untertitel">v0.9 · Persönlicher KI-Assistent</span>
+  </div>
+  <nav class="reiter" role="tablist" aria-label="Bereiche">
+    <button type="button" role="tab" id="reiter-cockpit" aria-controls="ansicht-cockpit" data-ansicht="cockpit">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><circle cx="10" cy="10" r="3"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>Cockpit</button>
+    <button type="button" role="tab" id="reiter-analyse" aria-controls="ansicht-analyse" data-ansicht="analyse">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 17h16"/><polyline points="3,13 7,8 11,11 17,4"/></svg>Analyse</button>
+    <button type="button" role="tab" id="reiter-trading" aria-controls="ansicht-trading" data-ansicht="trading">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l6.5 3v5c0 4-3 6.6-6.5 8-3.5-1.4-6.5-4-6.5-8V5z"/><path d="M7.5 10l2 2 3.5-4"/></svg>Paper-Trading</button>
+  </nav>
+  <div class="kopf-rechts">
+    <!-- ab 11-07a: Not-Aus aus jeder Ansicht erreichbar – springt nur zur Not-Aus-Karte, schaltet nichts -->
+    <button type="button" id="kopf-notaus" class="pille kopf-notaus" aria-label="Zum Not-Aus springen (Reiter Trading)">⛔<span class="kopf-notaus-text"> NOT-AUS</span></button>
+    <button type="button" id="seitenleiste-schalter" class="pille" aria-controls="seitenleiste" aria-expanded="false" hidden>Seitenleiste</button>
+    <span id="kopf-handel" class="pille getrennt">HANDEL: NICHT VERBUNDEN</span>
+    <span id="kopf-sprache" class="pille kopf-sprache" role="status" aria-live="off">MIKRO: – · VORLESEN: –</span>
+    <!-- ab 11-06j: einheitliche Navigation – Karten der aktiven Ansicht und Schnellzugriff auf Einstellungen (app/24-oberflaeche.js) -->
+<nav id="sprungleiste" class="sprungleiste" aria-label="Navigation innerhalb der Ansicht"><details id="sprung-details">
+  <summary class="pille sprung-summary" aria-label="Navigation: zu einer Karte dieser Ansicht oder zu den Einstellungen springen">☰ NAVIGATION</summary>
+  <div class="sprung-panel">
+  <!-- ab 11-07b: Suche über alle Ansichten, Favoriten und zuletzt genutzte Ziele -->
+  <div class="sprung-gruppe sprung-suchzeile"><label for="sprung-suche" class="klein">Suchen (Strg+K):</label><input id="sprung-suche" class="feld sprung-suche" type="search" autocomplete="off" placeholder="Karte, Einstellung oder Befehl" aria-describedby="sprung-suche-status"></div>
+  <p id="sprung-suche-status" class="klein" role="status" aria-live="polite"></p>
+  <div class="sprung-gruppe" id="sprung-treffer-gruppe" hidden><span class="klein">Treffer:</span><span id="sprung-treffer" class="sprung-knoepfe"></span></div>
+  <div class="sprung-gruppe" id="sprung-favoriten-gruppe" hidden><span class="klein">Favoriten:</span><span id="sprung-favoriten" class="sprung-knoepfe"></span></div>
+  <div class="sprung-gruppe" id="sprung-zuletzt-gruppe" hidden><span class="klein">Zuletzt:</span><span id="sprung-zuletzt" class="sprung-knoepfe"></span></div>
+  <div class="sprung-gruppe"><span class="klein">Karten:</span><span id="sprung-karten" class="sprung-knoepfe"></span></div>
+  <div class="sprung-gruppe"><span class="klein">Einstellungen:</span><span id="sprung-einstellungen" class="sprung-knoepfe"></span></div>
+</div></details></nav>
+    <time id="uhr" class="uhr"></time>
+  </div>
+</header>
+<!-- ab 11-10o: kompakte Seitenleiste (app/64-seitenleiste.js) – nur auf Wunsch und nur ab 1100 px Breite -->
+<nav id="seitenleiste" class="seitenleiste" aria-label="Seitenleiste: Bereiche" hidden>
+  <ul></ul>
+  <p class="seitenleiste-fuss"></p>
+</nav>
+<p id="version-hinweis" class="version-hinweis" role="alert" hidden></p>
+
+<main>
+
+<!-- ===================== COCKPIT ===================== -->
+<section id="ansicht-cockpit" class="cockpit" role="tabpanel" aria-labelledby="reiter-cockpit">
+
+  <div class="spalte links">
+    <!-- ab 11-06f: persönliche Startübersicht – nur Daten dieses Geräts und dieser Sitzung, keine Anfrage, nichts geschätzt -->
+    <article class="karte heute-karte" aria-labelledby="heute-titel">
+      <h2 class="karte-titel" id="heute-titel">Mein Tag <span class="zu">]</span><span class="zusatz">lokal · ohne Netz</span></h2>
+      <div class="karte-inhalt">
+        <p id="heute-kopf" class="info"></p>
+        <!-- ab 11-06h: alle Hinweise an einer Stelle -->
+        <h3 class="stimmtest-titel">Benachrichtigungen</h3>
+        <ul id="heute-benachrichtigungen" class="statusliste" aria-label="Benachrichtigungen" aria-live="polite"></ul>
+        <h3 class="stimmtest-titel">Übersicht</h3>
+        <ul id="heute-liste" class="statusliste heute-liste" aria-label="Tagesübersicht"></ul>
+        <div class="order-zeile">
+          <button type="button" class="knopf zweit" id="heute-aktualisieren">Aktualisieren</button>
+          <button type="button" class="knopf zweit" id="heute-vorlesen">Tagesbriefing vorlesen</button>
+          <button type="button" class="knopf zweit" id="heute-abend">Abendzusammenfassung</button>
+          <button type="button" class="knopf zweit" id="heute-woche">Wochenrückblick</button>
+        </div>
+        <ul id="heute-abend-text" class="statusliste" aria-label="Abendzusammenfassung" hidden></ul>
+        <!-- ab 11-07g: Hinweiszentrale und anpassbare Übersicht (app/28-hinweise.js) -->
+        <details id="hinweis-zentrale" class="briefing-details">
+          <summary>Hinweiszentrale (Verlauf)</summary>
+          <p id="hinweis-zaehler" class="klein" role="status" aria-live="polite"></p>
+          <div class="order-zeile">
+            <label for="hinweis-filter">Anzeigen:</label>
+            <select class="feld" id="hinweis-filter"><option value="">alle</option></select>
+            <button type="button" class="knopf zweit" id="hinweise-alle-gelesen">Alle als gelesen markieren</button>
+          </div>
+          <ul id="hinweis-liste" class="aufgaben-liste" aria-label="Hinweisverlauf"></ul>
+        </details>
+        <details id="briefing-einstellungen" class="briefing-details">
+          <summary>Übersicht anpassen</summary>
+          <div class="order-zeile">
+            <label for="briefing-ansicht">Ansicht:</label>
+            <select class="feld" id="briefing-ansicht"><option value="voll">ausführlich</option><option value="kompakt">kompakt (nur Hinweise und Aufgaben)</option></select>
+          </div>
+          <fieldset class="briefing-feldgruppe"><legend class="klein">Bereiche in „Mein Tag“</legend><div id="briefing-bereiche" class="briefing-wahlen"></div></fieldset>
+          <fieldset class="briefing-feldgruppe"><legend class="klein">Hinweisarten (Hinweiszentrale und Benachrichtigungen)</legend><div id="hinweis-arten" class="briefing-wahlen"></div></fieldset>
+          <p id="briefing-einstellung-meldung" class="klein" role="status"></p>
+        </details>
+      </div>
+    </article>
+    <p id="app-offline" class="wz-wichtig" role="status" aria-live="polite" hidden></p>
+    <!-- ab 11-09g: Arbeitsplatz – globale Suche, Schnellerfassung, anpassbare Kacheln aus vorhandenen Daten (app/39-arbeitsplatz.js) -->
+    <article class="karte arbeitsplatz-karte" aria-labelledby="ap-titel">
+      <h2 class="karte-titel" id="ap-titel">Arbeitsplatz <span class="zu">]</span><span class="zusatz">Suche · Schnellerfassung · Überblick</span></h2>
+      <div class="karte-inhalt">
+        <input class="feld" id="ap-suche" type="search" maxlength="80" placeholder="Alles durchsuchen: Aufgaben, Notizen, Projekte, Dateien, Profil, Karten" aria-label="Alles durchsuchen" aria-describedby="ap-suche-status" spellcheck="false">
+        <p id="ap-suche-status" class="klein" role="status" aria-live="polite"></p>
+        <ul id="ap-treffer" class="aufgaben-liste" aria-label="Suchergebnisse"></ul>
+        <form id="ap-schnell-form" class="aufgabe-form" autocomplete="off">
+          <select class="feld" id="ap-schnell-art" aria-label="Was erfassen"><option value="aufgabe">Aufgabe</option><option value="notiz">Notiz</option><option value="projekt">Projekt</option></select>
+          <input class="feld" id="ap-schnell-text" maxlength="300" placeholder="z. B. Steuer abgeben morgen um 9" aria-label="Schnellerfassung">
+          <button class="knopf zweit" type="submit">Erfassen</button>
+        </form>
+        <p id="ap-meldung" class="klein" role="status" aria-live="polite"></p>
+        <div id="ap-kacheln" class="ap-kacheln"></div>
+        <div class="order-zeile">
+          <button type="button" class="schalter" id="ap-kompakt" aria-pressed="false">Kompakt: aus</button>
+          <button type="button" class="schalter" id="ap-aktualisieren" aria-label="Arbeitsplatz aktualisieren">Aktualisieren</button>
+        </div>
+        <!-- ab 11-10a: laufende Prozesse, zentraler Abbruch, Fähigkeiten nach Bereichen (app/50-zentrale.js) -->
+        <details id="akt-details" class="klein briefing-details">
+          <summary>Aktivität: laufende Prozesse und Fähigkeiten</summary>
+          <ul id="akt-liste" class="aufgaben-liste" aria-label="Laufende Prozesse"></ul>
+          <button type="button" class="knopf zweit" id="akt-anhalten">Alles Lokale anhalten</button>
+          <p id="akt-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p class="klein">Hält KI-Anfrage, Vorlesen, Spracheingabe, offene Rückfragen, laufende Aufträge und Workflows an. Not-Aus und der Automatik-Stopp haben eigene Schalter.</p>
+          <p class="klein" style="margin-bottom: 4px;">Was JARVIS kann (nach Bereichen, mit Freigabe):</p>
+          <ul id="akt-faehigkeiten" class="statusliste" aria-label="Fähigkeiten nach Bereichen"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Zuletzt ausgeführt (lokale Befehle, ehrliches Ergebnis):</p>
+          <ul id="bedien-zuletzt" class="stimmtest-protokoll" aria-label="Zuletzt ausgeführte Aktionen"></ul>
+        </details>
+        <!-- ab 11-09o: App – Startseite, Installation, Vollbild, Netz, Version (app/47-app.js) -->
+        <details id="app-details" class="klein briefing-details">
+          <summary>App: Startseite, Installation, Vollbild, Version</summary>
+          <div class="order-zeile">
+            <label class="stimme-wahl">Startseite <select class="feld" id="app-start"><option value="cockpit">Cockpit</option><option value="analyse">Analyse</option><option value="trading">Trading</option></select></label>
+            <button type="button" class="knopf zweit" id="app-vollbild">Vollbild</button>
+            <button type="button" class="knopf zweit" id="app-installieren" hidden>Installieren</button>
+          </div>
+          <p id="app-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p id="app-installation" class="klein"></p>
+          <p id="app-netz" class="klein" role="status"></p>
+          <p id="app-version" class="klein"></p>
+          <p class="klein">Bewusst ohne Service Worker und Offline-Speicher: Nach einer neuen Version genügt Neuladen (Strg+F5), es bleibt kein veralteter Programmstand im Cache. Andere offene Tabs melden eine abweichende Version.</p>
+        </details>
+        <details id="ap-anpassen" class="klein briefing-details">
+          <summary>Arbeitsplatz anpassen (Kacheln ein-/ausblenden, Reihenfolge)</summary>
+          <ul id="ap-anpassen-liste" class="aufgaben-liste" aria-label="Kacheln des Arbeitsplatzes"></ul>
+        </details>
+      </div>
+    </article>    <article class="karte">
+      <h2 class="karte-titel">System <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <ul class="statusliste">
+          <li style="color: var(--ok);">● Dashboard: ONLINE</li>
+          <li id="ki-status">● KI-Verbindung: NICHT VERBUNDEN</li>
+          <li id="markt-status">● Marktdaten: NICHT VERBUNDEN</li>
+          <li id="trading-status">● Trading: DEAKTIVIERT</li>
+          <li id="handelsmodus-status">● Handelsmodus: KEIN HANDEL AKTIV</li>
+          <!-- Lage (ab 11-02m): nur aus dem tatsächlichen Zustand abgeleitet, keine eigene Abfrage, keine Kurse -->
+          <li id="lage-kurse">● Kursdaten US-Aktien: wird ermittelt</li>
+          <li id="lage-aktien-paper">● Aktien-Paper: wird ermittelt</li>
+          <li id="lage-krypto-paper">● Krypto-Paper: wird ermittelt</li>
+          <li id="lage-watchlists">● Watchlists: wird ermittelt</li>
+          <li id="lage-notaus">● Not-Aus: wird ermittelt</li>
+        </ul>
+        <button type="button" class="knopf zweit" id="briefing-knopf">Briefing starten</button>
+        <section id="briefing" class="briefing" hidden aria-live="polite">
+          <h3 class="briefing-titel">Briefing <span id="briefing-zeit" class="klein"></span></h3>
+          <table id="briefing-tabelle"></table>
+          <p class="klein">Nur vorhandene Daten, keine KI-Anfrage. „nicht verfügbar“ = keine Daten, nichts geschätzt.</p>
+        </section>
+      </div>
+    </article>
+
+    <article class="karte">
+      <h2 class="karte-titel">Funktionen <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <ul class="funktionen">
+          <li><span>Sprachausgabe (Vorlesen)</span><b id="vorlesen-status" class="aus">wird geprüft</b></li>
+          <li><span>Spracheingabe</span><b id="spracheingabe-status" class="aus">wird geprüft</b></li>
+          <li><span>Krypto-Paper-Trading</span><b id="paper-funktion" class="aus">noch nicht verbunden</b></li>
+          <li><span>Automatik-Trading</span><b class="gesperrt">gesperrt</b></li>
+          <li><span>Echtgeld-Handel</span><b class="gesperrt">ausgeschlossen</b></li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="karte aufgaben-karte" aria-labelledby="aufgaben-titel">
+      <h2 class="karte-titel" id="aufgaben-titel">Aufgaben <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät</span></h2>
+      <div class="karte-inhalt">
+        <form id="aufgabe-form" class="aufgabe-form" autocomplete="off">
+          <input class="feld" id="aufgabe-titel" maxlength="200" placeholder="Neue Aufgabe …" aria-label="Aufgabe" required>
+          <input class="feld" type="datetime-local" id="aufgabe-faellig" aria-label="Fällig am (optional)">
+          <select class="feld" id="aufgabe-prio" aria-label="Priorität">
+            <option value="normal">Normal</option><option value="hoch">Hoch</option><option value="niedrig">Niedrig</option>
+          </select>
+          <select class="feld" id="aufgabe-wiederholung" aria-label="Wiederholung">
+            <option value="">Einmalig</option><option value="taeglich">Täglich</option><option value="werktags">Werktags</option>
+            <option value="woechentlich">Wöchentlich</option><option value="monatlich">Monatlich</option>
+          </select>
+          <!-- ab 11-07e: Kategorie und Unterpunkte (optional) -->
+          <input class="feld" id="aufgabe-kategorie" maxlength="40" placeholder="Kategorie (optional)" aria-label="Kategorie (optional)">
+          <textarea class="feld" id="aufgabe-unterpunkte" rows="2" maxlength="2000" placeholder="Unterpunkte (optional, eine Zeile je Punkt)" aria-label="Unterpunkte (optional, eine Zeile je Punkt)"></textarea>
+          <button class="knopf" id="aufgabe-speichern" type="submit">Hinzufügen</button>
+          <button class="knopf zweit" id="aufgabe-abbrechen" type="button" hidden>Abbrechen</button>
+        </form>
+        <p id="aufgabe-meldung" class="klein" role="status"></p>
+        <!-- ab 11-06h: Sortierung, Filter und Zähler (nur Anzeige) -->
+        <div class="order-zeile">
+          <label for="aufgaben-sortierung">Sortieren:</label>
+          <select class="feld" id="aufgaben-sortierung"><option value="">nach Fälligkeit</option><option value="prio">nach Priorität</option><option value="titel">nach Titel</option><option value="neu">neueste zuerst</option></select>
+          <label for="aufgaben-filter">Anzeigen:</label>
+          <select class="feld" id="aufgaben-filter"><option value="">alle</option><option value="offen">offene</option><option value="ueberfaellig">überfällige</option><option value="erledigt">erledigte</option></select>
+          <label for="aufgaben-kategorie-filter">Kategorie:</label>
+          <select class="feld" id="aufgaben-kategorie-filter"><option value="">alle</option></select>
+          <button type="button" class="knopf zweit" id="aufgaben-woche" aria-expanded="false" aria-controls="aufgaben-wochenliste">Wochenübersicht</button>
+        </div>
+        <ul id="aufgaben-wochenliste" class="statusliste" aria-label="Wochenübersicht der Aufgaben" hidden></ul>
+        <!-- ab 11-10f: Tagesplanung – Reihenfolge, Zeitblöcke, Verpflichtungen, Woche, Monat, Tagesabschluss (app/55-tagesplan.js) -->
+        <details id="tplan-details" class="klein briefing-details">
+          <summary>Tagesplanung: Reihenfolge, Zeitblöcke, Woche, Monat</summary>
+          <progress id="tplan-fortschritt" max="1" value="0" aria-describedby="tplan-fortschritt-text"></progress> <span id="tplan-fortschritt-text" class="klein"></span>
+          <p class="klein" style="margin-bottom: 4px;">Vorschlag für die Reihenfolge heute</p>
+          <ol id="tplan-reihenfolge" class="stimmtest-protokoll" aria-label="Vorgeschlagene Reihenfolge"></ol>
+          <div class="order-zeile">
+            <input class="feld" id="tplan-von" maxlength="5" inputmode="numeric" placeholder="09:00" aria-label="Arbeitsbeginn (HH:MM)">
+            <input class="feld" id="tplan-bis" maxlength="5" inputmode="numeric" placeholder="18:00" aria-label="Arbeitsende (HH:MM)">
+            <button type="button" class="knopf zweit" id="tplan-planen">Zeitblöcke vorschlagen</button>
+            <button type="button" class="knopf zweit" id="tplan-uebernehmen" disabled>Zeitblöcke übernehmen</button>
+          </div>
+          <ul id="tplan-bloecke" class="statusliste" aria-label="Zeitblöcke"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Offene Verpflichtungen</p>
+          <ul id="tplan-verpflichtungen" class="statusliste" aria-label="Offene Verpflichtungen"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Diese Woche</p>
+          <ul id="tplan-woche" class="statusliste" aria-label="Wochenzusammenfassung"></ul>
+          <ul id="tplan-monat" class="statusliste" aria-label="Monatsübersicht"></ul>
+          <div class="order-zeile">
+            <button type="button" class="knopf zweit" id="tplan-abschluss">Tagesabschluss</button>
+            <button type="button" class="knopf zweit" id="tplan-verschieben">Offenes auf morgen verschieben …</button>
+          </div>
+          <p id="tplan-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p class="klein">Dauer, Abhängigkeit und Verschieben per Sprache: „Aufgabe … dauert 45 Minuten“, „Aufgabe … wartet auf …“, „Verschiebe Aufgabe … auf morgen um 10“.</p>
+        </details>
+        <!-- ab 11-10g: proaktive Vorschläge – bestätigen, ablehnen, später; Historie, Arten, Ruhezeit (app/56-vorschlaege.js) -->
+        <details id="vors-details" class="klein briefing-details">
+          <summary>Vorschläge von JARVIS <span id="vors-zahl"></span></summary>
+          <ul id="vors-liste" class="statusliste" aria-label="Aktuelle Vorschläge"></ul>
+          <p id="vors-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p class="klein" style="margin-bottom: 4px;">Vorschlagsarten</p>
+          <div id="vors-arten" class="verlauf-optionen"></div>
+          <div class="order-zeile">
+            <input class="feld" id="vors-ruhe-von" maxlength="5" inputmode="numeric" placeholder="22:00" aria-label="Ruhezeit von (HH:MM)">
+            <input class="feld" id="vors-ruhe-bis" maxlength="5" inputmode="numeric" placeholder="07:00" aria-label="Ruhezeit bis (HH:MM)">
+            <button type="button" class="knopf zweit" id="vors-ruhe-speichern">Ruhezeit speichern</button>
+          </div>
+          <p class="klein" style="margin-bottom: 4px;">Zuletzt</p>
+          <ul id="vors-historie" class="stimmtest-protokoll" aria-label="Vorschlagshistorie"></ul>
+          <p class="klein">Vorschläge entstehen nur aus deinen lokalen Daten, solange diese Seite offen ist. Bestätigen führt nur die genannte lokale Aktion aus; in der Ruhezeit erscheinen nur dringende Vorschläge.</p>
+        </details>
+        <p id="aufgaben-zaehler" class="klein" role="status" aria-live="polite"></p>
+        <ul id="aufgaben-liste" class="aufgaben-liste"></ul>
+        <p class="klein">
+          <button type="button" class="schalter" id="erinnerung-erlauben">Erinnerungen erlauben</button>
+          <span id="erinnerung-status">Erinnerungen: aus</span>
+        </p>
+      </div>
+    </article>
+
+    <!-- ab 11-06h: lokale Notizen (app/23-notizen.js) -->
+    <article class="karte notizen-karte" aria-labelledby="notizen-titel">
+      <h2 class="karte-titel" id="notizen-titel">Notizen <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät</span></h2>
+      <div class="karte-inhalt">
+        <form id="notiz-form" class="aufgabe-form" autocomplete="off">
+          <input class="feld" id="notiz-titel" maxlength="120" placeholder="Titel …" aria-label="Titel der Notiz">
+          <input class="feld" id="notiz-kategorie" maxlength="40" list="notiz-kategorien" aria-label="Kategorie">
+          <datalist id="notiz-kategorien"></datalist>
+          <!-- ab 11-07e: Vorlage füllt nur einen leeren Text; Tags als #wort im Text -->
+          <select class="feld" id="notiz-vorlage" aria-label="Vorlage einfügen (nur bei leerem Text)"></select>
+          <textarea class="feld" id="notiz-text" maxlength="5000" rows="3" placeholder="Text … (Tags mit #, z. B. #steuer)" aria-label="Text der Notiz"></textarea>
+          <button class="knopf" id="notiz-speichern" type="submit">Notiz speichern</button>
+          <button class="knopf zweit" id="notiz-abbrechen" type="button" hidden>Abbrechen</button>
+        </form>
+        <p id="notiz-meldung" class="klein" role="status" aria-live="polite"></p>
+        <div class="order-zeile">
+          <label for="notiz-suche">Suchen:</label>
+          <input class="feld" id="notiz-suche" type="search" maxlength="60" placeholder="Wörter in Titel, Text, Kategorie" spellcheck="false">
+          <label for="notiz-filter-kategorie">Kategorie:</label>
+          <select class="feld" id="notiz-filter-kategorie"></select>
+          <label for="notiz-filter-tag">Tag:</label>
+          <select class="feld" id="notiz-filter-tag"></select>
+        </div>
+        <p id="notiz-zaehler" class="klein"></p>
+        <ul id="notiz-liste" class="aufgaben-liste notiz-liste" aria-label="Notizen"></ul>
+      </div>
+    </article>
+
+    <article class="karte routinen-karte" aria-labelledby="routinen-titel">
+      <h2 class="karte-titel" id="routinen-titel">Routinen <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät</span></h2>
+      <div class="karte-inhalt">
+        <p id="routinen-fortschritt" class="klein" role="status" aria-live="polite"></p>
+        <ul id="routinen-liste" class="aufgaben-liste"></ul>
+        <div class="order-zeile">
+          <button class="knopf zweit" id="routine-neu" type="button">Neue Routine</button>
+          <button class="knopf zweit" id="routinen-export" type="button" aria-label="Routinen exportieren">Exportieren</button>
+          <label class="knopf zweit routine-import">Importieren<input type="file" id="routinen-import" accept="application/json,.json" hidden></label>
+        </div>
+        <!-- ab 11-09l: Workflow-Vorlagen, Wiederaufnahme, Test- und Verlaufsansicht (app/44-workflows.js) -->
+        <div class="order-zeile">
+          <select class="feld" id="wf-vorlage" aria-label="Workflow-Vorlage"></select>
+          <button class="knopf zweit" id="wf-vorlage-uebernehmen" type="button">Vorlage übernehmen</button>
+        </div>
+        <div id="wf-unterbrochen" class="wz-wichtig" role="status" hidden>
+          <span id="wf-unterbrochen-text"></span>
+          <button class="knopf zweit" id="wf-fortsetzen" type="button">Fortsetzen</button>
+          <button class="knopf zweit" id="wf-verwerfen" type="button">Verwerfen</button>
+        </div>
+        <section id="wf-ergebnis" class="verlauf-suche" hidden aria-label="Workflow-Test und Verlauf" aria-live="polite"></section>
+        <form id="routine-form" class="routine-form" hidden autocomplete="off">
+          <input class="feld" id="routine-name" maxlength="60" placeholder="Name, z. B. Morgenübersicht" aria-label="Name der Routine" required>
+          <textarea class="feld" id="routine-schritte" rows="4" aria-label="Schritte, ein Befehl pro Zeile" placeholder="Ein Befehl pro Zeile, z. B.&#10;Briefing&#10;Paper Kontostand"></textarea>
+          <p id="routine-pruefung" class="klein" aria-live="polite"></p>
+          <p class="klein">Besondere Schritte: „Wenn Aufgaben offen: …“ (auch „Aufgaben überfällig“, „verbunden“, „werktags“, „Wochenende“, „vormittags“, „nachmittags“), „Freigabe: Frage?“, „Warte 5 Sekunden“, „Versuche 2×: …“ (nur lesende Befehle).</p>
+          <ol id="routine-schrittansicht" class="stimmtest-protokoll" aria-label="Schrittansicht"></ol>
+          <div class="order-zeile">
+            <button class="knopf" id="routine-speichern" type="submit">Speichern</button>
+            <button class="knopf zweit" id="routine-abbrechen" type="button">Abbrechen</button>
+          </div>
+        </form>
+        <section id="routine-ablauf" class="briefing" hidden aria-live="polite">
+          <h3 class="briefing-titel" id="routine-ablauf-titel">Ablauf</h3>
+          <ol id="routine-schrittliste" class="stimmtest-protokoll"></ol>
+          <progress id="routine-fortschritt" max="1" value="0" aria-describedby="routine-fortschritt-text"></progress> <span id="routine-fortschritt-text" class="klein"></span>
+          <p id="routine-meldung" class="info"></p>
+          <div class="order-zeile">
+            <button class="knopf" id="routine-start" type="button">Jetzt starten</button>
+            <button class="knopf zweit" id="routine-fortsetzen" type="button" hidden>Ab fehlgeschlagenem Schritt fortsetzen</button>
+            <button class="knopf zweit" id="routine-von-vorn" type="button" hidden>Von vorn</button>
+            <button class="knopf zweit" id="routine-stopp" type="button" hidden>Abbrechen</button>
+            <button class="knopf" id="routine-freigeben" type="button" hidden>Freigeben und weiter</button>
+            <button class="knopf zweit" id="routine-pausieren" type="button" hidden>Anhalten</button>
+            <button class="knopf zweit" id="routine-weiter" type="button" hidden>Fortsetzen</button>
+            <button class="knopf zweit" id="routine-schliessen" type="button">Schließen</button>
+          </div>
+        </section>
+        <p class="klein">Schritte sind vorhandene JARVIS-Befehle (Abfragen und leicht rückgängig zu machende Aktionen). Folgenreiches (Paper-Orders, Löschen) und Gesperrtes ist in Routinen nicht erlaubt.</p>
+      </div>
+    </article>
+
+    <!-- ab 11-07f: persönliche Automatisierungen (app/27-automatik.js) – strikt getrennt vom Handel -->
+    <article class="karte automatik-karte" aria-labelledby="automatik-titel">
+      <h2 class="karte-titel" id="automatik-titel">Automatisierungen <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät</span></h2>
+      <div class="karte-inhalt">
+        <p id="auto-status" class="klein" role="status" aria-live="polite"></p>
+        <button type="button" class="knopf zweit" id="auto-stopp" aria-pressed="false">Alle Automatisierungen stoppen</button>
+        <p class="klein">Erlaubt sind nur Hinweise, die Tagesübersicht und Routinen – nie Handel, Orders oder der Not-Aus. Läuft nur, solange diese Seite geöffnet ist; Zeitpunkte, zu denen sie geschlossen war, werden nicht nachgeholt. Neue Regeln starten am besten im Modus „Simulation“.</p>
+        <form id="auto-form" class="aufgabe-form" autocomplete="off">
+          <input class="feld" id="auto-name" maxlength="60" placeholder="Name der Regel …" aria-label="Name der Regel" required>
+          <select class="feld" id="auto-ausloeser" aria-label="Auslöser"><option value="zeit">zu einer Uhrzeit</option><option value="ereignis">bei einem Ereignis</option></select>
+          <span id="auto-zeit-felder" class="auto-felder"><input class="feld" type="time" id="auto-uhrzeit" value="08:00" aria-label="Uhrzeit">
+            <select class="feld" id="auto-tage" aria-label="Tage"><option value="taeglich">täglich</option><option value="werktags">werktags</option><option value="wochenende">am Wochenende</option></select></span>
+          <span id="auto-ereignis-feld" class="auto-felder" hidden><select class="feld" id="auto-ereignis" aria-label="Ereignis"><option value="start">beim Öffnen der Seite (einmal am Tag)</option><option value="ueberfaellig">wenn Aufgaben überfällig sind (einmal am Tag)</option></select></span>
+          <select class="feld" id="auto-aktion" aria-label="Aktion"><option value="hinweis">Hinweis im Chat</option><option value="tagesuebersicht">Tagesübersicht aktualisieren</option><option value="routine">Routine starten</option></select>
+          <span id="auto-text-feld" class="auto-felder"><input class="feld" id="auto-text" maxlength="200" placeholder="Hinweistext …" aria-label="Hinweistext"></span>
+          <span id="auto-routine-feld" class="auto-felder" hidden><select class="feld" id="auto-routine" aria-label="Routine"></select></span>
+          <select class="feld" id="auto-modus" aria-label="Modus"><option value="simulation">Simulation (nur protokollieren)</option><option value="freigabe">mit Freigabe (Rückfrage)</option><option value="automatisch">automatisch</option></select>
+          <!-- ab 11-09k: Priorität und kombinierte Bedingungen (app/43-automatik-plus.js) -->
+          <select class="feld" id="auto-prio" aria-label="Priorität"><option value="normal">Priorität normal</option><option value="hoch">Priorität hoch</option><option value="niedrig">Priorität niedrig</option></select>
+          <input class="feld" id="auto-bed-offen" type="number" min="1" max="100" step="1" inputmode="numeric" placeholder="nur ab n offenen Aufgaben" aria-label="Bedingung: mindestens so viele offene Aufgaben">
+          <input class="feld" id="auto-bed-von" maxlength="5" inputmode="numeric" placeholder="ab HH:MM" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" aria-label="Bedingung: nur ab Uhrzeit (HH:MM)">
+          <input class="feld" id="auto-bed-bis" maxlength="5" inputmode="numeric" placeholder="bis HH:MM" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" aria-label="Bedingung: nur bis Uhrzeit (HH:MM)">
+          <select class="feld" id="auto-bed-tage" aria-label="Bedingung: Tage"><option value="">an allen Tagen</option><option value="werktag">nur werktags</option><option value="wochenende">nur am Wochenende</option></select>
+          <button class="knopf" type="submit" id="auto-anlegen">Regel anlegen</button>
+        </form>
+        <p id="auto-meldung" class="klein" role="status" aria-live="polite"></p>
+        <ul id="auto-liste" class="aufgaben-liste" aria-label="Regeln"></ul>
+        <!-- ab 11-09k: Vorlagen, Freigaben, Konflikte, Fehler (app/43-automatik-plus.js) -->
+        <div class="order-zeile">
+          <select class="feld" id="auto-vorlage" aria-label="Regelvorlage"></select>
+          <button type="button" class="knopf zweit" id="auto-vorlage-anlegen">Vorlage anlegen (Simulation)</button>
+        </div>
+        <p id="auto-freigaben" class="klein" role="status"></p>
+        <h3 class="stimmtest-titel">Konflikte</h3>
+        <ul id="auto-konflikte" class="statusliste" aria-label="Konflikte zwischen Regeln"></ul>
+        <h3 class="stimmtest-titel">Fehlerübersicht</h3>
+        <ul id="auto-fehler" class="statusliste" aria-label="Fehlerübersicht der Automatisierungen"></ul>
+        <h3 class="stimmtest-titel">Geplant</h3>
+        <ul id="auto-vorschau" class="statusliste" aria-label="Geplante Ausführungen"></ul>
+        <h3 class="stimmtest-titel">Protokoll (letzte 10)</h3>
+        <ul id="auto-protokoll" class="statusliste" aria-label="Ausführungsprotokoll"></ul>
+      </div>
+    </article>
+
+    <article class="karte profil-karte" aria-labelledby="profil-titel">
+      <h2 class="karte-titel" id="profil-titel">Profil &amp; Projekte <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät</span></h2>
+      <div class="karte-inhalt">
+        <div class="order-zeile">
+          <select class="feld" id="profil-filter" aria-label="Einträge anzeigen"></select>
+          <button class="knopf zweit" id="profil-neu" type="button">Neuer Eintrag</button>
+        </div>
+        <form id="profil-form" class="routine-form" hidden autocomplete="off">
+          <select class="feld" id="profil-kategorie" aria-label="Bereich"></select>
+          <input class="feld" id="profil-projekt" maxlength="40" list="profil-projekte" placeholder="Projektname, z. B. Garten" aria-label="Projektname" hidden>
+          <datalist id="profil-projekte"></datalist>
+          <input class="feld" id="profil-eintrag-titel" maxlength="80" placeholder="Stichwort, z. B. Anrede oder Ziel" aria-label="Stichwort" required>
+          <textarea class="feld" id="profil-text" rows="3" maxlength="500" placeholder="Inhalt, z. B. „Bitte kurze Antworten“ – keine Passwörter, Codes oder Schlüssel" aria-label="Inhalt" required></textarea>
+          <label class="verlauf-schalter"><input type="checkbox" id="profil-vorauswahl"> Für neue Anfragen vorauswählen (vor dem Senden abwählbar)</label>
+          <p id="profil-pruefung" class="klein" aria-live="polite"></p>
+          <p id="ged-vorschau" class="klein" aria-live="polite"></p>
+          <div class="order-zeile">
+            <button class="knopf" id="profil-speichern" type="submit">Speichern</button>
+            <button class="knopf zweit" id="profil-abbrechen" type="button">Abbrechen</button>
+          </div>
+        </form>
+        <ul id="profil-liste" class="aufgaben-liste"></ul>
+        <div class="order-zeile" style="margin-top: 8px;">
+          <button class="knopf zweit" id="profil-export" type="button" aria-label="Profil und Projekte exportieren">Exportieren</button>
+          <label class="knopf zweit routine-import">Importieren<input type="file" id="profil-import" accept="application/json,.json" hidden></label>
+          <button class="knopf zweit" id="profil-alles-loeschen" type="button">Alles löschen</button>
+        </div>
+        <p id="profil-meldung" class="klein" role="status"></p>
+        <p class="klein">Getrennt vom Gesprächsverlauf. An die KI geht ein Eintrag nur, wenn er über der Befehlszeile für die jeweilige Anfrage ausgewählt ist. Zugangscodes, Passwörter, API-Schlüssel und Tokens werden nicht gespeichert.</p>
+        <!-- ab 11-09j: Gedächtnis 2.0 – Suche, Herkunft, Nutzung, Prüfungen, Löschliste, Diagnose (app/42-gedaechtnis.js) -->
+        <details id="ged-details" class="klein briefing-details">
+          <summary>Gedächtnis: Suche, Prüfung, Nutzung, Diagnose</summary>
+          <input class="feld" id="ged-suche" type="search" maxlength="80" placeholder="Im Profil suchen" aria-label="Im Profil suchen">
+          <ul id="ged-diagnose" class="aufgaben-liste" aria-label="Gedächtnis-Diagnose"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Präferenzen, die JARVIS sich merkt (ab 11-10e)</p>
+          <ul id="ged3-praeferenzen" class="statusliste" aria-label="Präferenzübersicht"></ul>
+          <p id="ged-orte" class="klein"></p>
+          <div class="order-zeile">
+            <button type="button" class="knopf zweit" id="ged-export">Mit Herkunft und Nutzung exportieren</button>
+            <button type="button" class="knopf zweit" id="ged-loeschliste">Löschliste leeren …</button>
+          </div>
+        </details>
+        <!-- ab 11-09f: Projektplanung – bündelt vorhandene Aufgaben (Kategorie = Projektname), Notizen und Wissen (app/38-projekte.js) -->
+        <details id="projekt-details" class="klein briefing-details">
+          <summary>Projektplanung (Ziel, Status, Meilensteine, Fortschritt)</summary>
+          <p>Aufgaben mit der Kategorie = Projektname, Notizen mit dieser Kategorie oder #Tag und die Einträge „Projekt …“ oben gehören automatisch dazu. Fortschritt, nächster Schritt und Risiken werden daraus berechnet.</p>
+          <form id="projekt-form" class="aufgabe-form" autocomplete="off">
+            <input class="feld" id="projekt-name" maxlength="40" placeholder="Projektname, z. B. Umzug" aria-label="Projektname" required>
+            <input class="feld" id="projekt-ziel" maxlength="300" placeholder="Ziel (optional)" aria-label="Projektziel">
+            <input class="feld" id="projekt-faellig" type="date" aria-label="Projekt fällig bis">
+            <input class="feld" id="projekt-beschreibung" maxlength="1000" placeholder="Beschreibung (optional)" aria-label="Projektbeschreibung">
+            <select class="feld" id="projekt-prio" aria-label="Priorität"></select>
+            <select class="feld" id="projekt-vorlage" aria-label="Vorlage"></select>
+            <button class="knopf zweit" type="submit">Projekt anlegen</button>
+          </form>
+          <div class="order-zeile">
+            <input class="feld" id="projekt-suche" type="search" maxlength="80" placeholder="Projekte durchsuchen" aria-label="Projekte durchsuchen">
+            <select class="feld" id="projekt-status-filter" aria-label="Status filtern"></select>
+            <label class="knopf zweit">Projekt importieren<input type="file" id="projekt-import" accept="application/json,.json" hidden></label>
+          </div>
+          <label class="verlauf-schalter"><input type="checkbox" id="projekt-archiv"> archivierte zeigen</label>
+          <label class="verlauf-schalter"><input type="checkbox" id="projekt-import-aufgaben"> beim Import auch Aufgaben anlegen</label>
+          <label class="verlauf-schalter"><input type="checkbox" id="projekt-kette" checked> neuer Meilenstein wartet auf den vorigen</label>
+          <p id="projekt-meldung" class="klein" role="status" aria-live="polite"></p>
+          <ul id="projekt-liste" class="aufgaben-liste" aria-label="Projekte"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Wochenplanung (aktive Projekte, nächste 7 Tage)</p>
+          <ul id="projekt-woche" class="aufgaben-liste" aria-label="Wochenplanung der Projekte"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Projektverlauf (letzte 10)</p>
+          <ol id="projekt-verlauf" class="stimmtest-protokoll" aria-label="Projektverlauf"></ol>
+        </details>
+        <!-- ab 11-10h: Projektvergleich, blockierte Posten, Chronik, Projektnotiz (app/57-projekte2.js) -->
+        <details id="proj2-details" class="klein briefing-details">
+          <summary>Projekte vergleichen, Blockiertes, Chronik</summary>
+          <p class="klein" style="margin-bottom: 4px;">Vergleich der offenen Projekte</p>
+          <ul id="proj2-vergleich" class="statusliste" aria-label="Projektvergleich"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Blockiert (wartet auf Offenes)</p>
+          <ul id="proj2-blockiert" class="statusliste" aria-label="Blockierte Aufgaben und Meilensteine"></ul>
+          <div class="order-zeile">
+            <select class="feld" id="proj2-projekt" aria-label="Projekt für Chronik und Notiz"><option value="">– kein Projekt –</option></select>
+            <input class="feld" id="proj2-notiz" maxlength="500" placeholder="Notiz zum Projekt" aria-label="Notiz zum gewählten Projekt">
+            <button type="button" class="knopf zweit" id="proj2-notiz-los">Notiz speichern</button>
+          </div>
+          <p id="proj2-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p class="klein" style="margin-bottom: 4px;">Chronik</p>
+          <ul id="proj2-chronik" class="stimmtest-protokoll" aria-label="Projektchronik"></ul>
+        </details>
+      </div>
+    </article>
+
+    <details class="karte einstellungen" id="verbindung-karte">
+      <summary class="karte-titel">Verbindung <span class="zu">]</span><span class="zusatz"></span></summary>
+      <div class="karte-inhalt">
+        <p class="klein" style="margin-top: 0;">Diese Angaben werden nur auf diesem Gerät gespeichert, nicht in der Datei.</p>
+        <label for="worker-url">Worker-Adresse</label>
+        <input class="feld" type="url" id="worker-url" placeholder="https://jarvis.NAME.workers.dev">
+        <label for="zugangscode">Zugangscode</label>
+        <input class="feld" type="password" id="zugangscode" placeholder="Ihr JARVIS-Zugangscode" autocomplete="current-password">
+        <button class="knopf" onclick="verbindungSpeichern()">Speichern und prüfen</button>
+        <p id="verbindung-meldung" class="klein" role="status"></p>
+        <h3 class="stimmtest-titel">PC-Helfer (optional, nur dieser PC)</h3>
+        <p class="klein" style="margin-top: 0;">Für Aktivierungswort „Jarvis“ und erlaubte PC-Funktionen: <code>pc-helfer\jarvis-helfer.ps1</code>
+          starten und den dort angezeigten Kopplungscode eintragen. Der Helfer ist nur unter 127.0.0.1 erreichbar.</p>
+        <input class="feld" type="password" id="helfer-code" placeholder="Kopplungscode aus dem Helfer-Fenster" autocomplete="off" aria-label="Kopplungscode des PC-Helfers">
+        <label class="verlauf-schalter"><input type="checkbox" id="helfer-aktivierung"> Auf das Aktivierungswort „Jarvis“ reagieren</label>
+        <button class="knopf zweit" id="helfer-pruefen" type="button">Helfer prüfen</button>
+        <p id="helfer-status" class="info" role="status">PC-Helfer: nicht eingerichtet</p>
+        <p id="helfer-grenze" class="klein" hidden>Auf Tablet und Smartphone nicht nutzbar: Der PC-Helfer antwortet nur auf dem PC, auf dem er
+          läuft (127.0.0.1). Eine Freigabe ins Heimnetz ist bewusst nicht vorgesehen – Browser sperren den Weg von einer HTTPS-Seite ins
+          WLAN, und offen im WLAN wäre ein Risiko. Details: <code>docs/PC_HELFER_UND_AKTIVIERUNGSWORT.md</code>, Abschnitt 4b.</p>
+        <button class="knopf zweit" id="einrichtung-oeffnen" type="button">Einrichtungsassistent</button>
+      </div>
+    </details>
+
+    <details class="karte einstellungen" id="diagnose-karte">
+      <summary class="karte-titel">Diagnose <span class="zu">]</span><span class="zusatz" id="diagnose-anzahl">keine Fehler</span></summary>
+      <div class="karte-inhalt">
+        <p class="klein" style="margin-top: 0;">Fehlgeschlagene Anfragen an Worker und PC-Helfer – nur technische Angaben (Zeit, Pfad, Art,
+          Status, gekürzte Meldung), keine Gesprächsinhalte. Codes, Schlüssel und Tokens werden entfernt. Nur auf diesem Gerät.</p>
+        <ul id="diagnose-liste" class="diagnose-liste"></ul>
+        <div class="order-zeile">
+          <button class="knopf zweit" id="diagnose-kopieren" type="button">Kopieren</button>
+          <button class="knopf zweit" id="diagnose-loeschen" type="button" aria-label="Diagnoseprotokoll löschen">Löschen</button>
+        </div>
+        <p id="diagnose-meldung" class="klein" role="status"></p>
+      </div>
+    </details>
+
+    <details class="karte einstellungen" id="integrationen-karte">
+      <summary class="karte-titel">KI &amp; Integrationen <span class="zu">]</span><span class="zusatz">Übersicht</span></summary>
+      <div class="karte-inhalt">
+        <button class="knopf zweit" id="integrationen-pruefen" type="button">Prüfen (nur lesend, kostenlos)</button>
+        <p class="klein">Fragt nur Statusseiten ab (Worker, Paper, PC-Helfer) – keine KI-Anfrage, keine Stimme, keine Order.
+          Ob ein KI-Schlüssel wirklich funktioniert, zeigt erst eine echte (kostenpflichtige) Frage im Chat.</p>
+        <table id="integrationen-tabelle" class="uebersicht-tabelle"></table>
+        <h3 class="stimmtest-titel">KI-Nutzung (nur Mengen, keine Inhalte)</h3>
+        <div class="order-zeile">
+          <select class="feld" id="nutzung-zeitraum" aria-label="Zeitraum">
+            <option value="heute">Heute</option><option value="7">Letzte 7 Tage</option><option value="30">Letzte 30 Tage</option><option value="alle" selected>Alle</option>
+          </select>
+          <select class="feld" id="nutzung-art" aria-label="Art">
+            <option value="">Alle Arten</option><option value="chat">Chat (Claude)</option><option value="sprechen">Sprachausgabe (Google)</option>
+          </select>
+          <button class="knopf zweit" id="nutzung-loeschen" type="button" aria-label="KI-Nutzungsdaten löschen">Löschen</button>
+        </div>
+        <p id="nutzung-summe" class="info" role="status"></p>
+        <ul id="nutzung-liste" class="diagnose-liste"></ul>
+        <p class="klein">„≈“ = geschätzt aus der Textlänge (etwa 4 Zeichen je Token, ohne Systemanweisung und Suchergebnisse – eher zu
+          niedrig), solange der Worker keine Zahlen liefert (echte Zahlen ab dem Worker-Patch vom 30.10.).
+          Kosten rechnet JARVIS bewusst nicht aus – Preise ändern sich; maßgeblich ist die Abrechnung des Anbieters.</p>
+      </div>
+    </details>
+
+    <details class="karte einstellungen" id="faehigkeiten-karte">
+      <summary class="karte-titel">Fähigkeiten &amp; Freigaben <span class="zu">]</span><span class="zusatz" id="faehigkeiten-anzahl"></span></summary>
+      <div class="karte-inhalt">
+        <div class="order-zeile">
+          <input class="feld" type="search" id="faehigkeiten-suche" placeholder="Suchen, z. B. Aufgabe" aria-label="Fähigkeiten durchsuchen">
+          <select class="feld" id="faehigkeiten-filter" aria-label="Nach Freigabe filtern">
+            <option value="">Alle Freigaben</option><option value="abfrage">direkt (Abfrage)</option><option value="leicht">direkt, rückgängig machbar</option>
+            <option value="bestaetigen">nur nach Bestätigung</option><option value="gesperrt">ausgeschaltet/gesperrt</option><option value="geaendert">von mir geändert</option>
+          </select>
+        </div>
+        <ul id="faehigkeiten-liste" class="aufgaben-liste"></ul>
+        <!-- ab 11-09b: Werkzeuge – Trockenlauf, Historie und Diagnose (app/35-werkzeuge.js) -->
+        <h3 class="stimmtest-titel">Werkzeug testen (Trockenlauf – führt nichts aus)</h3>
+        <form id="werkzeug-test-form" class="order-zeile" autocomplete="off">
+          <input class="feld" id="werkzeug-test-text" maxlength="300" placeholder="Satz, z. B. Neue Aufgabe Steuer und dann gehe zu Notizen" aria-label="Satz für den Trockenlauf">
+          <button class="knopf zweit" type="submit">Prüfen</button>
+        </form>
+        <div id="werkzeug-test-ergebnis" class="info" role="status" aria-live="polite"></div>
+        <p id="werkzeug-diagnose" class="klein" role="status"></p>
+        <details class="klein briefing-details"><summary>Werkzeughistorie (diese Sitzung)</summary><ol id="werkzeug-historie" class="stimmtest-protokoll"></ol></details>
+        <p class="klein">Freigaben lassen sich nur <b>strenger</b> stellen (bis „ausgeschaltet“), nie lockerer als der Standard.
+          Strenger gestellte Fähigkeiten sind in Routinen nicht erlaubt.</p>
+        <div class="order-zeile">
+          <button class="knopf zweit" id="freigaben-standard" type="button">Alle auf Standard</button>
+        </div>
+        <p id="freigaben-meldung" class="klein" role="status"></p>
+        <h3 class="stimmtest-titel">Änderungsverlauf</h3>
+        <ul id="freigaben-verlauf" class="diagnose-liste"></ul>
+      </div>
+    </details>
+
+    <details class="karte einstellungen" id="haus-karte">
+      <summary class="karte-titel">Smart Home <span class="zu">]</span><span class="zusatz" id="haus-art">nicht geprüft</span></summary>
+      <div class="karte-inhalt">
+        <p id="haus-status" class="info" role="status" style="margin-top: 0;">Home Assistant: noch nicht geprüft.</p>
+        <ul id="haus-liste" class="aufgaben-liste"></ul>
+        <div class="order-zeile">
+          <button class="knopf zweit" id="haus-pruefen" type="button">Prüfen &amp; Geräte laden</button>
+          <button class="knopf zweit" id="haus-demo" type="button">Demo (Attrappe)</button>
+          <button class="knopf zweit" id="haus-trennen" type="button">Trennen (dieses Gerät)</button>
+        </div>
+        <p class="klein">Echte Verbindung nur über den Worker: Token als Secret <code>HA_TOKEN</code>, nie im Browser. Nur freigegebene
+          Lichter und Schalter (<code>HA_GERAETE</code>). Einrichtung: <code>docs/HOME_ASSISTANT_ANSCHLUSS.md</code>. „Trennen“ schaltet die
+          Anfragen auf diesem Gerät ab – vollständig trennen: Token in Home Assistant widerrufen und das Secret im Worker löschen.</p>
+      </div>
+    </details>
+
+    <details class="karte einstellungen" id="daten-karte">
+      <summary class="karte-titel">Daten auf diesem Gerät <span class="zu">]</span><span class="zusatz" id="daten-gesamt"></span></summary>
+      <div class="karte-inhalt">
+        <p class="klein" style="margin-top: 0;">Alles liegt nur im Browserspeicher dieses Browsers – nichts wird automatisch übertragen oder abgeglichen.
+          Auch auf demselben Gerät haben die geöffnete Datei und die Website getrennte Speicher; Daten wechseln nur über Sicherung und Wiederherstellen.
+          Sicherungen enthalten <b>nie</b> Zugangscode oder Kopplungscode; Schlüssel und Tokens werden vorher entfernt.</p>
+        <table id="daten-tabelle" class="uebersicht-tabelle"></table>
+        <h3 class="stimmtest-titel">Sicherung</h3>
+        <div class="order-zeile">
+          <button class="knopf zweit" id="daten-export" type="button">Sicherung exportieren</button>
+          <button class="knopf zweit" id="daten-export-einstellungen" type="button">Nur Einstellungen (für PC ↔ Tablet)</button>
+          <label class="knopf zweit routine-import">Wiederherstellen …<input type="file" id="daten-import" accept="application/json,.json" hidden></label>
+        </div>
+        <p id="daten-meldung" class="info" role="status"></p>
+        <button class="knopf zweit" id="daten-neu-laden" type="button" hidden>Seite jetzt neu laden</button>
+        <!-- ab 11-09p: Prüfbericht aller Speicherbereiche und Abgleich zwischen Tabs (app/48-datenpruefung.js) -->
+        <button class="knopf zweit" id="daten-pruefen" type="button">Alle Daten prüfen</button>
+        <p id="daten-pruefung-status" class="klein" role="status" aria-live="polite"></p>
+        <ul id="daten-pruefung" class="statusliste" aria-label="Prüfbericht der gespeicherten Daten"></ul>
+        <p id="daten-abgleich" class="klein" role="status" aria-live="polite"></p>
+        <p class="klein">„Nur Einstellungen“: Worker-Adresse (ohne Code), Stimme &amp; Sprache, Freigaben, Aktivierungswort-Schalter, Smart-Home-Modus, Risiko-Warnschwellen –
+          auf dem anderen Gerät „Wiederherstellen“, Vorschau prüfen, Zugangscode dort einmal von Hand eintragen.</p>
+        <p class="klein">Nicht in diesen Sicherungen: die Musterportfolios des Portfolio-Labors (Reiter Trading) – dort
+          „Alle Musterportfolios exportieren“ und auf dem anderen Gerät „Musterportfolios importieren“.</p>
+      </div>
+    </details>
+    <!-- ab 14ze: seltener genutzte Cockpit-Karten als klappbarer Bereich Weitere Werkzeuge (app/77-weitere-werkzeuge.js); am Ende der linken Spalte (nicht als eigenes Grid-Element), auf Touch-Geräten eingeklappt, nichts gelöscht -->
+  <p class="weitere-leiste"><button type="button" class="knopf zweit" id="weitere-schalter" aria-expanded="true">Weitere Werkzeuge ausblenden</button> <span class="klein" id="weitere-hinweis"></span></p>
+</div>
+
+  <div class="spalte mitte">
+    <article class="karte kern-karte">
+      <h2 class="karte-titel">Kern <span class="zu">]</span></h2>
+      <div class="kern-buehne">
+        <ul class="kern-knoten" aria-label="Kurzstatus">
+          <li id="knoten-ki" data-zustand="aus"><span class="name">KI</span><span class="wert">nicht eingerichtet</span></li>
+          <li id="knoten-markt" data-zustand="aus"><span class="name">Marktdaten</span><span class="wert">nicht verbunden</span></li>
+          <li id="knoten-handel" data-zustand="aus"><span class="name">Handel</span><span class="wert">nicht verbunden</span></li>
+        </ul>
+        <!-- Schnellzugriff US-Aktien (ab 11-02m): springt zu den vorhandenen Bereichen in „Trading“ und setzt dort den Fokus – löst nichts aus -->
+        <nav class="schnellzugriff" aria-label="Schnellzugriff US-Aktien">
+          <button type="button" class="knopf zweit" id="sz-analyse" data-ziel="ablauf-symbol">US-Aktie analysieren</button>
+          <button type="button" class="knopf zweit" id="sz-watchlist" data-ziel="wl-symbol">Aktien-Watchlist</button>
+          <button type="button" class="knopf zweit" id="sz-briefing" data-ziel="ab-briefing-kurz">Aktien-Briefing</button>
+          <button type="button" class="knopf zweit" id="sz-strategie" data-ziel="sl-kapital">Strategie-Vergleich</button>
+        </nav>
+
+        <div class="orbit" id="orbit">
+          <svg id="kern-verbindungen" class="verbindungen" aria-hidden="true"></svg>
+          <div id="kern" class="kern" data-zustand="offline" aria-hidden="true"><canvas id="kern-leinwand"></canvas></div>
+          <!-- Module: Reihenfolge = abwechselnd rechts/links, von oben nach unten. Weitere Module hier ergänzen. -->
+          <div class="kern-aktionen" aria-label="Module">
+          <button type="button" class="aktion" onclick="ansichtZeigen('analyse')">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 17h16"/><polyline points="3,13 7,8 11,11 17,4"/></svg></span>
+            <span><b>Analyse</b><small>Charts &amp; Indikatoren</small></span></button>
+          <button type="button" class="aktion" onclick="ansichtZeigen('trading')">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2l6.5 3v5c0 4-3 6.6-6.5 8-3.5-1.4-6.5-4-6.5-8V5z"/></svg></span>
+            <span><b>Trading</b><small>Not-Aus &amp; Testnet</small></span></button>
+          <button type="button" class="aktion" onclick="allesAktualisieren()">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16.5 10a6.5 6.5 0 1 1-2.2-4.9"/><polyline points="16.5,2.5 16.5,6.5 12.5,6.5"/></svg></span>
+            <span><b>Aktualisieren</b><small>Daten neu laden</small></span></button>
+          <button type="button" class="aktion" onclick="verbindungOeffnen()">
+            <span class="aktion-symbol"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="3"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.3 4.3l2.1 2.1M13.6 13.6l2.1 2.1M4.3 15.7l2.1-2.1M13.6 6.4l2.1-2.1"/></svg></span>
+            <span><b>Verbindung</b><small>Worker &amp; Zugang</small></span></button>
+          </div>
+        </div>
+
+        <p id="kern-text" class="kern-text" aria-live="polite">KI: NICHT EINGERICHTET</p>
+        <div class="untertitel" aria-hidden="true">
+          <p id="untertitel-frage"></p>
+          <p id="untertitel-antwort"></p>
+        </div>
+
+        <div class="befehlszeile">
+          <span class="befehl-symbol" aria-hidden="true">▶</span>
+          <input class="feld" type="text" id="befehl" placeholder="Befehl oder Frage an JARVIS …" aria-label="Nachricht an JARVIS">
+          <button type="button" class="mikro" id="mikro" data-zustand="bereit" aria-pressed="false" aria-describedby="sprach-status">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="2" width="6" height="10" rx="3"/><path d="M4 9a6 6 0 0 0 12 0M10 15v3M7 18h6"/></svg>
+            <span id="mikro-text">Sprechen</span></button>
+          <button class="knopf" id="senden" onclick="jarvisAntwort()">SENDEN</button>
+          <button class="knopf zweit" id="abbrechen" type="button" hidden>ABBRECHEN</button>
+        </div>
+        <!-- ab 11-07d: offene Rückfrage sichtbar; „verwerfen“ führt nie etwas aus (app/26-sprachausgabe.js) -->
+        <p id="dialog-zustand" class="dialog-zustand" hidden><span id="dialog-zustand-text" role="status"></span>
+          <button type="button" class="knopf zweit" id="dialog-verwerfen">Rückfrage verwerfen</button></p>
+        <!-- ab 11-07q: zuletzt ausgeführte Aktionen dieser Sitzung (app/33-integration.js) -->
+        <details id="aktionen-details" class="klein briefing-details">
+          <summary>Zuletzt ausgeführte Aktionen (diese Sitzung)</summary>
+          <ol id="aktionen-liste" class="stimmtest-protokoll" aria-label="Zuletzt ausgeführte Aktionen"></ol>
+        </details>
+        <!-- ab 11-09a: mehrteilige Aufträge mit Vorschau, Freigabe, Pause und Abbruch (app/34-auftraege.js) -->
+        <details id="auftrag-details" class="klein briefing-details">
+          <summary>Aufträge (mehrteilige Anfragen)</summary>
+          <p>Mehrere Befehle in einem Satz („… und dann …“) werden zu einem Auftrag. Lesen läuft sofort, Ändern erst nach Freigabe; Löschen, Orders und Gesperrtes nie innerhalb eines Auftrags.</p>
+          <p>„Plane: …“ bereitet nur vor (auch einteilig) und führt nichts aus, bis du freigibst. Pläne älter als 30 Minuten oder mit geänderter Freigabe müssen erst aktualisiert werden.</p>
+          <div class="order-zeile">
+            <label class="knopf zweit">Plan importieren<input type="file" id="auftrag-import" accept="application/json,.json" hidden></label>
+            <span id="auftrag-meldung" class="klein" role="status" aria-live="polite"></span>
+          </div>
+          <!-- ab 11-11c: Freigabeübersicht über alle Bereiche (app/68-freigaben.js) -->
+          <p class="klein" style="margin-bottom: 4px;">Wartet auf deine Freigabe <span id="frg-zahl"></span></p>
+          <ul id="frg-liste" class="statusliste" aria-label="Offene Freigaben"></ul>
+          <ul id="auftrag-liste" class="aufgaben-liste" aria-label="Aufträge"></ul>
+          <ol id="auftrag-protokoll" class="stimmtest-protokoll" aria-label="Auftragsprotokoll"></ol>
+        </details>
+
+        <!-- Profil für die nächste KI-Anfrage: immer sichtbar, sobald Einträge existieren; gilt nur für diese eine Anfrage -->
+        <!-- ab 11-10e: passende Profileinträge zur Frage, nur auf Klick (app/54-gedaechtnis3.js) -->
+        <p id="ged3-vorschlaege" class="klein" role="status" aria-live="polite" hidden></p>
+        <div id="profil-leiste" class="profil-leiste" hidden>
+          <span id="profil-anzeige" role="status"></span>
+          <button type="button" class="schalter" id="profil-auswahl-knopf" aria-expanded="false" aria-controls="profil-auswahl">Auswahl ändern</button>
+          <div id="profil-auswahl" class="profil-auswahl" hidden></div>
+        </div>
+
+        <!-- Spracheingabe: nach normalem Ende automatisch gesendet; nach Abbruch bearbeitbarer Vorschlag mit „Senden“ -->
+        <p id="sprach-status" class="sprach-status" role="status" aria-live="polite"></p>
+        <div id="sprach-vorschau" class="sprach-vorschau" hidden>
+          <label for="sprach-text">Erkannter Text – wird nach dem Ende der Aufnahme automatisch gesendet. Nach Abbruch (Esc) bitte prüfen und mit „Senden“ (Strg + Enter) abschicken.</label>
+          <textarea id="sprach-text" class="feld" rows="2"></textarea>
+          <div class="sprach-knoepfe">
+            <button type="button" class="knopf" id="sprach-senden">Senden</button>
+            <button type="button" class="knopf zweit" id="sprach-uebernehmen">Ins Eingabefeld</button>
+            <button type="button" class="knopf zweit" id="sprach-verwerfen">Verwerfen</button>
+          </div>
+        </div>
+
+        <div class="sprachleiste">
+          <button type="button" class="schalter" id="vorlesen-schalter" aria-pressed="true">Vorlesen: an</button>
+          <button type="button" class="schalter" id="vorlesen-stopp" disabled>Vorlesen stoppen</button>
+          <label class="stimme-wahl">Stimme <select class="feld" id="stimme-wahl"></select></label>
+          <label class="stimme-wahl">Erkennung <select class="feld" id="sprache-erkennung" aria-describedby="sprache-hinweis"></select></label>
+          <label class="stimme-wahl">Ausgabe <select class="feld" id="sprache-ausgabe" aria-describedby="sprache-hinweis"></select></label>
+          <!-- ab 11-07d: kurz = erste Sätze, Rest im Chat; Rückfragen immer vollständig (app/26-sprachausgabe.js) -->
+          <label class="stimme-wahl">Umfang <select class="feld" id="vorlesen-umfang"></select></label>
+          <span id="sprache-hinweis" class="sprach-hinweis" role="status"></span>
+          <button type="button" class="schalter" id="stimme-testen" aria-controls="stimmtest" aria-expanded="false">Stimme testen</button>
+          <span id="sprach-hinweis" class="sprach-hinweis" aria-live="polite"></span>
+          <div id="einstellung-fehler" class="wz-wichtig" role="alert" hidden></div>
+        </div>
+
+        <!-- Stimmtest: fester Testtext, keine KI-Anfrage. Misst Start, Dauer, Lücken und Fehler der echten Wiedergabe. -->
+        <section id="stimmtest" class="stimmtest" hidden aria-label="Stimmtest">
+          <p class="klein" style="margin-top: 0;">Fester deutscher Testtext, keine KI-Anfrage (spielt auch bei „Vorlesen: aus“).
+            Vergleich: Stockt schon <b>A</b>, liegt es eher an der Stimme bzw. ihrem Dienst. Stockt nur <b>C</b>, aber nicht <b>B</b>,
+            liegt es eher an der satzweisen Aufteilung.</p>
+          <label class="stimmtest-wahl">Teststimme – nur für diesen Test, ändert nicht die Vorlesestimme
+            <select class="feld" id="teststimme-wahl"></select></label>
+          <p class="klein" id="testsprache-hinweis"></p>
+          <div class="sprach-knoepfe">
+            <button type="button" class="knopf zweit" id="stimmtest-kurz">A · Kurzer Satz direkt</button>
+            <button type="button" class="knopf zweit" id="stimmtest-lang">B · Langer Text am Stück</button>
+            <button type="button" class="knopf zweit" id="stimmtest-teile">C · Langer Text satzweise</button>
+            <button type="button" class="knopf zweit" id="stimmtest-google">G · Google-Stimme (Worker, 1 Aufruf)</button>
+            <button type="button" class="knopf zweit" id="stimmtest-stopp">Stopp</button>
+          </div>
+          <h3 class="stimmtest-titel">Messwerte (neueste oben)</h3>
+          <ol id="stimmtest-protokoll" class="stimmtest-protokoll" aria-live="polite" aria-relevant="additions"><li>Noch kein Test.</li></ol>
+          <h3 class="stimmtest-titel">Verfügbare Stimmen (<span id="stimmen-anzahl">0</span>)</h3>
+          <ul id="stimmen-liste" class="stimmen-liste"></ul>
+        </section>
+      </div>
+    </article>
+
+    <article class="karte chat-karte">
+      <h2 class="karte-titel">Gesprächsverlauf <span class="zu">]</span></h2>
+      <div class="karte-inhalt">
+        <div class="verlauf-steuerung">
+          <label class="verlauf-schalter"><input type="checkbox" id="verlauf-dauerhaft"> Auf diesem Gerät speichern</label>
+          <button type="button" class="schalter" id="verlauf-export" aria-label="Gesprächsverlauf exportieren">Exportieren</button>
+          <button type="button" class="schalter" id="verlauf-loeschen">Verlauf löschen</button>
+          <button type="button" class="schalter" id="verlauf-suchen" aria-expanded="false" aria-controls="verlauf-suche">Suchen &amp; Angeheftet</button>
+          <label class="schalter bild-waehlen">Bild …<input type="file" id="bild-datei" accept="image/jpeg,image/png,image/gif,image/webp" hidden></label>
+          <span id="verlauf-modus" class="klein" role="status">Nur diese Sitzung – wird beim Neuladen gelöscht</span>
+        </div>
+        <!-- Suche nur lokal im Browser: durchsucht die angezeigten Nachrichten und die angehefteten – keine Anfrage -->
+        <!-- ab 11-09i: Gesprächsführung – Antwortstil, Kontext, Zusammenfassung, Antwort-Werkzeuge (app/41-dialog.js) -->
+        <details id="dialog-details" class="klein briefing-details">
+          <summary>Gespräch: Antwortstil, Kontext, Zusammenfassung</summary>
+          <div class="order-zeile">
+            <select class="feld" id="dialog-stil" aria-label="Antwortstil"></select>
+            <label class="verlauf-schalter"><input type="checkbox" id="dialog-ehrlich"> Ehrlichkeitshinweis mitsenden (Fakten/Annahmen trennen, nichts erfinden)</label>
+          </div>
+          <p id="dialog-kontext" class="klein" role="status"></p>
+          <div class="order-zeile">
+            <button type="button" class="knopf zweit" id="dialog-vergessen">Kontext vergessen</button>
+            <button type="button" class="knopf zweit" id="dialog-zusammenfassen">Gespräch zusammenfassen</button>
+            <button type="button" class="knopf zweit" id="dialog-export" aria-label="Gesprächszusammenfassung exportieren">Exportieren</button>
+          </div>
+          <div class="order-zeile">
+            <button type="button" class="schalter" id="dialog-kopieren">Letzte Antwort kopieren</button>
+            <button type="button" class="schalter" id="dialog-vorlesen">Letzte Antwort vorlesen</button>
+            <button type="button" class="schalter" id="dialog-bearbeiten">Letzte Frage bearbeiten</button>
+            <button type="button" class="schalter" id="dialog-erneut" hidden>Unterbrochene Frage erneut senden</button>
+          </div>
+          <p id="dialog-meldung" class="klein" role="status" aria-live="polite"></p>
+          <pre id="dialog-zusammenfassung" class="datei-text" hidden></pre>
+          <!-- ab 11-10b: Themen, Bezug, Anders formulieren, Teilfragen (app/51-gespraech.js) -->
+          <div class="order-zeile">
+            <button type="button" class="schalter" id="gespr-anders">Anders formulieren</button>
+            <label class="verlauf-schalter"><input type="checkbox" id="gespr-teilfragen"> Bei mehreren Fragen nummerierte Antworten erbitten</label>
+          </div>
+          <p id="gespr-bezug" class="klein"></p>
+          <p class="klein" style="margin-bottom: 4px;">Themen dieses Gesprächs</p>
+          <ol id="gespr-themen" class="stimmtest-protokoll" aria-label="Themen des Gesprächs"></ol>
+          <p class="klein" style="margin-bottom: 4px;">Gesprächsübersicht (Frage → Antwort, KI-Kontext dieser Sitzung)</p>
+          <ol id="dialog-paare" class="stimmtest-protokoll" aria-label="Gesprächsübersicht"></ol>
+        </details>
+        <p id="dialog-hinweis" class="klein" role="status" aria-live="polite" hidden></p>
+        <!-- ab 11-10c: KI-Modell – Anbieter, Mock, Datenschutz, Aktionsvorschläge (app/52-modelle.js) -->
+        <details id="modell-details" class="klein briefing-details">
+          <summary>KI-Modell: Anbieter, Testmodus, Datenschutz, Vorschläge</summary>
+          <p id="modell-status" class="klein" role="status"></p>
+          <div class="order-zeile">
+            <select class="feld" id="modell-anbieter" aria-label="KI-Anbieter"></select>
+            <select class="feld" id="modell-mockfehler" aria-label="Simulierter Fehler im Testmodus"></select>
+          </div>
+          <label class="verlauf-schalter"><input type="checkbox" id="modell-vorschau"> Vor jedem Senden zeigen, was an die KI geht</label>
+          <label class="verlauf-schalter"><input type="checkbox" id="modell-aktionen"> KI darf Aktionen vorschlagen (nie automatisch ausgeführt)</label>
+          <p id="modell-meldung" class="klein" role="status" aria-live="polite"></p>
+          <ul id="modell-liste" class="statusliste" aria-label="KI-Anbieter"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Aktionsvorschläge der letzten KI-Antwort</p>
+          <ul id="modell-vorschlaege" class="aufgaben-liste" aria-label="Aktionsvorschläge der KI"></ul>
+          <p class="klein">Enthält eine Anfrage E-Mail, Telefonnummer, IBAN, Kartennummer oder ausgewählte sensible Profilangaben, fragt JARVIS immer vor dem Senden. API-Schlüssel liegen nur im Worker.</p>
+        </details>
+        <section id="verlauf-suche" class="verlauf-suche" hidden aria-label="Verlauf durchsuchen">
+          <input class="feld" type="search" id="verlauf-suchtext" placeholder="Im Verlauf suchen …" aria-label="Suchbegriff">
+          <div class="verlauf-suche-zeile">
+            <label>von <input class="feld" type="date" id="verlauf-von"></label>
+            <label>bis <input class="feld" type="date" id="verlauf-bis"></label>
+            <label class="verlauf-schalter"><input type="checkbox" id="verlauf-nur-angeheftet"> nur angeheftete</label>
+            <button type="button" class="schalter" id="verlauf-filter-zuruecksetzen">Zurücksetzen</button>
+          </div>
+          <p id="verlauf-treffer-info" class="klein" role="status"></p>
+          <ul id="verlauf-treffer" class="aufgaben-liste verlauf-treffer"></ul>
+          <p class="klein">Angeheftete Nachrichten bleiben auf diesem Gerät gespeichert – auch ohne „Auf diesem Gerät speichern“ und
+            nach „Verlauf löschen“ –, bis sie gelöst werden. Codes und Schlüssel werden vorher entfernt.</p>
+        </section>
+        <!-- Bildanalyse: nur ausgewählte Dateien (kein Kamera- oder Bildschirmzugriff), Versand erst nach „Analysieren“ -->
+        <section id="bild-vorschau" class="verlauf-suche" hidden aria-label="Bild analysieren">
+          <img id="bild-bild" class="bild-bild" alt="Vorschau des ausgewählten Bildes">
+          <p id="bild-info" class="klein" style="margin: 0;"></p>
+          <input class="feld" id="bild-frage" maxlength="500" value="Was ist auf dem Bild zu sehen?" aria-label="Frage zum Bild">
+          <p id="bild-ziel" class="info" style="margin: 0;"></p>
+          <div class="order-zeile" style="margin: 0;">
+            <button class="knopf" id="bild-analysieren" type="button">Analysieren</button>
+            <button class="knopf zweit" id="bild-verwerfen" type="button">Verwerfen</button>
+          </div>
+        </section>
+        <div id="chatverlauf" role="log" aria-live="polite" aria-label="Gesprächsverlauf"></div>
+        <!-- ab 11-11a: passende nächste Befehle (app/66-bedienung.js) -->
+        <div id="bedien-schnell" class="bedien-schnell" role="group" aria-label="Schnellaktionen zum letzten Befehl" hidden></div>
+      </div>
+    </article>
+  </div>
+
+  <div class="spalte rechts">
+    <article class="karte">
+      <h2 class="karte-titel">Markt <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
+      <div class="karte-inhalt">
+        <div id="mini-chart" class="mini-chart" hidden>
+          <svg viewBox="0 0 300 70" preserveAspectRatio="none" aria-hidden="true">
+            <polygon id="mini-flaeche" points=""/>
+            <polyline id="mini-linie" points=""/>
+          </svg>
+          <p id="mini-text" class="klein" style="margin-top: 4px;"></p>
+        </div>
+        <table id="kurse"><tr><td class="leer">Kurse erscheinen nach dem Einrichten der Verbindung.</td></tr></table>
+        <p class="klein">Testnet-Kurse können vom echten Markt abweichen.</p>
+        <button class="knopf zweit" type="button" style="width: 100%; margin-top: 10px;" onclick="ansichtZeigen('analyse')">Zur Marktanalyse →</button>
+      </div>
+    </article>
+
+    <article class="karte watchlist-karte" aria-labelledby="watchlist-titel">
+      <h2 class="karte-titel" id="watchlist-titel">Krypto-Kursliste (Watchlist) &amp; Kursalarme <span class="zu">]</span><span class="zusatz">nur auf diesem Gerät · getrennt von der Aktien-Watchlist</span></h2>
+      <div class="karte-inhalt">
+        <p id="watch-status" class="klein" role="status" style="margin-top: 0;"></p>
+        <ul id="watch-liste" class="aufgaben-liste"></ul>
+        <form id="watch-form" class="aufgabe-form" autocomplete="off">
+          <select class="feld" id="watch-symbol" aria-label="Markt"></select>
+          <input class="feld" id="watch-notiz" maxlength="80" placeholder="Notiz (optional)" aria-label="Notiz">
+          <button class="knopf zweit" type="submit">Beobachten</button>
+        </form>
+        <form id="alarm-form" class="aufgabe-form" autocomplete="off">
+          <select class="feld" id="alarm-symbol" aria-label="Markt für den Alarm"></select>
+          <select class="feld" id="alarm-richtung" aria-label="Richtung"><option value="ueber">steigt auf ≥</option><option value="unter">fällt auf ≤</option></select>
+          <input class="feld" id="alarm-preis" type="number" min="0" step="any" inputmode="decimal" placeholder="Preis in USDT" aria-label="Preis in USDT" required>
+          <button class="knopf zweit" type="submit">Alarm anlegen</button>
+        </form>
+        <p id="alarm-meldung" class="klein" role="status"></p>
+        <ul id="alarm-liste" class="aufgaben-liste"></ul>
+        <p class="klein">Kurse: Binance-Testnet (alle 30 s, können vom echten Markt abweichen). Ein Alarm meldet sich einmal – im Chat
+          und, falls erlaubt, als Browser-Benachrichtigung – <b>nur solange diese Seite geöffnet ist</b>. Alarme handeln nie:
+          keine Order, kein Paper-Kauf. Bei veralteten Kursen (älter als 2 Minuten) wird nicht geprüft.</p>
+      </div>
+    </article>
+
+    <article class="karte paperbot-karte" aria-labelledby="paperbot-titel">
+      <h2 class="karte-titel" id="paperbot-titel">Paper-Bot <span class="zu">]</span><span class="zusatz">nur Simulation · virtuelles Guthaben</span></h2>
+      <div class="karte-inhalt">
+        <p id="bot-status" class="klein" role="status" aria-live="polite" style="margin-top: 0;">Noch nicht gestartet.</p>
+        <div class="bot-zeile">
+          <label>Markt <select class="feld" id="bot-symbol"><option value="BTCUSDT">BTCUSDT</option><option value="ETHUSDT">ETHUSDT</option></select></label>
+          <label>Kerzen <select class="feld" id="bot-intervall"><option value="15m">15 Minuten</option><option value="1h" selected>1 Stunde</option><option value="4h">4 Stunden</option></select></label>
+          <label>Stop-Verlust <select class="feld" id="bot-stop"><option value="">aus</option><option value="0.03">3 %</option><option value="0.05" selected>5 %</option><option value="0.1">10 %</option></select></label>
+        </div>
+        <div class="bot-zeile">
+          <button class="knopf" type="button" id="bot-start">Bot starten</button>
+          <button class="knopf zweit" type="button" id="bot-anhalten" disabled>Anhalten</button>
+          <button class="knopf zweit" type="button" id="bot-neu">Neu beginnen</button>
+        </div>
+        <dl id="bot-konto" class="bot-konto"></dl>
+        <p class="klein" style="margin-bottom: 4px;">Order-Journal (simuliert, neueste zuerst)</p>
+        <ul id="bot-journal" class="aufgaben-liste"><li>Noch keine simulierte Order.</li></ul>
+        <p class="klein">Strategie: EMA-Kreuzung 9/21 auf <b>abgeschlossenen</b> Kerzen von <code>/kerzen</code> (öffentliche
+          Marktdaten). Signal am Schluss einer Kerze, Ausführung frühestens zur Eröffnung der nächsten; Gebühr 0,1 %;
+          Startguthaben 10.000 USDT (virtuell). Läuft nur, solange diese Seite geöffnet ist – beim Öffnen werden verpasste
+          abgeschlossene Kerzen nachgeholt. Stand nur auf diesem Gerät. <b>Keine echte Order</b>: weder Testnet noch Echtgeld,
+          getrennt vom Paper-Konto im Reiter „Trading“.</p>
+      </div>
+    </article>
+
+    <!-- ab 11-09d: lokale Dateiverwaltung – nur ausgewählte Dateien, nur Metadaten gespeichert, nie löschen (app/36-dateien.js) -->
+    <article class="karte" aria-labelledby="datei-titel">
+      <h2 class="karte-titel" id="datei-titel">Dateien <span class="zu">]</span><span class="zusatz">nur ausgewählte · nichts wird geändert oder gelöscht</span></h2>
+      <div class="karte-inhalt">
+        <details id="datei-details" class="klein briefing-details" open>
+          <summary>Dateiliste, Suche und Vorschau</summary>
+          <p>JARVIS sieht nur Dateien, die du hier auswählst – keine Ordner, keine Pfade. Gespeichert werden nur Name, Größe, Typ, Datum und SHA-256-Prüfsumme; Inhalte bleiben bis zum Neuladen im Arbeitsspeicher. „Aus Liste nehmen“ löscht keine Datei.</p>
+          <div class="order-zeile">
+            <label class="knopf zweit">Dateien auswählen …<input type="file" id="datei-auswahl" multiple hidden></label>
+            <button type="button" class="knopf zweit" id="datei-beispiele">Beispieldateien (Testmodus)</button>
+            <button type="button" class="knopf zweit" id="datei-export">Liste exportieren</button>
+          </div>
+          <div class="order-zeile">
+            <input class="feld" id="datei-suche" type="search" maxlength="80" placeholder="Name oder Inhalt suchen" aria-label="Dateien durchsuchen">
+            <select class="feld" id="datei-filter" aria-label="Art filtern"></select>
+            <select class="feld" id="datei-sortierung" aria-label="Sortierung"><option value="name">Name</option><option value="datum">Änderungsdatum</option><option value="groesse">Größe</option><option value="angesehen">zuletzt angesehen</option></select>
+            <label class="verlauf-schalter"><input type="checkbox" id="datei-favoriten"> nur Favoriten</label>
+          </div>
+          <p id="datei-meldung" class="klein" role="status" aria-live="polite"></p>
+          <div id="datei-ersetzen" class="wz-wichtig" role="alert" hidden>
+            <span id="datei-ersetzen-text"></span>
+            <button type="button" class="knopf zweit" id="datei-ersetzen-ja">Ersetzen</button>
+            <button type="button" class="knopf zweit" id="datei-ersetzen-nein">Behalten</button>
+          </div>
+          <p id="datei-status" class="klein" role="status"></p>
+          <ul id="datei-liste" class="aufgaben-liste" aria-label="Dateien"></ul>
+          <section id="datei-vorschau" class="verlauf-suche" hidden aria-label="Dateivorschau"></section>
+        </details>
+        <!-- ab 11-09e: Dokumentenassistent – lokal, keine KI, Dokument bleibt unverändert (app/37-dokumente.js) -->
+        <details id="dok-details" class="klein briefing-details">
+          <summary>Dokumentenassistent (geladene Textdateien)</summary>
+          <p>Kennzahlen, Gliederung, Schlüsselwörter, Kernsätze, Fundstellen, erkannte Termine und Aufgaben sowie der Vergleich zweier Fassungen – alles lokal ausgewertet, ohne KI und ohne Übermittlung. Aufgaben entstehen nur per Knopf.</p>
+          <div class="order-zeile">
+            <label class="stimme-wahl">Dokument <select class="feld" id="dok-wahl"></select></label>
+            <button type="button" class="knopf zweit" id="dok-analysieren">Analysieren</button>
+            <button type="button" class="knopf zweit" id="dok-export">Bericht exportieren</button>
+          </div>
+          <div class="order-zeile">
+            <label class="stimme-wahl">Vergleichen mit <select class="feld" id="dok-wahl-b"></select></label>
+            <button type="button" class="knopf zweit" id="dok-vergleichen">Vergleichen</button>
+          </div>
+          <form id="dok-suchen" class="aufgabe-form" autocomplete="off">
+            <input class="feld" id="dok-begriff" maxlength="80" placeholder="Begriff im Dokument finden" aria-label="Begriff im Dokument finden">
+            <button class="knopf zweit" type="submit">Fundstellen</button>
+          </form>
+          <!-- ab 11-09g: Markdown-Vorschau, Dokumentnotiz/Tags (Metadaten), Textentwurf mit Vorschau, Export und Kopieren -->
+          <div class="order-zeile">
+            <button type="button" class="knopf zweit" id="dok-markdown">Markdown-Vorschau</button>
+            <label class="stimme-wahl">Entwurf <select class="feld" id="dok-entwurf-art"></select></label>
+            <button type="button" class="knopf zweit" id="dok-entwurf-erstellen">Entwurf erstellen</button>
+          </div>
+          <form id="dok-notiz-form" class="aufgabe-form" autocomplete="off">
+            <input class="feld" id="dok-notiz" maxlength="1000" placeholder="Eigene Notiz zum Dokument" aria-label="Notiz zum Dokument">
+            <input class="feld" id="dok-tags" maxlength="200" placeholder="#tags, z. B. #steuer #2026" aria-label="Tags zum Dokument">
+            <button class="knopf zweit" type="submit">Notiz/Tags speichern</button>
+          </form>
+          <div id="dok-entwurf-bereich" hidden>
+            <label for="dok-entwurf" class="klein">Entwurf (bearbeitbar, wird nicht gesendet)</label>
+            <textarea class="feld" id="dok-entwurf" rows="8"></textarea>
+            <div class="order-zeile">
+              <button type="button" class="knopf zweit" id="dok-entwurf-md">Als Markdown</button>
+              <button type="button" class="knopf zweit" id="dok-entwurf-txt">Als Text</button>
+              <button type="button" class="knopf zweit" id="dok-entwurf-kopieren">Kopieren</button>
+            </div>
+            <p class="klein">Vorschau:</p>
+            <div id="dok-entwurf-vorschau" class="verlauf-suche" aria-label="Entwurfsvorschau"></div>
+          </div>
+          <!-- ab 11-10i: Abschnitte, Suche über alle Dokumente, Änderungsübersicht, Stichworte, KI-Frage nur mit Vorschau und Zustimmung (app/58-dokumente2.js) -->
+          <details id="dok2-details" class="klein briefing-details">
+            <summary>Mehr: Abschnitte, Suche in allen Dokumenten, Änderungen, Stichworte, Frage an die KI</summary>
+            <div class="order-zeile">
+              <button type="button" class="knopf zweit" id="dok2-abschnitte">Abschnitte</button>
+              <button type="button" class="knopf zweit" id="dok2-aenderungen">Änderungsübersicht</button>
+            </div>
+            <form id="dok2-suche" class="aufgabe-form" autocomplete="off">
+              <input class="feld" id="dok2-begriff" maxlength="80" placeholder="In allen geladenen Dokumenten suchen" aria-label="In allen geladenen Dokumenten suchen">
+              <button class="knopf zweit" type="submit">Alle durchsuchen</button>
+            </form>
+            <p class="klein" style="margin-bottom: 4px;">Tags und Stichworte</p>
+            <ul id="dok2-stichworte" class="statusliste" aria-label="Tags und Stichworte über alle Dokumente"></ul>
+            <p class="klein">Frage an die KI: Es geht nur ein Auszug des gewählten Dokuments mit – erst nach Vorschau und ausdrücklicher Zustimmung, jedes Mal neu.</p>
+            <div class="order-zeile">
+              <input class="feld" id="dok2-frage" maxlength="300" placeholder="Frage zum gewählten Dokument" aria-label="Frage zum gewählten Dokument">
+              <button type="button" class="knopf zweit" id="dok2-vorschau">Vorschau der Übertragung</button>
+            </div>
+            <div id="dok2-uebertragung" hidden>
+              <p id="dok2-info" class="klein wz-wichtig"></p>
+              <pre id="dok2-text" class="datei-text" aria-label="Text, der übertragen würde"></pre>
+              <label class="verlauf-schalter"><input type="checkbox" id="dok2-zustimmung"> Ich erlaube, genau diesen Text einmalig an den KI-Anbieter zu senden</label>
+              <button type="button" class="knopf zweit" id="dok2-senden">Senden</button>
+            </div>
+          </details>
+          <p id="dok-meldung" class="klein" role="status" aria-live="polite"></p>
+          <section id="dok-ergebnis" class="verlauf-suche" aria-label="Ergebnis des Dokumentenassistenten" aria-live="polite"></section>
+        </details>
+        <!-- ab 11-10j: Wissensübersicht, zuletzt verwendet, Datei ↔ Aufgabe, Wissenssuche (app/59-wissen.js) -->
+        <details id="wissen-details" class="klein briefing-details">
+          <summary>Wissen: Übersicht, Verknüpfungen, Suche</summary>
+          <ul id="wissen-uebersicht" class="statusliste" aria-label="Lokale Wissensübersicht"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Zuletzt verwendete Dateien</p>
+          <ul id="wissen-zuletzt" class="statusliste" aria-label="Zuletzt verwendete Dateien"></ul>
+          <div class="order-zeile">
+            <select class="feld" id="wissen-datei" aria-label="Datei"><option value="">– keine Datei –</option></select>
+            <select class="feld" id="wissen-aufgabe" aria-label="Offene Aufgabe"><option value="">– keine offene Aufgabe –</option></select>
+            <button type="button" class="knopf zweit" id="wissen-verknuepfen">Verknüpfen</button>
+            <button type="button" class="knopf zweit" id="wissen-loesen">Lösen</button>
+          </div>
+          <p id="wissen-verknuepfungen" class="klein"></p>
+          <p id="wissen-meldung" class="klein" role="status" aria-live="polite"></p>
+          <form id="wissen-suche" class="aufgabe-form" autocomplete="off">
+            <input class="feld" id="wissen-begriff" maxlength="80" placeholder="Im eigenen Wissen suchen" aria-label="Im eigenen Wissen suchen">
+            <button class="knopf zweit" type="submit">Suchen</button>
+          </form>
+          <ul id="wissen-treffer" class="stimmtest-protokoll" aria-label="Treffer im Wissen"></ul>
+          <p class="klein">Browsergrenzen: JARVIS sieht nur Dateien, die du auswählst – keine Pfade, keine Ordner; Inhalte nur bis zum Neuladen. Verknüpfen ändert nie die Datei.</p>
+        </details>
+      </div>
+    </article>
+
+    <article class="karte protokoll-karte">
+      <h2 class="karte-titel">Protokoll <span class="zu">]</span><span class="zusatz">letzte 20</span></h2>
+      <div class="karte-inhalt">
+        <ul id="protokoll"><li>Noch nicht geladen.</li></ul>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ===================== MARKTANALYSE ===================== -->
+<section id="ansicht-analyse" role="tabpanel" aria-labelledby="reiter-analyse" hidden>
+  <article class="karte">
+    <h2 class="karte-titel">Marktanalyse <span class="zu">]</span><span class="zusatz">echte öffentliche Marktdaten</span></h2>
+    <div class="karte-inhalt">
+      <p class="klein" style="margin: 0 0 10px;">Technische Einordnung – keine Anlageberatung und kein Handelssignal.</p>
+      <div class="analyse-steuerung">
+        <select class="feld" id="analyse-symbol" aria-label="Handelspaar">
+          <option value="BTCUSDT">BTCUSDT</option>
+          <option value="ETHUSDT">ETHUSDT</option>
+        </select>
+        <select class="feld" id="analyse-intervall" aria-label="Intervall">
+          <option value="15m">15 Minuten</option>
+          <option value="1h" selected>1 Stunde</option>
+          <option value="4h">4 Stunden</option>
+          <option value="1d">1 Tag</option>
+        </select>
+        <button class="knopf zweit" id="analyse-aktualisieren" type="button" aria-label="Marktanalyse aktualisieren">Aktualisieren</button>
+      </div>
+      <div class="legende" aria-hidden="true">
+        <span style="--farbe:#ffcc66">EMA 20</span>
+        <span style="--farbe:#00eaff">EMA 50</span>
+        <span style="--farbe:#c792ea">EMA 200</span>
+        <span style="--farbe:#7aa6b8">Darunter: Volumen · RSI 14 (30/70) · MACD 12/26/9</span>
+      </div>
+      <div id="analyse-chart" class="chart" role="img" aria-label="Kurschart mit EMA, Volumen, RSI und MACD"></div>
+      <p id="analyse-status" class="info" role="status" aria-live="polite"></p>
+      <div class="analyse-zweispaltig">
+        <p id="analyse-zusammenfassung" class="info"></p>
+        <ul id="analyse-hinweise"></ul>
+      </div>
+      <div class="ki-analyse">
+        <div class="analyse-steuerung">
+          <button class="knopf zweit" id="ki-analyse-knopf" type="button">KI-Analyse anfordern</button>
+          <span id="ki-analyse-zaehler" class="klein" role="status" aria-live="polite"></span>
+        </div>
+        <p class="klein">Nur auf ausdrückliche Anfrage mit Bestätigung: kostenpflichtige Claude-Anfrage (geschätzt ca. 0,04 Cent),
+          höchstens 20 pro Tag (der Zähler beginnt um 0 Uhr UTC neu, in Deutschland um 1 Uhr bzw. im Sommer um 2 Uhr).
+          Auch eine fehlgeschlagene Claude-Anfrage zählt mit. Erklärt die Kennzahlen – keine Anlageberatung, kein Handelssignal.</p>
+        <p id="ki-analyse-text" class="info" aria-live="polite"></p>
+      </div>
+    </div>
+  </article>
+  <!-- ab 11-09n: Analyse- und Rechenwerkzeuge – lokaler Rechner, Prozent, Statistik, CSV (app/46-rechner.js) -->
+  <article class="karte rechner-karte" aria-labelledby="rechner-titel">
+    <h2 class="karte-titel" id="rechner-titel">Rechnen &amp; Tabellen <span class="zu">]</span><span class="zusatz">lokal · ohne KI · nichts gespeichert</span></h2>
+    <div class="karte-inhalt">
+      <p class="klein">Werkzeuge: Rechner (Formeln), Prozent und Verhältnis, Statistik einer Zahlenreihe, CSV-Tabellen mit Sortieren, Filtern, Gruppieren, Zeitreihenvergleich, Diagramm und Export. Formeln werden mit einem eigenen Rechenwerk ausgewertet – nie als Programmcode.</p>
+      <form id="rechner-form" class="aufgabe-form" autocomplete="off">
+        <input class="feld" id="rechner-ausdruck" maxlength="300" placeholder="z. B. (1200 - 15%) * 3 oder sqrt(2)" aria-label="Rechenausdruck" spellcheck="false">
+        <button class="knopf zweit" type="submit">Rechnen</button>
+      </form>
+      <p id="rechner-ergebnis" class="info" role="status" aria-live="polite"></p>
+      <form id="prozent-form" class="aufgabe-form" autocomplete="off">
+        <select class="feld" id="prozent-art" aria-label="Art der Berechnung"><option value="von">p % von G</option><option value="anteil">Anteil in %</option><option value="aenderung">Veränderung in %</option><option value="verhaeltnis">Verhältnis</option></select>
+        <input class="feld" id="prozent-a" inputmode="decimal" maxlength="20" placeholder="erster Wert" aria-label="Erster Wert">
+        <input class="feld" id="prozent-b" inputmode="decimal" maxlength="20" placeholder="zweiter Wert" aria-label="Zweiter Wert">
+        <button class="knopf zweit" type="submit">Berechnen</button>
+      </form>
+      <p id="prozent-ergebnis" class="info" role="status" aria-live="polite"></p>
+      <form id="statistik-form" class="aufgabe-form" autocomplete="off">
+        <input class="feld" id="statistik-werte" maxlength="2000" placeholder="Zahlen, getrennt durch ; oder Leerzeichen" aria-label="Zahlenreihe">
+        <button class="knopf zweit" type="submit">Statistik</button>
+      </form>
+      <p id="statistik-ergebnis" class="info" role="status" aria-live="polite"></p>
+      <div class="order-zeile">
+        <button class="knopf zweit" type="button" id="csv-waehlen">CSV öffnen …</button><input type="file" id="csv-datei" accept=".csv,text/csv,text/plain" hidden aria-label="CSV-Datei für den Rechner wählen">
+        <button type="button" class="knopf zweit" id="csv-beispiel">Beispiel (synthetisch)</button>
+      </div>
+      <p id="csv-meldung" class="klein" role="status" aria-live="polite"></p>
+      <div id="csv-bereich" hidden>
+        <ul id="csv-warnungen" class="statusliste" aria-label="Prüfung der CSV-Datei"></ul>
+        <div class="order-zeile">
+          <input class="feld" id="csv-filter" type="search" maxlength="80" placeholder="Zeilen filtern" aria-label="Zeilen filtern">
+          <select class="feld" id="csv-sort" aria-label="Sortieren"></select>
+          <select class="feld" id="csv-richtung" aria-label="Richtung"><option value="auf">aufsteigend</option><option value="ab">absteigend</option></select>
+          <button type="button" class="knopf zweit" id="csv-export">CSV exportieren</button>
+        </div>
+        <p id="csv-status" class="klein" role="status"></p>
+        <div id="csv-tabelle" class="rechner-tabelle-rahmen"></div>
+        <ul id="csv-statistik" class="statusliste" aria-label="Statistik je Spalte"></ul>
+        <div class="order-zeile">
+          <select class="feld" id="csv-gruppe" aria-label="Gruppieren nach"></select>
+          <select class="feld" id="csv-wert" aria-label="Wertspalte"></select>
+          <select class="feld" id="csv-art" aria-label="Kennzahl der Gruppe"><option value="summe">Summe</option><option value="mittel">Mittel</option><option value="min">Minimum</option><option value="max">Maximum</option><option value="anzahl">Anzahl</option></select>
+          <button type="button" class="knopf zweit" id="csv-gruppieren">Gruppieren</button>
+        </div>
+        <ul id="csv-gruppen" class="statusliste" aria-label="Gruppen"></ul>
+        <div class="order-zeile">
+          <select class="feld" id="csv-reihen" multiple size="3" aria-label="Zahlenspalten für Vergleich und Diagramm (bis zu zwei)"></select>
+          <button type="button" class="knopf zweit" id="csv-vergleichen">Vergleichen und Diagramm</button>
+        </div>
+        <ul id="csv-vergleich" class="statusliste" aria-label="Zeitreihenvergleich"></ul>
+        <div id="csv-diagramm"></div>
+        <p id="csv-zusammenfassung" class="klein"></p>
+      </div>
+    </div>
+  </article>
+</section>
+
+<!-- ===================== TRADING ===================== -->
+<section id="ansicht-trading" role="tabpanel" aria-labelledby="reiter-trading" hidden>
+  <div class="trading-raster">
+    <article class="karte modus-karte" aria-live="polite">
+      <h2 class="karte-titel">Handelsmodus <span class="zu">]</span><span class="zusatz">Was ist gerade aktiv?</span></h2>
+      <div class="karte-inhalt">
+        <p id="handelsmodus-kopf">Kein Handel aktiv.</p>
+        <p class="krypto-aus-hinweis info">Krypto-Handel (Binance-Testnet, Krypto-Paper) ist im Aktien-Stand abgeschaltet – der Code bleibt erhalten.</p>
+        <ul id="handelsmodus-details">
+          <li id="modus-paper">Paper-Trading (Simulation): nicht verbunden</li>
+          <li id="modus-testnet">Binance-Testnet: nicht verbunden</li>
+          <li>Echtgeld-Handel: ausgeschlossen · Automatik: AUS</li>
+        </ul>
+      </div>
+    </article>
+
+    <article class="karte notaus-karte">
+      <h2 class="karte-titel">Not-Aus <span class="zu">]</span><span class="zusatz">sperrt alle Orders</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Sperrt jede Order: Aktien im Alpaca-Paper-Konto und – nur falls eingeschaltet – Binance-Testnet. Nur Spielgeld, keine Echtgeld-Verbindung. Automatik ist im Worker fest ausgeschaltet.</p>
+        <button id="notaus" class="notaus" type="button" aria-describedby="trading-zustand" onclick="notausUmschalten()">NOT-AUS</button>
+        <p id="trading-zustand" class="info" role="status" aria-live="polite">Status wird geladen …</p>
+      </div>
+    </article>
+
+    <article class="karte aktien-karte" aria-labelledby="aktien-titel">
+      <h2 class="karte-titel" id="aktien-titel">Aktien – Alpaca Paper <span class="zu">]</span><span class="zusatz">Stufe 1 · nur Paper-Konto · jede Order einzeln freigeben</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Nur das Alpaca-<b>Paper</b>-Konto (Spielgeld, US-Aktien/ETF). Keine Echtgeld-Verbindung, keine Automatik.
+          Ablauf: Budget aufteilen → Risiko prüfen → jede bestandene Order einzeln mit „Ja, genau diese Order senden“ freigeben.</p>
+        <p id="aktien-status" class="info" role="status" aria-live="polite">Status kommt über die Worker-Verbindung. Ohne eingerichteten Worker bleibt diese Karte ohne Konto – Analyse mit lokalen Testdaten und „Simulation (lokal)“ funktionieren ohne Worker.</p>
+        <p id="aktien-konto" class="info"></p>
+        <p id="aktien-sperre" class="info" role="status" aria-live="polite"></p>
+        <ul id="aktien-gesperrt" class="aktien-gesperrt" aria-live="polite" hidden></ul>
+        <form id="aktien-plan" class="aktien-plan" autocomplete="off">
+          <label>Dein Budget (USD) <input class="feld" id="aktien-budget" type="number" min="10" step="1" inputmode="numeric" placeholder="Budget selbst eintragen – nichts vorbelegt"></label>
+          <label>Ziele (je Zeile TICKER=Gewicht) <textarea class="feld" id="aktien-ziele" spellcheck="false" placeholder="z. B. AAPL=40 (je Zeile ein Ticker) – nichts vorbelegt"></textarea></label>
+          <label>Rechenweg <select class="feld" id="aktien-rechenweg"><option value="jarvis" selected>JARVIS-Standard</option><option value="skill">Skill-Profil trader-budget (5189e79)</option></select></label>
+          <label>Top N (nur Skill-Profil, optional) <input class="feld" type="number" id="aktien-top" min="1" step="1" placeholder="alle"></label>
+          <label class="verlauf-schalter"><input type="checkbox" id="aktien-cent"> Cent-genau statt ganzer Dollar (nur Skill-Profil)</label>
+          <button class="knopf zweit" id="aktien-aufteilen" type="submit">Budget aufteilen</button>
+          <button class="knopf zweit" id="aktien-vorschlag-datei" type="button" disabled>Vorschlag als Datei (JSON, keine Order)</button>
+        </form>
+        <p class="klein" id="aktien-budget-hinweis">Mit Aktien kann man Geld verlieren. Nur einen Betrag einplanen, dessen Verlust du verkraften kannst.</p>
+        <p class="klein" id="aktien-regeln">Regeln beim Aufteilen: werden aus dem Budget-Planer gelesen …</p>
+        <p id="aktien-aufteilung" class="info" aria-live="polite"></p>
+        <div id="aktien-aufteilung-tabelle" class="wz-ausgabe" aria-live="polite"></div>
+        <button class="knopf" id="aktien-pruefen" type="button" disabled>Risiko prüfen</button>
+        <ul id="aktien-tickets" aria-live="polite"></ul>
+        <p class="info" id="aktien-pruefung-summe" role="status" aria-live="polite"></p>
+        <p class="klein">Börsenuhr und Kurse von Alpaca (IEX, kann vom Gesamtmarkt abweichen). Gesendet wird nur bei offener US-Börse,
+          aktivem Paper-Konto und ausgeschaltetem Not-Aus. Ohne Antwort: „Ergebnis unklar“ → „Status prüfen“, nie erneut senden.
+          <b>Nur ein Gerät und ein Tab gleichzeitig verwenden:</b> Mehrgerätebetrieb bleibt gesperrt, bis die Doppel-Order-Sperre (Durable Object) live eingerichtet und geprüft ist.
+          Vorbild der Regeln: trader-skill (MIT, Jake Schincariol). Keine Anlageberatung.</p>
+        <p class="klein" style="margin-bottom: 0;">Letzte Aktien-Orders:</p>
+        <ul id="aktien-journal" class="aufgaben-liste"><li>Noch keine.</li></ul>
+      </div>
+    </article>
+    <article class="karte ablauf-karte" aria-labelledby="ablauf-titel">
+      <h2 class="karte-titel" id="ablauf-titel">US-Aktie analysieren <span class="zu">]</span><span class="zusatz">Ablauf nach Trader Skill · keine Order</span></h2>
+      <div class="karte-inhalt">
+        <p class="klein">Ein Symbol, ein Ablauf: Kursdaten → Chart-Scanner → Entry-Timer → Exit-Planer → Quartalszahlen (SEC) → Screener → Paper-Kern-Simulation (lokal).
+          Jeder Schritt nennt Quelle und Datenzeit; Blockaden stehen mit dem nächsten sicheren Schritt darunter. Dieser Ablauf sendet nie eine Order.</p>
+        <h3 class="stimmtest-titel" id="wl-titel">Aktien-Watchlist (nur auf diesem Gerät)</h3>
+        <p class="klein" id="wl-datenschutz">Datenschutz: Gespeichert wird nur im Browserspeicher dieses Geräts – Symbol, Kennung, Erstellungszeit und optional deine Notiz.
+          Keine Namen, Konto- oder Zugangsdaten; Notizen gehen nie an den Worker. Briefing-Texte und Ergebnisse werden nicht gespeichert (nur diese Sitzung).</p>
+        <div class="order-zeile" role="group" aria-labelledby="wl-titel">
+          <label for="wl-symbol">Symbol:</label>
+          <input class="feld" id="wl-symbol" placeholder="z. B. AAPL" maxlength="8" spellcheck="false" autocomplete="off" aria-describedby="wl-status">
+          <label for="wl-notiz">Notiz (optional):</label>
+          <input class="feld" id="wl-notiz" maxlength="200" placeholder="nur für dich" spellcheck="false">
+          <button class="knopf zweit" type="button" id="wl-hinzu">Zur Watchlist</button>
+          <button class="knopf zweit" type="button" id="wl-export">Exportieren (JSON)</button>
+          <button class="knopf zweit" type="button" id="wl-import-knopf">Importieren (JSON)</button>
+          <input type="file" id="wl-import" accept="application/json,.json" hidden aria-label="Watchlist-Datei wählen">
+          <button class="knopf zweit" type="button" id="wl-roh-sichern" hidden>Beschädigten Speicherinhalt sichern (Datei)</button>
+          <button class="knopf zweit" type="button" id="wl-reset" hidden>Watchlist-Speicher zurücksetzen</button>
+        </div>
+        <div id="wl-bestaetigung" class="wz-wichtig" role="group" aria-labelledby="wl-bestaetigung-text" hidden>
+          <p id="wl-bestaetigung-text"></p>
+          <button class="knopf zweit" type="button" id="wl-bestaetigung-ja">Ja, lokal ändern</button>
+          <button class="knopf zweit" type="button" id="wl-bestaetigung-nein">Abbrechen</button>
+        </div>
+        <p id="wl-status" class="info" role="status" aria-live="polite"></p>
+        <p id="wl-aktiv" class="info" role="status" aria-live="polite">Aktives Symbol: keins gewählt.</p>
+        <!-- ab 11-06e: Sortieren und Filtern nur der Anzeige (gespeicherte Reihenfolge bleibt), Vergleich analysierter Werte -->
+        <div class="order-zeile">
+          <label for="wl-sortierung">Sortieren:</label>
+          <select class="feld" id="wl-sortierung">
+            <option value="">eigene Reihenfolge</option>
+            <option value="symbol">Symbol A–Z</option>
+            <option value="analyse">zuerst analysiert</option>
+            <option value="kgv">KGV aufsteigend (analysierte)</option>
+            <option value="perf3m">Kursänderung 3 Monate absteigend (analysierte)</option>
+            <option value="erstellt">zuletzt hinzugefügt</option>
+            <option value="favorit">Favoriten zuerst</option>
+            <option value="kategorie">nach Kategorie</option>
+          </select>
+          <label for="wl-filter">Filter:</label>
+          <input class="feld" id="wl-filter" maxlength="40" placeholder="Symbol, Name, Notiz, Kategorie oder Tag" spellcheck="false">
+          <label><input type="checkbox" id="wl-nur-analysiert"> nur analysierte</label>
+          <!-- ab 11-07k: Kategorie, Tag und Favoriten (Zusatzangaben in app/29-watchlist-plus.js) -->
+          <label for="wl-kategorie-filter">Kategorie:</label>
+          <select class="feld" id="wl-kategorie-filter"><option value="">alle Kategorien</option></select>
+          <label for="wl-tag-filter">Tag:</label>
+          <select class="feld" id="wl-tag-filter"><option value="">alle Tags</option></select>
+          <label><input type="checkbox" id="wl-nur-favoriten"> nur Favoriten</label>
+          <button class="knopf zweit" type="button" id="wl-vergleichen">Analysierte vergleichen</button>
+        </div>
+        <ul id="wl-liste" class="wl-liste" aria-label="Aktien-Watchlist"></ul>
+        <p id="wl-filter-status" class="klein" role="status" aria-live="polite"></p>
+        <div id="wl-vergleich" class="info wz-ausgabe" role="region" aria-label="Vergleich analysierter Werte" hidden></div>
+        <section id="wl-detail" class="info" aria-label="Details zum Watchlist-Eintrag" hidden></section>
+        <form id="ablauf-form" class="order-zeile" autocomplete="off">
+          <label for="ablauf-symbol">US-Aktie:</label>
+          <input class="feld" id="ablauf-symbol" list="ablauf-symbole" placeholder="z. B. AAPL" maxlength="8" spellcheck="false" aria-describedby="ablauf-kopf">
+          <datalist id="ablauf-symbole"></datalist>
+          <label for="ablauf-quelle">Datenquelle:</label>
+          <select class="feld" id="ablauf-quelle" aria-describedby="ablauf-quelle-hinweis">
+            <option value="lokal">Lokale Testdaten (synthetisch, kein Netz)</option>
+            <option value="worker">Worker: Alpaca IEX und SEC EDGAR</option>
+          </select>
+          <label for="ablauf-von">Zeitraum von (optional):</label>
+          <input class="feld" type="date" id="ablauf-von" aria-describedby="ablauf-zeitraum-hinweis ablauf-kopf">
+          <label for="ablauf-bis">bis:</label>
+          <input class="feld" type="date" id="ablauf-bis" aria-describedby="ablauf-zeitraum-hinweis ablauf-kopf">
+          <button class="knopf" id="ablauf-start" type="submit">Analysieren</button>
+          <button class="knopf zweit" id="ablauf-abbrechen" type="button" hidden>Analyse abbrechen</button>
+        </form>
+        <!-- ab 11-02t: was die gewählte Datenquelle ist; Hinweis, wenn das Symbolfeld nicht mehr zum angezeigten Ergebnis passt -->
+        <p id="ablauf-quelle-hinweis" class="klein"></p>
+        <p id="ablauf-eingabe-hinweis" class="klein wz-wichtig" role="status" hidden></p>
+        <p id="ablauf-zeitraum-hinweis" class="klein">Zeitraum gilt für die Kursdaten und alle daraus berechneten Schritte (auch den Strategie-Vergleich). Ohne Angabe: alle verfügbaren Tageskerzen. Nur „von“: bis heute. Nachrichten, Meldungen, Alarme und Budget-Kurse bleiben ungefiltert.</p>
+        <div class="order-zeile">
+          <label for="ablauf-sprung">Ausreißerregel – max. Tagessprung %:</label>
+          <input class="feld" type="number" id="ablauf-sprung" min="0.1" step="0.1" placeholder="nicht festgelegt">
+          <label for="ablauf-spanne">max. Tagesspanne %:</label>
+          <input class="feld" type="number" id="ablauf-spanne" min="0.1" step="0.1" placeholder="nicht festgelegt">
+        </div>
+        <p id="ablauf-kopf" class="info" role="status" aria-live="polite">Noch keine Analyse.</p>
+        <!-- ab Analyseauftrag 1311: Unternehmen und Systemeinschätzung auf einen Blick (Kriterien: docs/ANALYSE_EINSCHAETZUNG_14I.md) – bucht nichts -->
+        <h3 class="stimmtest-titel" id="ablauf-einschaetzung-titel">Ergebnis auf einen Blick: Unternehmen und Systemeinschätzung</h3>
+        <div id="ablauf-einschaetzung" class="info wz-ausgabe" role="region" aria-labelledby="ablauf-einschaetzung-titel">Noch keine Analyse.</div>
+        <ol id="ablauf-schritte" class="ablauf-schritte" aria-label="Schritte der Analyse"></ol>
+        <!-- ab 11-06e: Widersprüche zwischen den Bausteinen und schneller Wechsel zu anderen Analysen dieser Sitzung -->
+        <h3 class="stimmtest-titel" id="ablauf-widersprueche-titel">Widersprüchliche Signale</h3>
+        <ul id="ablauf-widersprueche" class="stimmtest-protokoll" aria-label="Widersprüchliche Signale"><li>Noch keine Analyse.</li></ul>
+        <div id="ablauf-zuletzt" class="order-zeile" role="group" aria-label="Zuletzt analysiert" hidden></div>
+        <!-- ab 11-06i: Kennzahlenübersicht und Chancen/Risiken -->
+        <h3 class="stimmtest-titel">Kennzahlenübersicht</h3>
+        <div id="ablauf-kennzahlen" class="info wz-ausgabe" role="region" aria-label="Kennzahlenübersicht">Noch keine Analyse.</div>
+        <h3 class="stimmtest-titel">Chancen und Risiken (vergangene Daten)</h3>
+        <div id="ablauf-chancen" class="info wz-ausgabe" role="region" aria-label="Chancen und Risiken">Noch keine Analyse.</div>
+        <!-- Kurschart der Aktienanalyse (ab 11-02s): nur die Tageskerzen dieser Analyse, Stufen aus der Einordnung, keine Anfrage -->
+        <h3 class="stimmtest-titel">Kurschart dieser Analyse</h3>
+        <p id="ablauf-chart-hinweis" class="klein" role="status">Kein Chart – noch keine Analyse.</p>
+        <figure id="ablauf-chart-bereich" class="ablauf-chart-bereich" hidden>
+          <figcaption id="ablauf-chart-titel" class="klein"></figcaption>
+          <div id="ablauf-chart" class="ablauf-chart" role="img" aria-label="Kurschart der Aktienanalyse" aria-describedby="ablauf-chart-titel ablauf-chart-text"></div>
+          <!-- ab 11-02t: Datum und OHLC der Kerze unter Maus/Finger (nicht angesagt, um Screenreader nicht zu überfluten) -->
+          <p id="ablauf-chart-ohlc" class="klein" aria-live="off"></p>
+          <!-- ab 11-13r: Kerzenwerte auch per Tastatur (vorher nur Maus/Finger über das Fadenkreuz) -->
+          <label class="klein ablauf-kerze-wahl">Kerze per Tastatur wählen (Pfeiltasten, Pos1/Ende): <input type="range" id="ablauf-chart-kerze" min="0" max="0" value="0" step="1" disabled></label>
+          <p id="ablauf-chart-text" class="klein"></p>
+          <!-- ab 11-06i: Indikatorlinien und Erklärung -->
+          <label class="klein"><input type="checkbox" id="ablauf-indikatoren" checked> EMA20 (durchgezogen, türkis) und Bollinger-Bänder (gepunktet, gelb) einblenden</label>
+          <!-- ab 11-07j: Ausschnitt nur für die Anzeige; Berechnungen nutzen immer alle Kerzen -->
+          <div class="order-zeile"><label for="ablauf-chart-zeitraum" class="klein">Chart-Ausschnitt:</label>
+            <select class="feld" id="ablauf-chart-zeitraum"><option value="alle">alle Kerzen</option><option value="252">letzte 12 Monate</option><option value="126">letzte 6 Monate</option><option value="63">letzte 3 Monate</option><option value="21">letzter Monat</option></select></div>
+          <details class="klein indikator-erklaerung">
+            <summary>Was bedeuten die Indikatoren?</summary>
+            <dl>
+              <dt>EMA20 / EMA50 / EMA200</dt><dd>Gleitende Durchschnitte der Schlusskurse über 20, 50 bzw. 200 Tage; jüngere Kurse zählen stärker. Kurs über EMA50 über EMA200 gilt im Scanner als Aufwärtstrend.</dd>
+              <dt>RSI 14</dt><dd>Verhältnis der Auf- zu Abwärtsbewegungen der letzten 14 Tage (0–100). Ab 70 „überkauft“, ab 30 abwärts „überverkauft“ – beides allein kein Handelssignal.</dd>
+              <dt>MACD (12/26/9)</dt><dd>Abstand der EMA12 zur EMA26; die Signallinie ist deren EMA9. Kreuzt die MACD-Linie die Signallinie, hat sich die kurzfristige Richtung gedreht.</dd>
+              <dt>Bollinger-Bänder (20, 2σ)</dt><dd>Durchschnitt der letzten 20 Schlusskurse ± zwei Standardabweichungen. Schlüsse außerhalb der Bänder sind selten; schmale Bänder bedeuten geringe Schwankung.</dd>
+              <dt>ATR 14</dt><dd>Durchschnittliche Tagesspanne der letzten 14 Tage; der Exit-Planer nutzt sie für den Stop.</dd>
+              <dt>Zeitraumvergleich und Schwankung (ab 11-07j)</dt><dd>Kursänderung und größter Rückgang vom Hoch innerhalb von 1, 3, 6 und 12 Monaten (21/63/126/252 Tageskerzen), nur mit genug Kerzen. Schwankung: ATR in % des Kurses (unter 1,5 % ruhig, unter 3 % mittel, sonst unruhig – allgemeine Faustwerte).</dd>
+            </dl>
+            <p>Alle Werte beschreiben vergangene Kurse – keine Prognose, keine Empfehlung. MACD und Bollinger fließen nicht in die Scanner-Punkte ein.</p>
+          </details>
+          <p class="klein">Chart-Bibliothek: TradingView Lightweight Charts™ – <a href="vendor/NOTICE-lightweight-charts.txt" target="_blank" rel="noopener">Lizenzhinweis (lokale Datei)</a>.</p>
+        </figure>
+        <!-- ab 11-07j: neutrale Chartlage aus denselben Kerzen (aktien/technik.js chartAnalyse) -->
+        <h3 class="stimmtest-titel">Chartlage (Zusammenfassung)</h3>
+        <div id="ablauf-chartlage" class="info wz-ausgabe" role="region" aria-label="Chartlage">Noch keine Analyse.</div>
+        <!-- ab 11-07m: Entscheidungshilfe – ordnet vorhandene Ergebnisse, entscheidet und bucht nichts (app/31-entscheidung.js) -->
+        <h3 class="stimmtest-titel">Entscheidungshilfe (keine Empfehlung)</h3>
+        <div id="ablauf-entscheidung" class="info wz-ausgabe" role="region" aria-label="Entscheidungshilfe">Noch keine Analyse.</div>
+        <details class="klein indikator-erklaerung">
+          <summary>Analysehistorie dieser Sitzung und Vergleich zweier Zeitpunkte</summary>
+          <ul id="ent-verlauf" class="statusliste" aria-label="Analysehistorie (nur diese Sitzung)"></ul>
+          <div class="order-zeile">
+            <label for="ent-a">Früher:</label><select class="feld" id="ent-a"><option value="">noch keine Analyse</option></select>
+            <label for="ent-b">Später:</label><select class="feld" id="ent-b"><option value="">noch keine Analyse</option></select>
+            <button type="button" class="knopf zweit" id="ent-vergleichen">Vergleichen</button>
+          </div>
+          <div id="ent-vergleich" class="info" role="status" aria-live="polite"></div>
+          <p>Die Historie liegt nur im Arbeitsspeicher und ist nach dem Neuladen leer. Grenzen: Die Hilfe kennt nur die Daten dieses Laufs (Kerzen, SEC-Zahlen soweit geladen), keine Nachrichtenlage, keine Bewertung durch Fachleute, keine Prognose.</p>
+        </details>
+        <h3 class="stimmtest-titel">Blockadegründe und nächster sicherer Schritt</h3>
+        <ul id="ablauf-blockaden" class="ablauf-blockaden" aria-live="polite"><li>–</li></ul>
+        <h3 class="stimmtest-titel">Aktienprofil (alle Werkzeuge zu diesem Symbol)</h3>
+        <p class="klein">Analyse, Nachrichten, Meldungen, Alarme, Budget und Rebalancing in einem Profil. Jede Sektion behält ihre eigene Quelle,
+          ihr Datenalter und ihren Status; fehlende Bereiche werden genannt, nicht ersetzt. „Trader-Skill“ steht nur, wo der Abgleich es belegt.</p>
+        <div class="order-zeile">
+          <label for="profil-budget">Budget (USD, Simulation):</label>
+          <input class="feld" type="number" id="profil-budget" min="1" step="1" placeholder="nicht festgelegt">
+          <label for="profil-ziele">Zielgewichte:</label>
+          <input class="feld" id="profil-ziele" placeholder="z. B. AAPL=60, KO=40" size="22" spellcheck="false">
+        </div>
+        <p id="profil-zusammenfassung" class="info" role="status" aria-live="polite"></p>
+        <ol id="profil-sektionen" class="ablauf-schritte" aria-label="Sektionen des Aktienprofils"></ol>
+        <h3 class="stimmtest-titel">Aktien-Paper-Vorschlag (lokale Simulation im Paper-Kern, nie eine Order)</h3>
+        <p class="klein" id="profil-notaus-hinweis">Not-Aus: Ohne Worker-Verbindung ist der Not-Aus-Zustand unbekannt – diese lokale Spielgeld-Simulation wird dann nicht durch den Not-Aus gesperrt und ist kein abgesicherter Handel.</p>
+        <div class="order-zeile">
+          <label for="profil-richtung">Richtung:</label>
+          <select class="feld" id="profil-richtung"><option value="kauf">Kauf</option><option value="verkauf">Verkauf</option></select>
+          <label for="profil-betrag">Betrag (USD):</label>
+          <input class="feld" type="number" id="profil-betrag" min="1" step="0.01" placeholder="nicht festgelegt">
+          <button class="knopf zweit" type="button" id="profil-vorschlag">Paper-Vorschlag erstellen</button>
+          <button class="knopf" type="button" id="profil-bestaetigen" disabled aria-describedby="profil-vorschlag-text">Genau diesen Vorschlag bestätigen (Simulation)</button>
+          <button class="knopf zweit" type="button" id="profil-verwerfen">Vorschlag verwerfen</button>
+        </div>
+        <p id="profil-vorschlag-text" class="info" role="status" aria-live="polite">Bestätigen gesperrt: noch kein Paper-Vorschlag. Erst analysieren, dann „Paper-Vorschlag erstellen“ – gebucht wird nur Spielgeld.</p>
+        <p class="klein" id="profil-entscheidungen" aria-live="polite"></p>
+        <div class="order-zeile">
+          <button class="knopf zweit" type="button" id="profil-aktualisieren">Profil aktualisieren (gleiche Datenquelle)</button>
+          <button class="knopf zweit" type="button" id="profil-zum-ergebnis">Zum Ergebnis: Ledger und Portfolio (Simulation)</button>
+        </div>
+        <!-- Portfolio-Labor (ab 11-02u): hypothetische Musterportfolios, nur im Browserspeicher, keine Anfrage, keine Order -->
+        <section id="pl-bereich" class="pl-bereich" aria-labelledby="pl-titel">
+          <h3 class="stimmtest-titel" id="pl-titel">Portfolio-Labor (Musterrechnung, nur auf diesem Gerät)</h3>
+          <p class="klein" id="pl-erklaerung">Hypothetische Musterportfolios zum Durchrechnen: Zielbetrag = Budget × Zielgewicht. Nichts wird gesendet,
+            gekauft oder verkauft – auch kein Vorschlag hier wird je automatisch ausgeführt. Analysedaten je Symbol stammen aus „US-Aktie analysieren“
+            in dieser Sitzung; mit „Lokale Testdaten“ sind sie SYNTHETISCH (keine echten Kurse).</p>
+          <div class="order-zeile">
+            <label for="pl-auswahl">Musterportfolio:</label>
+            <select class="feld" id="pl-auswahl" aria-describedby="pl-status"></select>
+            <label for="pl-name">Name:</label>
+            <input class="feld" id="pl-name" maxlength="60" placeholder="z. B. Dividenden-Muster" spellcheck="false" aria-describedby="pl-status">
+            <button class="knopf zweit" type="button" id="pl-neu">Neu anlegen</button>
+            <button class="knopf zweit" type="button" id="pl-umbenennen">Umbenennen</button>
+            <!-- ab 11-02v: archivieren (Szenarien bleiben) bzw. endgültig löschen mit Rückfrage -->
+            <button class="knopf zweit" type="button" id="pl-archivieren">Archivieren</button>
+            <button class="knopf zweit" type="button" id="pl-loeschen">Endgültig löschen …</button>
+          </div>
+          <p id="pl-meta" class="klein"></p>
+          <div class="order-zeile">
+            <!-- Beschriftung, Feld und Knopf bleiben beim Umbruch zusammen (pl-gruppe) -->
+            <span class="pl-gruppe">
+              <label for="pl-budget">Hypothetisches Budget (USD):</label>
+              <input class="feld" type="number" id="pl-budget" min="1" max="10000000" step="0.01" placeholder="nicht festgelegt" aria-describedby="pl-status">
+            </span>
+            <span class="pl-gruppe">
+              <label for="pl-wl-symbol">Aus der Watchlist:</label>
+              <select class="feld" id="pl-wl-symbol"></select>
+              <button class="knopf zweit" type="button" id="pl-wl-hinzu" aria-label="Symbol aus der Watchlist hinzufügen">Hinzufügen</button>
+            </span>
+            <span class="pl-gruppe">
+              <label for="pl-symbol">Symbol von Hand:</label>
+              <input class="feld" id="pl-symbol" maxlength="8" placeholder="z. B. KO" spellcheck="false" aria-describedby="pl-status">
+              <button class="knopf zweit" type="button" id="pl-hinzu" aria-label="Symbol von Hand hinzufügen">Hinzufügen</button>
+            </span>
+          </div>
+          <div class="order-zeile">
+            <span class="pl-gruppe pl-notiz-gruppe">
+              <label for="pl-notiz">Notiz zum Musterportfolio (höchstens 500 Zeichen):</label>
+              <textarea class="feld" id="pl-notiz" rows="2" maxlength="500" spellcheck="true" aria-describedby="pl-status"></textarea>
+            </span>
+          </div>
+          <p id="pl-status" class="info" role="status" aria-live="polite"></p>
+          <div class="pl-tabelle-huelle">
+            <table id="pl-tabelle" class="pl-tabelle" aria-describedby="pl-summe">
+              <caption class="klein" id="pl-tabelle-titel">Verteilung des Musterportfolios</caption>
+              <thead><tr><th scope="col">Symbol</th><th scope="col">Zielgewicht (%)</th><th scope="col">Anteil</th><th scope="col">Zielbetrag (USD)</th><th scope="col">Analysedaten (Quelle · Zeitraum)</th><th scope="col">Reihenfolge / Entfernen</th></tr></thead>
+              <tbody id="pl-zeilen"></tbody>
+            </table>
+          </div>
+          <p id="pl-summe" class="info"></p>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-gleich">Gleichmäßig verteilen</button>
+            <button class="knopf zweit" type="button" id="pl-normieren">Auf 100 % normieren</button>
+          </div>
+          <p id="pl-rechnung" class="info"></p>
+          <p id="pl-konzentration" class="info"></p>
+          <!-- Szenarien (ab 11-02v): unveränderliche Schnappschüsse dieses Musterportfolios, nur im Browserspeicher -->
+          <h4 class="stimmtest-titel" id="pl-sz-titel">Szenarien dieses Musterportfolios</h4>
+          <p class="klein" id="pl-sz-erklaerung">Ein Szenario hält Budget, Symbole, Reihenfolge, Gewichte und Notiz als unveränderlichen Schnappschuss fest – nur der Name
+            lässt sich ändern. „Als neues Szenario speichern“ legt immer ein neues an und überschreibt nichts; „In Portfolioeingaben laden …“
+            ändert nach einer Vorschau nur die aktuellen Eingaben. Alles bleibt in diesem Browser – nichts geht an Worker, Broker oder Börsen.</p>
+          <div class="order-zeile">
+            <span class="pl-gruppe">
+              <label for="pl-sz-name">Szenarioname:</label>
+              <input class="feld" id="pl-sz-name" maxlength="60" placeholder="z. B. Vorsichtig" spellcheck="false" aria-describedby="pl-sz-status">
+              <button class="knopf zweit" type="button" id="pl-sz-speichern">Als neues Szenario speichern</button>
+            </span>
+            <button class="knopf zweit" type="button" id="pl-sz-rueckgaengig" hidden>Löschen rückgängig</button>
+          </div>
+          <p id="pl-sz-status" class="info" role="status" aria-live="polite" tabindex="-1"></p>
+          <ul id="pl-sz-liste" class="pl-sz-liste" aria-labelledby="pl-sz-titel"></ul>
+          <div id="pl-sz-vorschau" class="info pl-sz-vorschau" role="region" aria-label="Vorschau vor dem Laden eines Szenarios" hidden></div>
+          <h4 class="stimmtest-titel" id="pl-sz-vergleich-titel">Zwei Szenarien vergleichen</h4>
+          <div class="order-zeile">
+            <span class="pl-gruppe"><label for="pl-sz-a">Szenario A:</label><select class="feld" id="pl-sz-a"></select></span>
+            <span class="pl-gruppe"><label for="pl-sz-b">Szenario B:</label><select class="feld" id="pl-sz-b"></select></span>
+          </div>
+          <div id="pl-sz-vergleich" class="info"></div>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-sz-import-knopf">Szenario in dieses Portfolio importieren (JSON)</button>
+            <input type="file" id="pl-sz-import" accept="application/json,.json" hidden aria-label="Szenario aus JSON-Datei importieren">
+          </div>
+          <h4 class="stimmtest-titel" id="pl-vergleich-titel">Vergleich mit einem zweiten Musterportfolio</h4>
+          <div class="order-zeile">
+            <label for="pl-vergleich">Vergleichen mit:</label>
+            <select class="feld" id="pl-vergleich"></select>
+          </div>
+          <div id="pl-vergleich-ergebnis" class="info"></div>
+          <div class="order-zeile">
+            <button class="knopf zweit" type="button" id="pl-export">Alle Musterportfolios exportieren (JSON)</button>
+            <button class="knopf zweit" type="button" id="pl-export-v1">Für Stand 02u exportieren (ohne Szenarien)</button>
+            <button class="knopf zweit" type="button" id="pl-import-knopf">Musterportfolios importieren (JSON)</button>
+            <input type="file" id="pl-import" accept="application/json,.json" hidden aria-label="Musterportfolios aus JSON-Datei importieren">
+            <button class="knopf zweit" type="button" id="pl-verwerfen" hidden>Beschädigten Speicher verwerfen</button>
+          </div>
+        </section>
+        <h3 class="stimmtest-titel" id="ab-titel">US-Aktien-Briefing (nur Daten dieser Sitzung)</h3>
+        <div class="order-zeile" role="group" aria-labelledby="ab-titel">
+          <button class="knopf zweit" type="button" id="ab-briefing-kurz">Briefing kurz</button>
+          <button class="knopf zweit" type="button" id="ab-briefing-lang">Briefing ausführlich</button>
+          <button class="knopf zweit" type="button" id="ab-briefing-vorlesen">Briefing vorlesen</button>
+          <button class="knopf zweit" type="button" id="ab-vorlesen-pause" disabled>Pause</button>
+          <button class="knopf zweit" type="button" id="ab-vorlesen-weiter" disabled>Fortsetzen</button>
+          <button class="knopf zweit" type="button" id="ab-vorlesen-abbruch" disabled>Vorlesen abbrechen</button>
+        </div>
+        <p id="ab-meta" class="klein" role="status" aria-live="polite">Noch kein Briefing erzeugt.</p>
+        <p id="ab-vorlese-status" class="info" role="status" aria-live="polite"></p>
+        <div id="ab-briefing" class="ablauf-blockaden" aria-live="polite"></div>
+        <h3 class="stimmtest-titel">Strategie-Vergleich (Strategy Lab, SIMULATION)</h3>
+        <p class="klein">Rechnet die vorhandenen Strategien des Strategy Labs auf denselben Kursdaten und demselben Zeitraum. Alle Werte selbst eintragen – es gibt keine Vorgaben.
+          Ergebnis ist eine Simulation, nicht das Ergebnis eines echten Kontos. Nicht direkt vergleichbar mit der Paper-Kern-Simulation im Ablauf oben
+          oder der Timer/Planer-Simulation im Werkzeug: andere Regeln, andere Annahmen.</p>
+        <div class="order-zeile" role="group" aria-labelledby="sl-csv-titel">
+          <span id="sl-csv-titel" class="klein">Eigene Kursdaten (CSV, nur Tageskerzen) – bleiben in diesem Browser, werden nicht gesendet und nicht gespeichert:</span>
+          <button class="knopf zweit" type="button" id="sl-csv-waehlen">CSV-Datei wählen</button>
+          <input type="file" id="sl-csv-datei" accept=".csv,text/csv" hidden aria-label="CSV-Datei mit Tageskerzen wählen">
+          <label for="sl-csv-symbol">Symbol der Datei:</label>
+          <input class="feld" id="sl-csv-symbol" maxlength="8" size="8" placeholder="z. B. AAPL" spellcheck="false" autocomplete="off" aria-describedby="sl-csv-status">
+          <label for="sl-csv-trenner">Trennzeichen:</label>
+          <select class="feld" id="sl-csv-trenner"><option value="auto">automatisch (nur wenn eindeutig)</option><option value=";">Semikolon</option><option value=",">Komma</option></select>
+          <label for="sl-csv-zahlen">Dezimalzeichen:</label>
+          <select class="feld" id="sl-csv-zahlen"><option value="auto">automatisch (nur wenn eindeutig)</option><option value="punkt">Punkt</option><option value="komma">Komma</option></select>
+          <button class="knopf zweit" type="button" id="sl-csv-pruefen" disabled>Datei prüfen</button>
+          <button class="knopf zweit" type="button" id="sl-csv-verwenden" disabled>Für den Vergleich verwenden</button>
+          <button class="knopf zweit" type="button" id="sl-csv-entfernen" disabled>CSV-Daten entfernen</button>
+        </div>
+        <div id="sl-csv-status" class="info" role="status" aria-live="polite">Keine CSV-Datei gewählt. Format: Kopfzeile Datum, Open, High, Low, Close (optional Volume); JJJJ-MM-TT oder TT.MM.JJJJ.</div>
+        <div class="order-zeile">
+          <label for="sl-kapital">Startkapital (USD):</label><input class="feld" type="number" id="sl-kapital" aria-describedby="sl-ergebnis" min="1" step="1" placeholder="nicht festgelegt">
+          <label for="sl-gebuehr">Gebühr %:</label><input class="feld" type="number" id="sl-gebuehr" aria-describedby="sl-ergebnis" min="0" step="0.01" placeholder="nicht festgelegt">
+          <label for="sl-slippage">Slippage %:</label><input class="feld" type="number" id="sl-slippage" aria-describedby="sl-ergebnis" min="0" step="0.01" placeholder="nicht festgelegt">
+          <label for="sl-kurz">EMA kurz:</label><input class="feld" type="number" id="sl-kurz" aria-describedby="sl-ergebnis" min="2" step="1" placeholder="nicht festgelegt">
+          <label for="sl-lang">EMA lang:</label><input class="feld" type="number" id="sl-lang" aria-describedby="sl-ergebnis" min="3" step="1" placeholder="nicht festgelegt">
+          <button class="knopf zweit" type="button" id="sl-rechnen">Vergleich rechnen (lokal)</button>
+          <button class="knopf zweit" type="button" id="sl-paper" disabled>Als Paper-Vorschlag vorbereiten (unverbindlich)</button>
+        </div>
+        <div id="sl-vorschau" class="klein" aria-live="polite"></div>
+        <div id="sl-ergebnis" class="info" role="status" aria-live="polite"></div>
+      </div>
+    </article>
+    <!-- ab 11-09m: Aktien-Überblick – bündelt vorhandene Analysen und die Paper-Simulation, nur lesend (app/45-aktien-ueberblick.js) -->
+    <article class="karte aueb-karte" aria-labelledby="aueb-titel">
+      <h2 class="karte-titel" id="aueb-titel">Aktien-Überblick <span class="zu">]</span><span class="zusatz">nur lesend · kein Signal · keine Order</span></h2>
+      <div class="karte-inhalt">
+        <details id="aueb-details" class="klein briefing-details" open>
+          <summary>Watchlist, Bewertung, Risiken, Quellen, Historie</summary>
+          <div class="order-zeile">
+            <button type="button" class="knopf zweit" id="aueb-aktualisieren" aria-label="Aktien-Überblick aktualisieren">Aktualisieren</button>
+            <button type="button" class="knopf zweit" id="aueb-stand">Paper-Stand merken</button>
+          </div>
+          <!-- ab 11-10m: Aussagekraft je Symbol und Paper-Entwicklung (app/62-aktien4.js) -->
+          <p class="klein" style="margin-bottom: 4px;">Aussagekraft der Analysen (Unsicherheit, keine Prognose)</p>
+          <ul id="akt4-aussagekraft" class="statusliste" aria-label="Aussagekraft je Symbol"></ul>
+          <p id="akt4-paper" class="klein"></p>
+          <p class="klein">Fragen per Chat: „Was bedeutet KGV?“, „Vergleiche AAPL mit MSFT“, „Aussagekraft von AAPL“, „Simulationsverlauf“. JARVIS gibt keine Echtzeitsignale – Analysen beruhen auf historischen Daten.</p>
+          <p id="aueb-meldung" class="klein" role="status" aria-live="polite"></p>
+          <h3 class="stimmtest-titel">Watchlist-Zusammenfassung</h3>
+          <ul id="aueb-liste" class="statusliste" aria-label="Watchlist-Zusammenfassung"></ul>
+          <h3 class="stimmtest-titel">Bewertungsvergleich</h3>
+          <div id="aueb-bewertung" class="rechner-tabelle-rahmen"></div>
+          <h3 class="stimmtest-titel">Risikozusammenfassung</h3>
+          <ul id="aueb-risiken" class="statusliste" aria-label="Risikozusammenfassung"></ul>
+          <p id="aueb-paper" class="klein"></p>
+          <h3 class="stimmtest-titel">Quellen</h3>
+          <ul id="aueb-quellen" class="statusliste" aria-label="Quellenübersicht"></ul>
+          <h3 class="stimmtest-titel">Analysehistorie (letzte 10)</h3>
+          <ul id="aueb-historie" class="statusliste" aria-label="Analysehistorie"></ul>
+          <h3 class="stimmtest-titel">Simulationshistorie (Stände)</h3>
+          <ul id="aueb-staende" class="statusliste" aria-label="Simulationshistorie"></ul>
+          <p class="klein">Einordnung aus vorhandenen Daten, keine Anlageberatung, keine Rendite- oder Kursversprechen. Testdaten und ältere Daten ergeben nie ein Signal. Orders bleiben gesperrt (HandelsWache, Not-Aus unverändert).</p>
+        </details>
+        <!-- ab 11-10n: Datenquellen, Abrufqualität, Fehler, Cache (app/63-datenquellen.js) -->
+        <details id="dq-details" class="klein briefing-details">
+          <summary>Datenquellen und Qualität</summary>
+          <p class="klein" style="margin-bottom: 4px;">Quellen</p>
+          <ul id="dq-quellen" class="statusliste" aria-label="Datenquellen"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Qualität und Fehler je Quelle</p>
+          <ul id="dq-qualitaet" class="statusliste" aria-label="Qualität je Quelle"></ul>
+          <p class="klein" style="margin-bottom: 4px;">Letzte Abrufe</p>
+          <ul id="dq-historie" class="stimmtest-protokoll" aria-label="Abrufhistorie"></ul>
+          <p id="dq-cache" class="klein"></p>
+          <button type="button" class="knopf zweit" id="dq-cache-leeren" hidden>Datencache leeren …</button>
+          <p id="dq-meldung" class="klein" role="status" aria-live="polite"></p>
+          <p class="klein">Diese Übersicht ruft nichts ab – sie protokolliert nur, was die Analyse ohnehin abruft. Testdaten sind erfunden und nie eine Entscheidungsgrundlage.</p>
+        </details>
+      </div>
+    </article>
+
+    <article class="karte werkzeug-karte" aria-labelledby="wz-titel">
+      <h2 class="karte-titel" id="wz-titel">Aktien-Werkzeuge <span class="zu">]</span><span class="zusatz">Stufe 2 · nur lesen und rechnen · nie eine Order ohne deine Freigabe</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Scanner, Timer, Planer, Simulation, Alarme, Nachrichten, SEC- und Kongress-Daten <b>senden nie eine Order</b>.
+          Ein Vorschlag geht nur über „In die Risiko-Prüfung übernehmen“ in die Karte oben – dort braucht jede Order weiter deine Freigabe.
+          Nachrichten, SEC-, 13F- und Kongress-Inhalte sind <b>unbestätigte externe Daten</b>: nur Anzeige, sie lösen nie eine Aktion aus.</p>
+        <p class="klein" id="wz-worker-hinweis">Ohne eingerichtete Worker-Verbindung liefern Scanner, Quartalszahlen, Screener und die übrigen Werkzeuge hier keine Daten – sie melden dann „Bitte zuerst im Cockpit die Verbindung einrichten.“ Ohne Worker: Karte „US-Aktie analysieren“ mit Datenquelle „Lokale Testdaten“ – sie enthält Chart-Scanner, Entry-Timer und Exit-Planer auf synthetischen Kursen.</p>
+        <p class="klein" id="wz-broker-hinweis">Bevor du mit echtem Geld etwas entscheidest: alles Wichtige mit deinem Broker abgleichen – Kurse, Zahlen und Meldungen hier können verzögert, unvollständig oder nur Testdaten sein.</p>
+        <div class="wz-kopf">
+          <label for="wz-wahl" class="klein">Werkzeug</label>
+          <select class="feld" id="wz-wahl">
+            <option value="scanner">Chart-Scanner</option>
+            <option value="einstieg">Entry-Timer</option>
+            <option value="ausstieg">Exit-Planer</option>
+            <option value="simulation">Timer/Planer-Simulation (historisch)</option>
+            <option value="alarme">Preisalarme</option>
+            <option value="nachrichten">Nachrichten &amp; 8-K</option>
+            <option value="sec">Quartalszahlen (SEC)</option>
+            <option value="kongress">Kongress-Tracker</option>
+            <option value="copycat">13F-Tracker (Copycat)</option>
+            <option value="screener">Screener</option>
+            <option value="rebalance">Rebalancing</option>
+          </select>
+        </div>
+
+        <section class="wz-panel" data-wz="scanner">
+          <form class="wz-zeile" id="wz-scan-form" autocomplete="off">
+            <label>Ticker (bis 10, Komma) <input class="feld" id="wz-scan-symbole" value="AAPL,MSFT,KO,JPM,XOM" spellcheck="false"></label>
+            <button class="knopf zweit" type="submit" id="wz-scan-start">Scannen (Tageskerzen)</button>
+          </form>
+          <p class="info wz-ausgabe" id="wz-scan-status" role="status" aria-live="polite"></p>
+          <ul class="wz-liste" id="wz-scan-liste"></ul>
+        </section>
+
+        <section class="wz-panel" data-wz="einstieg" hidden>
+          <form class="wz-zeile" id="wz-ein-form" autocomplete="off">
+            <label>Ticker <input class="feld" id="wz-ein-symbol" value="AAPL" spellcheck="false" size="7"></label>
+            <label>Betrag (USD) <input class="feld" id="wz-ein-betrag" type="number" min="5" step="1" value="250" inputmode="numeric"></label>
+            <label>Gebühr je Seite % <input class="feld" id="wz-ein-gebuehr" type="number" min="0" max="19.99" step="0.01" placeholder="keine Annahme"></label>
+            <button class="knopf zweit" type="submit" id="wz-ein-pruefen">Zeitpunkt prüfen</button>
+          </form>
+          <div class="info wz-ausgabe" id="wz-ein-ergebnis" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="wz-panel" data-wz="ausstieg" hidden>
+          <form class="wz-zeile" id="wz-aus-form" autocomplete="off">
+            <label>Position <select class="feld" id="wz-aus-position"><option value="">– Konto laden –</option></select></label>
+            <label>Einstand je Aktie <input class="feld" id="wz-aus-einstand" type="number" min="0" step="0.01"></label>
+            <label>Höchstkurs seit Kauf <input class="feld" id="wz-aus-hoch" type="number" min="0" step="0.01" placeholder="optional"></label>
+            <label>Handelstage gehalten <input class="feld" id="wz-aus-tage" type="number" min="0" step="1" placeholder="optional"></label>
+            <label><span><input type="checkbox" id="wz-aus-ziel1"> Ziel 1 schon verkauft</span></label>
+            <label>Gebühr je Seite % <input class="feld" id="wz-aus-gebuehr" type="number" min="0" max="19.99" step="0.01" placeholder="keine Annahme"></label>
+            <button class="knopf zweit" type="submit" id="wz-aus-planen">Plan berechnen</button>
+          </form>
+          <div class="info wz-ausgabe" id="wz-aus-ergebnis" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="wz-panel" data-wz="simulation" hidden>
+          <p class="klein" id="wz-sim-hinweis">Timer/Planer-Simulation: Regeln von Entry-Timer und Exit-Planer auf der Vergangenheit (AktienSimulation). Eine von drei getrennten Simulationen – nicht direkt vergleichbar mit der Paper-Kern-Simulation im Analyse-Ablauf oder dem Strategie-Vergleich (Strategy Lab): andere Regeln, andere Annahmen.</p>
+          <form class="wz-zeile" id="wz-sim-form" autocomplete="off">
+            <label>Ticker <input class="feld" id="wz-sim-symbol" value="AAPL" spellcheck="false" size="7"></label>
+            <label>Zeitraum <select class="feld" id="wz-sim-anzahl"><option value="500">ca. 2 Jahre</option><option value="750">ca. 3 Jahre</option><option value="1000" selected>ca. 4 Jahre</option></select></label>
+            <label>Slippage % <input class="feld" id="wz-sim-slippage" type="number" min="0" max="5" step="0.01" value="0.05"></label>
+            <label>Gebühr je Seite % <input class="feld" id="wz-sim-gebuehr" type="number" min="0" max="5" step="0.01" placeholder="0"></label>
+            <button class="knopf zweit" type="submit" id="wz-sim-start">Simulieren</button>
+          </form>
+          <div class="info wz-ausgabe" id="wz-sim-ergebnis" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="wz-panel" data-wz="alarme" hidden>
+          <form class="wz-zeile" id="wz-al-form" autocomplete="off">
+            <label>Art <select class="feld" id="wz-al-art"><option value="ueber">über Preis</option><option value="unter">unter Preis</option><option value="stop">Stop</option><option value="prozent">Bewegung %</option><option value="meldung">neue SEC-Meldung</option><option value="nachricht">neue Nachricht</option><option value="boersenoeffnung">Börsenöffnung</option></select></label>
+            <label>Ticker <input class="feld" id="wz-al-symbol" value="AAPL" spellcheck="false" size="7"></label>
+            <label>Preis bzw. % <input class="feld" id="wz-al-wert" type="number" min="0" step="0.01"></label>
+            <label>Richtung (nur bei %) <select class="feld" id="wz-al-richtung"><option value="">bitte wählen</option><option value="auf">steigt um mind. %</option><option value="ab">fällt um mind. %</option><option value="beide">steigt oder fällt</option></select></label>
+            <label><span><input type="checkbox" id="wz-al-wieder"> wieder scharf</span></label>
+            <label>gültig bis <input class="feld" id="wz-al-ablauf" type="date"></label>
+            <label>Formulare/Kennzeichen <input class="feld" id="wz-al-auswahl" placeholder="z. B. 8-K, 4 oder Zahlen" size="16" spellcheck="false"></label>
+            <button class="knopf zweit" type="submit" id="wz-al-anlegen">Alarm anlegen</button>
+            <button class="knopf zweit" type="button" id="wz-al-pruefen">Jetzt prüfen</button>
+          </form>
+          <p class="klein">Ein Alarm ist eine Information, nie eine Order. Geprüft wird nur, solange diese Seite offen ist (alle 60 s bei offener Börse).</p>
+          <p class="info wz-ausgabe" id="wz-al-status" role="status" aria-live="polite"></p>
+          <button class="knopf zweit" type="button" id="wz-al-reset" hidden>Alarmspeicher zurücksetzen</button>
+          <ul class="wz-liste" id="wz-al-liste"></ul>
+        </section>
+
+        <section class="wz-panel" data-wz="nachrichten" hidden>
+          <form class="wz-zeile" id="wz-news-form" autocomplete="off">
+            <label>Ticker (bis 10) <input class="feld" id="wz-news-symbole" value="AAPL,MSFT" spellcheck="false"></label>
+            <label><span><input type="checkbox" id="wz-news-neu"> nur neue</span></label>
+            <label>Profil <select class="feld" id="wz-news-profil"><option value="jarvis" selected>JARVIS-Standard (alle Zeiten)</option><option value="skill">Skill-Profil trader-news: 48 Stunden, nur neue</option></select></label>
+            <button class="knopf zweit" type="submit" id="wz-news-laden">Nachrichten laden</button>
+            <button class="knopf zweit" type="button" id="wz-news-reset">Gesehen-Status zurücksetzen</button>
+          </form>
+          <p class="klein">Schlagzeilen sind Hinweise, keine geprüften Fakten. Meldungen an die SEC (8-K, nur mit SEC-Einrichtung) haben Vorrang. ! = wichtiger 8-K-Punkt.</p>
+          <p class="klein" id="wz-news-regeln">Hinter einer Bezahlschranke wird nichts gelesen – dann steht dort nur die Schlagzeile. Mit ! markierte Meldungen zuerst lesen, z. B. 4.02 (frühere Abschlüsse nicht mehr verlässlich), 3.01 (Hinweis auf ein Delisting), 2.02 (Quartalszahlen) – erst die Meldung selbst, nie nur die Schlagzeile.</p>
+          <p class="info wz-ausgabe" id="wz-news-status" role="status" aria-live="polite"></p>
+          <ul class="wz-liste" id="wz-news-liste"></ul>
+        </section>
+
+        <section class="wz-panel" data-wz="sec" hidden>
+          <form class="wz-zeile" id="wz-sec-form" autocomplete="off">
+            <label>Ticker <input class="feld" id="wz-sec-symbol" value="AAPL" spellcheck="false" size="7"></label>
+            <button class="knopf zweit" type="submit" id="wz-sec-laden">Quartalszahlen laden</button>
+          </form>
+          <div class="info wz-ausgabe" id="wz-sec-ergebnis" role="status" aria-live="polite"></div>
+        </section>
+
+        <section class="wz-panel" data-wz="kongress" hidden>
+          <form class="wz-zeile" id="wz-ko-form" autocomplete="off">
+            <label>Mitglied <input class="feld" id="wz-ko-mitglied" value="pelosi" spellcheck="false"></label>
+            <label>Jahr <input class="feld" id="wz-ko-jahr" type="number" min="2012" step="1" size="5"></label>
+            <button class="knopf zweit" type="submit" id="wz-ko-laden">Meldungen laden</button>
+          </form>
+          <p class="klein">Öffentliche Meldungen nach dem STOCK Act, bis zu 45 Tage nach dem Geschäft eingereicht – kein Insiderwissen, keine Prognose. Beträge sind Spannen. Senat nur von Hand (efdsearch.senate.gov).</p>
+          <p class="info wz-ausgabe" id="wz-ko-status" role="status" aria-live="polite"></p>
+          <ul class="wz-liste" id="wz-ko-liste"></ul>
+          <div class="wz-zeile">
+            <label>Eingabe <select class="feld" id="wz-ko-art">
+              <option value="house">Repräsentantenhaus: Text eines PTR (aus dem PDF kopiert)</option>
+              <option value="manuell">Senat oder andere: Zeilen von Hand (manuell)</option>
+            </select></label>
+          </div>
+          <p class="klein" id="wz-ko-format">PDF beim House Clerk selbst öffnen, Text markieren, kopieren und hier einfügen. JARVIS liest nur diesen Text – nichts wird abgefragt oder gesendet.</p>
+          <textarea class="feld" id="wz-ko-text" rows="4" spellcheck="false" style="width: 100%;" aria-labelledby="wz-ko-format"></textarea>
+          <button class="knopf zweit" type="button" id="wz-ko-lesen">Text lesen</button>
+          <div class="info wz-ausgabe" id="wz-ko-bericht"></div>
+        </section>
+
+        <section class="wz-panel" data-wz="copycat" hidden>
+          <form class="wz-zeile" id="wz-13f-form" autocomplete="off">
+            <label>Investor (Filer) <select class="feld" id="wz-13f-filer"></select></label>
+            <label>oder CIK <input class="feld" id="wz-13f-cik" placeholder="z. B. 1067983" size="11" inputmode="numeric"></label>
+            <label>Top <input class="feld" id="wz-13f-top" type="number" min="1" max="30" step="1" value="5"></label>
+            <label>Quartal oder Akzession <input class="feld" id="wz-13f-quartal" placeholder="leer = neuestes" size="14" spellcheck="false" maxlength="24"></label>
+            <button class="knopf zweit" type="submit" id="wz-13f-laden">13F laden</button>
+          </form>
+          <form class="wz-zeile" id="wz-13f-suche-form" autocomplete="off">
+            <label>Filer suchen (Name oder Person) <input class="feld" id="wz-13f-suche" spellcheck="false" maxlength="80"></label>
+            <button class="knopf zweit" type="submit" id="wz-13f-suchen">Suchen</button>
+          </form>
+          <p class="info wz-ausgabe" id="wz-13f-suche-status" role="status" aria-live="polite"></p>
+          <ul class="wz-liste" id="wz-13f-treffer"></ul>
+          <details>
+            <summary class="klein">Eigene CUSIP-Zuordnungen (manuell, nur auf diesem Gerät)</summary>
+            <p class="klein">Je Zeile <code>CUSIP=TICKER</code>, z. B. <code>650111107=NYT</code>. CUSIP wird mit Prüfziffer geprüft. Manuelle Zuordnungen haben Vorrang und sind in der Tabelle als „manuell“ gekennzeichnet – du bist für ihre Richtigkeit verantwortlich.</p>
+            <textarea class="feld" id="wz-13f-cusip" rows="3" spellcheck="false" style="width: 100%;" aria-label="Eigene CUSIP-Zuordnungen"></textarea>
+            <button class="knopf zweit" type="button" id="wz-13f-cusip-speichern">Zuordnungen prüfen und speichern</button>
+            <p class="info wz-ausgabe" id="wz-13f-cusip-status" role="status" aria-live="polite"></p>
+          </details>
+          <p class="klein">Quelle: SEC EDGAR, Formular 13F-HR (nur mit SEC-Einrichtung). Stand = Quartalsende, eingereicht bis zu 45 Tage später;
+            nur US-Long-Positionen, eingereicht von der Firma, nicht von der Person. Ergebnis: Beobachtung und Zielgewichte als Vorschlag – nie eine Order.</p>
+          <div class="info wz-ausgabe" id="wz-13f-ergebnis" role="status" aria-live="polite"></div>
+          <section class="wz-13f-lokal" aria-labelledby="wz-13f-lokal-titel">
+            <h4 id="wz-13f-lokal-titel">13F-Dateien von sec.gov einlesen (ohne Worker)</h4>
+            <p class="klein" id="wz-13f-lokal-hinweis">Selbst gespeicherte Dateien genau einer Einreichung wählen: Informationstabelle (.xml, Pflicht), Deckblatt primary_doc.xml (Manager, Zeilenzahl, Gesamtwert) und für das Einreichungsdatum (und damit die Einheit) die Seite „Filing Detail“ (.htm) oder die SEC-Meldungsliste (submissions-JSON). Nur lokal gelesen – keine Abfrage, keine Übernahme, nichts gebucht.</p>
+            <label>13F-Dateien wählen <input class="feld" type="file" id="wz-13f-dateien" multiple accept=".xml,.htm,.html,.json,text/xml,application/xml,text/html,application/json" aria-describedby="wz-13f-lokal-hinweis wz-13f-lokal-status"></label>
+            <p class="info wz-ausgabe" id="wz-13f-lokal-status" role="status" aria-live="polite"></p>
+            <div class="wz-ausgabe" id="wz-13f-lokal-ergebnis"></div>
+          </section>
+        </section>
+
+        <section class="wz-panel" data-wz="screener" hidden>
+          <form class="wz-zeile" id="wz-scr-form" autocomplete="off">
+            <label>Ticker (bis 10) <input class="feld" id="wz-scr-symbole" value="AAPL,MSFT,KO,JPM,XOM" spellcheck="false"></label>
+            <label>Regeln <select class="feld" id="wz-scr-vorlage">
+              <option value="technisch">Aufwärtstrend ohne Übertreibung (Kerzen)</option>
+              <option value="fundamental">Wachsend, profitabel (SEC, Beispiel trader-screener)</option>
+              <option value="kombiniert">Wachstum und Trend (SEC + Kerzen)</option>
+              <option value="eigene">Eigene Regeln (JSON)</option>
+            </select></label>
+            <button class="knopf zweit" type="submit" id="wz-scr-start">Screenen</button>
+          </form>
+          <textarea class="feld" id="wz-scr-regeln" rows="5" spellcheck="false" style="width: 100%;" aria-label="Eigene Screener-Regeln (JSON)" hidden></textarea>
+          <p class="klein">Kennzahlen nur aus vorhandenen Daten: Tageskerzen (Alpaca IEX) und SEC-Quartalszahlen. Fehlt etwas oder ist es veraltet, steht dort „nicht verfügbar“ – nichts wird geschätzt. Keine Empfehlung.</p>
+          <!-- ab 11-07k: Regeln speichern/laden und Verlauf der Läufe (app/29-watchlist-plus.js) -->
+          <div class="wz-zeile">
+            <label>Name <input class="feld" id="wz-scr-name" maxlength="40" placeholder="z. B. Mein Trendfilter"></label>
+            <button class="knopf zweit" type="button" id="wz-scr-speichern">Regeln speichern</button>
+            <label>Gespeichert <select class="feld" id="wz-scr-gespeichert"><option value="">keine gespeicherten Regeln</option></select></label>
+            <button class="knopf zweit" type="button" id="wz-scr-loeschen">Gespeicherte löschen</button>
+          </div>
+          <p class="info wz-ausgabe" id="wz-scr-status" role="status" aria-live="polite"></p>
+          <ul class="wz-liste" id="wz-scr-liste"></ul>
+          <h4>Verlauf der Läufe (nur Ergebnis und Datenstand)</h4>
+          <ul class="wz-liste" id="wz-scr-verlauf" aria-label="Verlauf der Screener-Läufe"></ul>
+        </section>
+
+        <section class="wz-panel" data-wz="rebalance" hidden>
+          <form class="wz-zeile" id="wz-reb-form" autocomplete="off">
+            <label>Zielgewichte (je Zeile TICKER=Gewicht) <textarea class="feld" id="wz-reb-ziele" rows="4" spellcheck="false" placeholder="AAPL=40&#10;MSFT=35&#10;KO=25"></textarea></label>
+            <label>Band (Punkte) <input class="feld" id="wz-reb-band" type="number" min="1" max="50" step="0.5" value="5"></label>
+            <label><span><input type="checkbox" id="wz-reb-nichtziele"> Positionen außerhalb der Ziele verkaufen</span></label>
+            <button class="knopf zweit" type="submit" id="wz-reb-planen">Vorschläge berechnen</button>
+          </form>
+          <p class="klein">Nur Vorschläge auf Basis deines Paper-Kontos und deiner Zielgewichte. Jede Order geht durch die Risiko-Prüfung der Stufe 1 und braucht dort deine Freigabe.</p>
+          <div class="info wz-ausgabe" id="wz-reb-ergebnis" role="status" aria-live="polite"></div>
+        </section>
+      </div>
+    </article>
+
+    <article class="karte konto-karte krypto-teil">
+      <h2 class="karte-titel">Kontostand <span class="zu">]</span><span class="zusatz">Spielgeld</span></h2>
+      <div class="karte-inhalt">
+        <table id="guthaben"><tr><td class="leer">Kontostand erscheint nach dem Einrichten der Verbindung.</td></tr></table>
+      </div>
+    </article>
+
+    <article class="karte order-karte krypto-teil">
+      <h2 class="karte-titel">Manuelle Order <span class="zu">]</span><span class="zusatz">Testnet</span></h2>
+      <div class="karte-inhalt">
+        <div class="order-zeile">
+          <select class="feld" id="order-symbol" aria-label="Handelspaar"><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          <select class="feld" id="order-seite" aria-label="Seite">
+            <option value="BUY">Kaufen</option>
+            <option value="SELL">Verkaufen</option>
+          </select>
+          <input class="feld" type="number" id="order-betrag" value="10" min="10" max="50" step="1" aria-label="Betrag in USDT"> USDT
+        </div>
+        <p class="order-zeile">
+          <label><input type="checkbox" id="order-nur-pruefen" checked> Nur prüfen (nicht ausführen)</label>
+        </p>
+        <div class="order-zeile">
+          <button id="order-senden" class="knopf" onclick="orderSenden()">Order senden</button>
+          <button class="knopf zweit" onclick="tradingLaden()" aria-label="Testnet-Handelsstand aktualisieren">Aktualisieren</button>
+          <button class="knopf zweit" id="diagnose-knopf" onclick="diagnoseStarten()">Diagnose</button>
+        </div>
+        <p id="order-ergebnis" class="info" role="status" aria-live="polite"></p>
+        <p id="diagnose-ergebnis" class="info"></p>
+      </div>
+    </article>
+
+    <article class="karte paper-karte krypto-teil">
+      <h2 class="karte-titel">Krypto-Paper-Trading <span class="zu">]</span><span class="zusatz">Simulation im Worker · 10.000 USDT Spielgeld · nicht US-Aktien</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis">Reine Simulation im Worker-Speicher: keine Börse, kein Testnet, kein echtes Geld.
+          Kurse aus öffentlichen Kraken-Marktdaten, simulierte Gebühr 0,1 % je Order. Nur manuell, keine Automatik.</p>
+        <p class="klein">Per Sprache oder Chat: „Paper kaufe Bitcoin für 100 Dollar“, „Paper verkaufe alles Ethereum“,
+          „Paper Kontostand“, „Paper Positionen“. Vor jeder Order liest JARVIS Markt, Richtung und Betrag vor und wartet auf „Ja“.</p>
+        <p id="paper-uebersicht" class="info">Noch nicht geladen.</p>
+        <table id="paper-positionen"></table>
+        <div class="order-zeile">
+          <select class="feld" id="paper-symbol" aria-label="Handelspaar (Simulation)"><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          <select class="feld" id="paper-seite" aria-label="Seite (Simulation)">
+            <option value="BUY">Kaufen</option>
+            <option value="SELL">Verkaufen</option>
+          </select>
+          <input class="feld" type="number" id="paper-betrag" value="100" min="10" step="1" aria-label="Betrag in USDT (Simulation)"> USDT
+        </div>
+        <div class="order-zeile">
+          <button class="knopf" id="paper-senden" type="button">Simuliert ausführen</button>
+          <button class="knopf zweit" id="paper-alles" type="button">Position ganz verkaufen</button>
+          <button class="knopf zweit" id="paper-aktualisieren" type="button" aria-label="Krypto-Paper-Stand aktualisieren">Aktualisieren</button>
+        </div>
+        <p id="paper-ergebnis" class="info" role="status" aria-live="polite"></p>
+        <h3 class="stimmtest-titel">Journal der Simulation</h3>
+        <div class="order-zeile journal-filter">
+          <select class="feld" id="journal-symbol" aria-label="Journal: Handelspaar"><option value="">Alle Paare</option><option>BTCUSDT</option><option>ETHUSDT</option></select>
+          <select class="feld" id="journal-zeitraum" aria-label="Journal: Zeitraum"><option value="">Gesamter Verlauf</option><option value="1">Letzte 24 Stunden</option><option value="7">Letzte 7 Tage</option><option value="30">Letzte 30 Tage</option></select>
+          <button class="knopf zweit" id="journal-csv" type="button">CSV exportieren</button>
+        </div>
+        <p id="journal-summe" class="info"></p>
+        <ol id="paper-historie" class="stimmtest-protokoll"><li>Noch keine simulierten Orders.</li></ol>
+        <button class="knopf zweit" id="paper-reset" type="button" style="margin-top: 10px;">Simulation auf 10.000 USDT zurücksetzen</button>
+      </div>
+    </article>
+    <article class="karte simkern-karte" aria-labelledby="simkern-titel">
+      <h2 class="karte-titel" id="simkern-titel">Simulation (lokal) <span class="zu">]</span><span class="zusatz">Paper-Kern · Testdaten · kein Konto</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis"><span class="sim-modus">SIMULATIONSMODUS</span> – läuft nur in diesem Browser. Keine Verbindung zu Worker oder Broker,
+          kein Freigabecode, keine Order. Das Spielkapital ist <b>kein</b> Konto; Ergebnisse gelten nur für den Testdatensatz – keine Prognose.</p>
+        <div class="order-zeile">
+          <label for="sim-datensatz">Datenquelle:</label>
+          <select class="feld" id="sim-datensatz">
+            <option value="A">Testdatensatz „Synthetisch A“ (Saat 42)</option>
+            <option value="B">Testdatensatz „Synthetisch B“ (Saat 7)</option>
+            <option value="datei">Echte Tageskurse: eigene Kursdatei (CSV) oder dein Worker</option>
+          </select>
+        </div>
+        <div class="order-zeile" id="sim-datei-bereich" hidden>
+          <label for="sim-datei-symbol">Symbol der Datei:</label> <input class="feld" id="sim-datei-symbol" maxlength="8" size="8" spellcheck="false" autocomplete="off" placeholder="z. B. AAPL" aria-describedby="sim-datei-hinweis">
+          <label>Kursdatei wählen <input class="feld" type="file" id="sim-datei" accept=".csv,text/csv" aria-describedby="sim-datei-hinweis sim-datei-status"></label>
+          <button type="button" class="knopf zweit" id="sim-worker-laden" aria-describedby="sim-datei-hinweis sim-datei-status">oder Tageskurse über deinen Worker laden</button>
+          <p class="klein" id="sim-datei-hinweis">CSV mit Kopfzeile Date,Open,High,Low,Close[,Volume], Tageskerzen (z. B. von stooq.com als „aapl_us_d.csv“ gespeichert). Nur lokal gelesen, keine Abfrage. Das Symbol wird nie aus Dateiname oder Inhalt geraten. Herkunft und Richtigkeit der Kurse prüft JARVIS nicht gegen den Anbieter. Lange Dateien (über 5.000 Tage, aufsteigend sortiert) werden auf die jüngsten 5.000 Tageskerzen gekürzt – das wird angezeigt. UTF-8 und Windows-1252 werden erkannt. Über deinen Worker (Zugangscode im Cockpit) kommen Tageskurse von Alpaca (Feed IEX); eine noch laufende Tageskerze wird nicht verwendet.</p>
+          <p class="info" id="sim-datei-status" role="status" aria-live="polite">Noch keine Kursdatei gelesen.</p>
+          <ul class="klein" id="sim-datenbericht" aria-label="Datenqualitätsbericht der Kurse" hidden></ul>
+          <label>SEC-Kennzahlen (optional, companyfacts-JSON) <input class="feld" type="file" id="sim-sec-datei" accept=".json,application/json" aria-describedby="sim-sec-hinweis sim-sec-status"></label>
+          <p class="klein" id="sim-sec-hinweis">Datei „companyfacts“ der SEC zum selben Unternehmen, im Browser unverändert gespeichert von data.sec.gov/api/xbrl/companyfacts/CIK##########.json (z. B. CIK0000320193 für Apple). Nur lokal gelesen, keine Abfrage. Im Replay zählt je Kerze nur, was bis zu diesem Tag bei der SEC eingereicht war (Feld „filed“) – kein Blick in spätere Meldungen. SEC-Dateien sind keine Kurse.</p>
+          <p class="info" id="sim-sec-status" role="status" aria-live="polite">Keine SEC-Datei gelesen – JARVIS-Signale ohne Kernkennzahlen (kein Kauf).</p>
+        </div>
+        <div class="order-zeile">
+          <label for="sim-signalquelle">Signalquelle:</label>
+          <select class="feld" id="sim-signalquelle">
+            <option value="ema">EMA-Kreuzung 5/20 (Regel der Simulation)</option>
+            <option value="jarvis">JARVIS-Signale: Analyse + Entry-Timer + Exit-Planer (Replay, simulierte Kurse)</option>
+          </select>
+        </div>
+        <p id="sim-vorschau" class="info" role="status" aria-live="polite">Testdatensatz wird geprüft …</p>
+        <div class="order-zeile">
+          <label for="sim-von">Beginn (optional):</label> <input class="feld" type="date" id="sim-von">
+          <label for="sim-bis">Ende (optional):</label> <input class="feld" type="date" id="sim-bis">
+        </div>
+        <p class="testnet-hinweis" id="sim-kennzeichnung"><b>Paper-Trading – Spielgeld – synthetische Daten.</b> Der Bot handelt nur mit simulierten Testkursen im Browser: keine echten Kurse, kein Broker, keine Order, kein Echtgeld. Ergebnisse sagen nichts über Gewinnchancen.</p>
+        <div class="order-zeile">
+          <p class="info"><b>Laufstatus:</b> <span id="sim-status-marke" role="status" aria-live="polite" data-zustand="notaus">Aus – Simulations-Not-Aus aktiv, Start gesperrt</span></p>
+        <button class="knopf zweit" id="sim-notaus" type="button" aria-describedby="sim-zustand">Simulations-Not-Aus ausschalten</button>
+        </div>
+        <p id="sim-zustand" class="info" role="status" aria-live="polite">Paper-Automatik: Aus – startet nur auf ausdrücklichen Klick, nie von selbst (auch nicht nach dem Neuladen).</p>
+        <div class="order-zeile">
+          <p class="info" id="sim-start-zusammenfassung" aria-live="polite"></p>
+        <label class="verlauf-schalter"><input type="checkbox" id="sim-bestaetigung" aria-describedby="sim-start-zusammenfassung"> Startkonfiguration geprüft (Symbol, Datenquelle, Zeitraum, Strategie, Gebühren, Grenzen) – gilt nur bis zur nächsten Änderung oder zum Neuladen</label>
+        <button class="knopf" id="sim-start" type="button">Paper-Automatik starten</button>
+          <button class="knopf zweit" id="sim-stopp" type="button" disabled>Pausieren</button>
+          <button class="knopf zweit" id="sim-abbruch" type="button" disabled>Sofort stoppen</button>
+          <button class="knopf zweit" id="sim-reset" type="button">Simulations-Portfolio zurücksetzen</button>
+          <button class="knopf zweit" id="sim-migration" type="button" hidden>Stand vor der Speicherumstellung wiederherstellen</button>
+        </div>
+        <p id="sim-ergebnis" class="info" role="status" aria-live="polite"></p>
+        <p id="sim-stand" class="info" aria-live="polite">Stand: noch nicht geladen.</p>
+        <h3 class="stimmtest-titel" id="sim-protokoll-titel">Laufprotokoll der Paper-Automatik</h3>
+        <p class="klein">Je verarbeitetem Schritt: ausgeführt (mit Ledger-Kennung), abgelehnt (mit Grund des Paper-Kerns), unklar oder kein Signal. Nur auf diesem Gerät, ohne persönliche Daten; Ergebnisse stammen aus dem Ledger.</p>
+        <ol id="sim-protokoll" class="stimmtest-protokoll sim-ledger" aria-labelledby="sim-protokoll-titel"><li>Noch kein Lauf.</li></ol>
+        <button class="knopf zweit" id="sim-protokoll-kopieren" type="button">Laufprotokoll kopieren</button>
+        <h3 class="stimmtest-titel">Ledger der Simulation</h3>
+        <div class="order-zeile">
+          <select class="feld" id="sim-filter-seite" aria-label="Ledger: Seite"><option value="">Kauf und Verkauf</option><option value="kauf">nur Kauf</option><option value="verkauf">nur Verkauf</option></select>
+          <select class="feld" id="sim-filter-zustand" aria-label="Ledger: Zustand"><option value="">alle Zustände</option><option value="gefuellt">ausgeführt (simuliert)</option><option value="abgelehnt">blockiert</option><option value="unklar">unklar</option></select>
+          <select class="feld" id="sim-filter-symbol" aria-label="Ledger: Symbol"><option value="">alle Symbole</option></select>
+        </div>
+        <ol id="sim-ledger" class="stimmtest-protokoll sim-ledger"><li>Noch keine simulierten Orders.</li></ol>
+        <button class="knopf zweit" id="sim-ledger-csv" type="button">Ledger als CSV exportieren</button> <button class="knopf zweit" id="sim-bericht" type="button">Replay-Bericht exportieren (Markdown)</button>
+        <!-- ab 11-06e: Verteilung und Konzentration des Simulations-Portfolios (AktienRebalance.risikoUebersicht) -->
+        <h3 class="stimmtest-titel">Portfolio-Risiko der Simulation</h3>
+        <form id="sim-schwellen-form" class="order-zeile" autocomplete="off" novalidate>
+          <label for="sim-schwelle-position">Warnschwelle je Position %:</label>
+          <input class="feld" id="sim-schwelle-position" type="number" min="1" max="100" step="1" inputmode="numeric">
+          <label for="sim-schwelle-sektor">je Sektor %:</label>
+          <input class="feld" id="sim-schwelle-sektor" type="number" min="1" max="100" step="1" inputmode="numeric">
+          <button class="knopf zweit" type="submit">Schwellen speichern</button>
+          <span id="sim-schwellen-meldung" class="klein" role="status"></span>
+        </form>
+        <div id="sim-risiko" class="info" role="status" aria-live="polite">Noch keine Positionen.</div>
+        <!-- ab 11-07l: Zusammenfassung mit Ergebnissen und Gebühren (app/30-portfolio-plus.js) – nur Anzeige -->
+        <h3 class="stimmtest-titel">Zusammenfassung der Simulation</h3>
+        <div id="sim-zusammenfassung" class="info" aria-label="Zusammenfassung der Simulation">Noch kein Simulations-Portfolio.</div>
+        <details class="klein indikator-erklaerung">
+          <summary>Wie wird gerechnet?</summary>
+          <dl>
+            <dt>Ausführung</dt><dd>Simulierte Orders werden zum Eröffnungskurs der nächsten Tageskerze nach dem Signal gefüllt, beim Kauf plus, beim Verkauf minus Slippage; die Gebühr ist ein Prozentsatz des Volumens. Annahmen stehen je Buchung im Ledger und in der CSV.</dd>
+            <dt>Realisiert</dt><dd>Summe der Ergebnisse abgeschlossener Verkäufe nach Kauf- und Verkaufsgebühren.</dd>
+            <dt>Nicht realisiert</dt><dd>Menge × (Kurs − Einstand) offener Positionen – nur mit dem Kurs einer Analyse dieser Sitzung; ohne Kurs „nicht bewertbar“ und zum Einstand gezählt, nie geschätzt.</dd>
+            <dt>Cash-Quote, Gewichte, Konzentration</dt><dd>Bargeld bzw. Positionswert ÷ Gesamtwert; „effektiv n gleich große Positionen“ = 1 ÷ Herfindahl-Index. Warnschwellen sind nur Anzeige, keine Handelsregel.</dd>
+          </dl>
+          <p>SIMULATION mit Spielgeld – kein Konto, keine Order, keine Rendite-Zusage. Die Handelssperren (Not-Aus, HandelsWache, Order-Sperren) gelten unverändert und werden hier nicht berührt.</p>
+        </details>
+        <p id="sim-detail" class="info" role="status" aria-live="polite"></p>
+        <details id="sim-diagnose-bereich" class="briefing-details"><summary>Diagnose der Paper-Automatik</summary>
+          <p class="klein">Zeigt Ursache und nächsten Schritt – ohne Zugangscodes, Schlüssel, vollständige SEC-Dateien oder lokale Pfade.</p>
+          <button class="knopf zweit" id="sim-diagnose-pruefen" type="button">Diagnose aktualisieren (prüft auch den Worker)</button>
+          <ul class="klein" id="sim-diagnose" aria-label="Diagnose der Paper-Automatik"></ul>
+        </details>
+      </div>
+    </article>
+    <!-- ab 14ze: trader-tax – Steuer-Information nach US-Regeln auf dem Ledger der Simulation (aktien/steuer.js, app/76-steuer.js); keine Order -->
+    <article class="karte steuer-karte" aria-labelledby="steuer-titel">
+      <h2 class="karte-titel" id="steuer-titel">Steuer-Information (US-Regeln) <span class="zu">]</span><span class="zusatz">trader-tax · keine Steuerberatung</span></h2>
+      <div class="karte-inhalt">
+        <p class="testnet-hinweis" id="steuer-hinweis"><b>Keine Steuerberatung – insbesondere keine deutsche.</b> JARVIS rechnet nur nach den US-Regeln des Trader-Skills (Haltedauer kurz/lang, Wash-Sale) auf den Kauflosen der Simulation. Deutsche Regeln (Abgeltungsteuer, Verlusttöpfe, Freistellungsauftrag) sind nicht enthalten.</p>
+        <p class="klein">Grundlage: Ledger der Simulation (Paper-Kern, Spielgeld). Kauf = Los (Kosten inklusive Gebühr), Verkauf = Abgang nach FIFO. Preis: letzter Kurs des gewählten Datensatzes; eigene Preise überschreiben ihn. Es entsteht nie eine Order.</p>
+        <h3>Lose und Fristen</h3>
+        <div class="order-zeile">
+          <label for="steuer-stichtag">Stichtag:</label> <input class="feld" type="date" id="steuer-stichtag">
+          <label for="steuer-preise">Eigene Preise:</label> <input class="feld" id="steuer-preise" placeholder="z. B. AAPL=190.5, KO=61" autocomplete="off" spellcheck="false">
+          <label for="steuer-minverlust">Mindestverlust (USD):</label> <input class="feld" type="number" id="steuer-minverlust" value="100" min="0" step="1">
+        </div>
+        <button class="knopf zweit" id="steuer-berechnen" type="button">Lose, Fristen und Verluste berechnen</button>
+        <ul class="klein" id="steuer-ergebnis" aria-label="Steuer-Information: Lose und Fristen" aria-live="polite"></ul>
+        <h3>Verkauf simulieren</h3>
+        <div class="order-zeile">
+          <label for="steuer-symbol">Verkauf simulieren – Symbol:</label> <input class="feld" id="steuer-symbol" size="8" maxlength="8" autocomplete="off" spellcheck="false">
+          <label for="steuer-stueck">Stück:</label> <input class="feld" type="number" id="steuer-stueck" min="0" step="any">
+          <label for="steuer-preis">Preis (USD):</label> <input class="feld" type="number" id="steuer-preis" min="0" step="any">
+          <label for="steuer-methode">Methode:</label> <select class="feld" id="steuer-methode"><option value="fifo">FIFO (älteste zuerst)</option><option value="hifo">HIFO (höchste Kosten zuerst)</option><option value="specific">bestimmte Lose</option></select>
+          <label for="steuer-lose">Lose:</label> <input class="feld" id="steuer-lose" placeholder="z. B. AAPL-2" autocomplete="off" spellcheck="false">
+        </div>
+        <button class="knopf zweit" id="steuer-simulieren" type="button">Verkauf simulieren (keine Order)</button>
+        <ul class="klein" id="steuer-verkauf" aria-label="Steuer-Information: simulierter Verkauf" aria-live="polite"></ul>
+        <p class="weitere-leiste klein">Weitere Werkzeuge: Die Krypto-Testnet-Karten (Kontostand, Manuelle Order, Krypto-Paper) sind nachrangig. <button type="button" class="knopf zweit" id="weitere-schalter-trading" aria-expanded="true">Weitere Werkzeuge ausblenden</button></p>
+      </div>
+    </article>
+  </div>
+</section>
+
+</main>
+
+<!-- Stand-Kennung: bei jeder Veröffentlichung erhöhen, damit sichtbar ist, welcher Code im Browser wirklich geladen ist -->
+<p id="netz-status" class="netz-status" role="status" aria-live="polite" hidden></p>
+<footer class="fuss">Spielgeld · Automatik AUS · keine Echtgeld-Verbindung · <span id="stand-kennung">Stand v0.9-2026-11-15f</span></footer>
+
+<script src="app/01-uhr.js"></script>
+<script src="app/02-chat-ki.js"></script>
+<script src="app/03-trading-skills.js"></script>
+<script src="app/04-simulation.js"></script>
+<script src="app/05-mein-tag.js"></script>
+<script src="app/06-aktienanalyse.js"></script>
+<script src="app/07-portfolio-labor.js"></script>
+<script src="app/08-watchlist.js"></script>
+<script src="app/09-aktien-befehle.js"></script>
+<script src="app/10-aktien-chart.js"></script>
+<script src="app/11-aufgaben.js"></script>
+<script src="app/12-briefing.js"></script>
+<script src="app/13-routinen.js"></script>
+<script src="app/14-einrichtung.js"></script>
+<script src="app/15-profil-projekte.js"></script>
+<script src="app/16-verlauf.js"></script>
+<script src="app/17-uebersichten-freigaben.js"></script>
+<!-- Marktanalyse: lokale Kopie von TradingView Lightweight Charts 5.2.1 (Apache-2.0, siehe vendor/LICENSE-lightweight-charts.txt).
+     Attribution laut vendor/NOTICE-lightweight-charts.txt: TradingView Lightweight Charts™ Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/
+     Das TradingView-Logo im Chart (attributionLogo, Standard) bleibt eingeschaltet – es erfüllt die verlangte Verlinkung. -->
+<script src="aktien/budget.js"></script>
+<script src="app/18-aktien-stufe1.js"></script>
+<script src="aktien/technik.js"></script>
+<script src="daten/datenquellen.js"></script>
+<script src="aktien/workflow.js"></script>
+<script src="aktien/profil.js"></script>
+<script src="aktien/assistent.js"></script>
+<script src="aktien/einstieg.js"></script>
+<script src="aktien/ausstieg.js"></script>
+<script src="aktien/signal-bot.js"></script>
+<script src="aktien/simulation.js"></script>
+<script src="aktien/alarme.js"></script>
+<script src="aktien/nachrichten.js"></script>
+<script src="aktien/sec.js"></script>
+<script src="aktien/sec-beschreibung.js"></script>
+<script src="aktien/kongress.js"></script>
+<script src="aktien/copycat.js"></script>
+<script src="aktien/tickerliste-offline.js"></script>
+<script src="aktien/screener.js"></script>
+<script src="aktien/rebalance.js"></script>
+<script src="aktien/steuer.js"></script>
+<script src="app/19-aktien-werkzeuge.js"></script>
+<script src="bot/backtest.js"></script>
+<script src="bot/paper-bot.js"></script>
+<script src="bot/paper-kern.js"></script>
+<script src="app/20-paper-bot.js"></script>
+<script src="vendor/lightweight-charts-5.2.1.standalone.production.js"></script>
+<script src="analyse.js"></script>
+<script src="app/21-kern-kugel.js"></script>
+<script src="app/22-sprache.js"></script>
+<script src="app/23-notizen.js"></script>
+<script src="app/24-oberflaeche.js"></script>
+<script src="app/25-sprachverstaendnis.js"></script>
+<script src="app/26-sprachausgabe.js"></script>
+<script src="app/27-automatik.js"></script>
+<script src="app/28-hinweise.js"></script>
+<script src="app/29-watchlist-plus.js"></script>
+<script src="app/30-portfolio-plus.js"></script>
+<script src="app/31-entscheidung.js"></script>
+<script src="app/32-touch.js"></script>
+<script src="app/33-integration.js"></script>
+<script src="app/34-auftraege.js"></script>
+<script src="app/35-werkzeuge.js"></script>
+<script src="app/36-dateien.js"></script>
+<script src="app/37-dokumente.js"></script>
+<script src="app/38-projekte.js"></script>
+<script src="app/39-arbeitsplatz.js"></script>
+<script src="app/40-sprachbefehle.js"></script>
+<script src="app/41-dialog.js"></script>
+<script src="app/42-gedaechtnis.js"></script>
+<script src="app/43-automatik-plus.js"></script>
+<script src="app/44-workflows.js"></script>
+<script src="app/45-aktien-ueberblick.js"></script>
+<script src="app/46-rechner.js"></script>
+<script src="app/47-app.js"></script>
+<script src="app/48-datenpruefung.js"></script>
+<script src="app/49-haertung.js"></script>
+<script src="app/50-zentrale.js"></script>
+<script src="app/51-gespraech.js"></script>
+<script src="app/52-modelle.js"></script>
+<script src="app/53-sprache3.js"></script>
+<script src="app/54-gedaechtnis3.js"></script>
+<script src="app/55-tagesplan.js"></script>
+<script src="app/56-vorschlaege.js"></script>
+<script src="app/57-projekte2.js"></script>
+<script src="app/58-dokumente2.js"></script>
+<script src="app/59-wissen.js"></script>
+<script src="app/60-workflows3.js"></script>
+<script src="app/61-automatik3.js"></script>
+<script src="app/62-aktien4.js"></script>
+<script src="app/63-datenquellen.js"></script>
+<script src="app/64-seitenleiste.js"></script>
+<script src="app/65-datenschutz10.js"></script>
+<script src="app/66-bedienung.js"></script>
+<script src="app/67-sprache4.js"></script>
+<script src="app/68-freigaben.js"></script>
+<script src="app/69-erinnern.js"></script>
+<script src="app/70-simbericht.js"></script>
+<script src="app/71-alltag.js"></script>
+<script src="app/72-organisation.js"></script>
+<script src="app/73-oberflaeche3.js"></script>
+<script src="app/74-ki-schutz.js"></script>
+<script src="app/75-datenschutz13.js"></script>
+<script src="app/76-steuer.js"></script>
+<script src="app/77-weitere-werkzeuge.js"></script>
+</body>
+</html>
