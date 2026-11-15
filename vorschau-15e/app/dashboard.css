@@ -1,0 +1,1120 @@
+/* JARVIS Dashboard – Gestaltung. Ab 11-06g aus index.html ausgelagert, Inhalt unverändert. */
+
+    /* Schriftgrößen in rem (ab 11-02j): 1rem = Grundschrift des Browsers (Standard 16 px) – bei Standard unveränderte Darstellung, bei größerer
+       Browser-Schrift wächst der Text mit. Abstände, Symbole und Breiten bleiben bewusst in px. */
+    :root {
+      --bg: #020912;
+      --panel: rgba(6, 22, 38, 0.92);
+      --panel-kopf: rgba(0, 234, 255, 0.05);
+      --linie: rgba(0, 234, 255, 0.16);
+      --linie-stark: rgba(0, 234, 255, 0.45);
+      --akzent: #00eaff;
+      --text: #d6f4ff;
+      --gedimmt: #7aa6b8;
+      --ok: #7affc4;
+      --warn: #ffcc66;
+      --fehler: #ff6b6b;
+      --mono: Consolas, "Cascadia Mono", "Roboto Mono", ui-monospace, monospace;
+      --kopf-hoehe: 60px;
+      --fuss-hoehe: 30px;
+      --leuchten: 0 0 18px rgba(0, 234, 255, 0.07), inset 0 0 22px rgba(0, 234, 255, 0.03);
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { margin: 0; }
+    /* ab 11-06d: Hinweis auf eine andere JARVIS-Version in einem anderen Tab */
+    .version-hinweis { margin: 8px 16px 0; padding: 8px 12px; border: 1px solid var(--warn); border-radius: 6px; color: var(--warn); background: rgba(255, 204, 102, 0.08); }
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      background-color: var(--bg);
+      background-image:
+        radial-gradient(ellipse at 50% 35%, rgba(0, 234, 255, 0.08), transparent 60%),
+        linear-gradient(rgba(0, 234, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 234, 255, 0.03) 1px, transparent 1px);
+      background-size: auto, 32px 32px, 32px 32px;
+      color: var(--text);
+      font: 0.9375rem/1.45 "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    }
+    input, select, button { font: inherit; }
+    /* Auswahlfelder sind so breit wie ihre längste Option – bei 320 px ragte z. B. „Datenquelle“ über den Rand (ab 11-02h begrenzt) */
+    select { max-width: 100%; }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible,
+    /* Links (ab 11-02s), z. B. der laut Lizenz sichtbare Hinweis-Link der Chart-Bibliothek im Kurschart der Aktienanalyse */
+    a:focus-visible,
+    /* Datums-/Zeitfelder: der Fokus liegt auf inneren Teilfeldern (z. B. Uhrzeit) – dort gilt nur :focus-within (ab 11-02i per Tastaturtest gefunden) */
+    input[type="date"]:focus-within, input[type="time"]:focus-within, input[type="datetime-local"]:focus-within {
+      outline: 2px solid var(--akzent);
+      outline-offset: 2px;
+    }
+
+    /* ---------- Kopfleiste ---------- */
+    .kopf {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-height: var(--kopf-hoehe);
+      padding: 8px 16px;
+      background: rgba(2, 9, 18, 0.94);
+      border-bottom: 1px solid var(--linie-stark);
+      box-shadow: 0 1px 16px rgba(0, 234, 255, 0.08);
+    }
+    .marke { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    .logo {
+      margin: 0; /* ab 11-02k Hauptüberschrift (h1) – Aussehen unverändert */
+      line-height: inherit;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 1.125rem;
+      letter-spacing: 0.3em;
+      color: var(--akzent);
+      text-shadow: 0 0 10px rgba(0, 234, 255, 0.6);
+      white-space: nowrap;
+    }
+    .kopf-untertitel {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.12em;
+      color: var(--gedimmt);
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .kopf-rechts { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .pille {
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.08em;
+      padding: 3px 9px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 3px;
+      color: var(--gedimmt);
+      white-space: nowrap;
+    }
+    .pille.gesperrt { color: var(--fehler); border-color: rgba(255, 107, 107, 0.7); background: rgba(255, 107, 107, 0.08); }
+    .pille.frei { color: var(--warn); border-color: rgba(255, 204, 102, 0.7); }
+    .uhr { font-family: var(--mono); font-size: 1rem; color: var(--akzent); letter-spacing: 0.05em; }
+
+    /* ---------- Reiter (Desktop oben in der Kopfleiste, Smartphone unten) ---------- */
+    .reiter { display: flex; gap: 4px; margin: 0 auto; }
+    .reiter button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      min-width: 84px;
+      min-height: 44px;
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--gedimmt);
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .reiter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .reiter button:hover { color: var(--text); }
+    .reiter button[aria-selected="true"] {
+      color: var(--akzent);
+      border-color: var(--linie-stark);
+      background: rgba(0, 234, 255, 0.08);
+      box-shadow: 0 0 12px rgba(0, 234, 255, 0.25), inset 0 -2px 0 var(--akzent);
+    }
+    .reiter button[aria-selected="true"] svg { filter: drop-shadow(0 0 4px rgba(0, 234, 255, 0.8)); }
+
+    /* ---------- Fußzeile ---------- */
+    .fuss {
+      display: flex;
+      justify-content: center;
+      min-height: var(--fuss-hoehe);
+      padding: 6px 16px;
+      border-top: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      color: var(--gedimmt);
+      letter-spacing: 0.08em;
+    }
+
+    /* ---------- Bereiche ---------- */
+    main { flex: 1 0 auto; padding: 14px 16px; }
+    .cockpit {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(280px, 340px);
+      grid-template-areas: "links mitte rechts";
+      height: calc(100vh - var(--kopf-hoehe) - var(--fuss-hoehe) - 28px);
+      min-height: 640px;
+    }
+    .spalte { display: flex; flex-direction: column; gap: 14px; min-width: 0; min-height: 0; }
+    .links { grid-area: links; overflow: auto; }
+    .mitte { grid-area: mitte; }
+    .rechts { grid-area: rechts; }
+
+    /* ---------- Karten ---------- */
+    .karte {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--linie);
+      border-radius: 4px;
+      box-shadow: var(--leuchten);
+    }
+    .karte::before, .karte::after {
+      content: "";
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border: 0 solid var(--akzent);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    .karte::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+    .karte::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+    .karte-titel {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      padding: 8px 12px;
+      background: var(--panel-kopf);
+      border-bottom: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--akzent);
+    }
+    .karte-titel::before { content: "["; color: var(--gedimmt); }
+    .karte-titel .zu { color: var(--gedimmt); }
+    .karte-titel .zusatz { margin-left: auto; color: var(--gedimmt); font-weight: 400; letter-spacing: 0.08em; font-size: 0.6875rem; }
+    .karte-inhalt { padding: 10px 12px 12px; min-height: 0; }
+    .klein { font-size: 0.75rem; color: var(--gedimmt); margin: 8px 0 0; }
+    .info { color: var(--gedimmt); white-space: pre-line; line-height: 1.5; overflow-wrap: anywhere; margin: 8px 0 0; }
+
+    /* Statuslisten */
+    .statusliste, .funktionen { list-style: none; margin: 0; padding: 0; }
+    .statusliste li {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--linie);
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      overflow-wrap: anywhere;
+    }
+    .statusliste li:last-child, .funktionen li:last-child { border-bottom: 0; }
+    .funktionen li {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--linie);
+      font-size: 0.8125rem;
+    }
+    .funktionen b { font-family: var(--mono); font-size: 0.6875rem; font-weight: 400; letter-spacing: 0.04em; text-align: right; }
+    .funktionen .ok { color: var(--ok); }
+    .funktionen .aus { color: var(--gedimmt); }
+    .funktionen .gesperrt { color: var(--fehler); }
+    .aktien-gesperrt { list-style: none; padding: 0; margin: 8px 0; }
+    .aktien-gesperrt > li { border: 1px solid rgba(255, 107, 107, 0.7); background: rgba(255, 107, 107, 0.08); border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; }
+    .aktien-gesperrt b { color: var(--fehler); }
+
+    /* Verbindung */
+    details.einstellungen summary { cursor: pointer; list-style: none; }
+    details.einstellungen summary::-webkit-details-marker { display: none; }
+    details.einstellungen summary .zusatz::after { content: "▸ öffnen"; }
+    details.einstellungen[open] summary .zusatz::after { content: "▾ schließen"; }
+    details.einstellungen label { display: block; margin-top: 8px; font-size: 0.75rem; color: var(--gedimmt); }
+    details.einstellungen .feld { width: 100%; margin: 4px 0 4px; }
+    details.einstellungen .knopf { width: 100%; margin-top: 8px; }
+
+    /* Felder und Knöpfe */
+    .feld {
+      min-height: 44px;
+      padding: 10px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 4px;
+      background: #020a14;
+      color: var(--text);
+    }
+    .knopf {
+      min-height: 44px;
+      padding: 10px 18px;
+      border: 1px solid var(--akzent);
+      border-radius: 4px;
+      background: var(--akzent);
+      color: #00222b;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+    .knopf.zweit { background: transparent; color: var(--akzent); border-color: var(--linie-stark); }
+    .knopf.zweit:hover { border-color: var(--akzent); }
+    .knopf:disabled { opacity: 0.5; cursor: wait; }
+
+    /* ---------- Kern ---------- */
+    /* Die Kern-Karte wächst mit ihrem Inhalt (z. B. geöffnete Sprachvorschau); die mittlere Spalte scrollt dann */
+    .kern-karte { flex: 0 0 auto; min-height: 300px; }
+    .kern-buehne {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 10px;
+      padding: 12px 18px 18px;
+      min-height: 0;
+    }
+
+    /* Umlaufbahn: Kern in der Mitte, Module werden per Skript gleichmäßig links und rechts im Bogen verteilt.
+       Neues Modul = weiterer <button class="aktion"> in .kern-aktionen; die Verteilung passt sich an.
+       Reicht der Platz nicht, schaltet das Skript auf .kompakt (Raster unter dem Kern). */
+    .orbit { position: relative; width: 100%; display: flex; flex-direction: column; align-items: center; }
+    .orbit .kern { position: relative; z-index: 1; }
+    .kern-aktionen { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+    /* 204 px (bis 11-02o 196 px): „AKTUALISIEREN“ passt ohne Umbruch mitten im Wort */
+    .kern-aktionen .aktion { position: absolute; left: 0; top: 0; width: 204px; pointer-events: auto; transform: translate(var(--x, 0px), var(--y, 0px)); }
+    .kern-aktionen .aktion:not([style*="--x"]) { visibility: hidden; }
+    .orbit.kompakt .kern-aktionen {
+      position: static;
+      display: grid;
+      /* ab 11-02p: vier in einer Reihe oder 2 + 2, nie 3 + 1 (eine Spalte erst unter 2 × 170 px).
+         Spalte = ¼ der Breite, solange das ≥ 170 px ergibt (Breite ≥ 710 px), sonst ½ der Breite. */
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, max(170px, calc(25% - 8px), min(calc(50% - 6px), calc((710px - 100%) * 1000)))), 1fr));
+      gap: 10px;
+      width: 100%;
+      margin-top: 12px;
+    }
+    .orbit.kompakt .kern-aktionen .aktion { position: relative; width: auto; transform: none; visibility: visible; }
+    .orbit.kompakt .verbindungen { display: none; }
+
+    /* Leitungen zwischen Kern, Statuspunkten und Schnellzugriff (per Skript gezeichnet) */
+    .verbindungen { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 0; }
+    .verbindungen .leitung-schein { fill: none; stroke: rgba(0, 234, 255, 0.07); stroke-width: 7; stroke-linejoin: round; }
+    .verbindungen .leitung { fill: none; stroke: rgba(0, 234, 255, 0.38); stroke-width: 1.4; stroke-linejoin: round; transition: stroke 0.25s, stroke-width 0.25s; }
+    .verbindungen .leitung.hell { stroke: var(--akzent); stroke-width: 2.4; filter: drop-shadow(0 0 5px var(--akzent)); }
+    .verbindungen .anschluss { fill: var(--akzent); filter: drop-shadow(0 0 4px var(--akzent)); }
+    .verbindungen .puls { fill: #d8fdff; filter: drop-shadow(0 0 5px var(--akzent)); }
+    .verbindungen .impuls { fill: #ffffff; filter: drop-shadow(0 0 8px var(--akzent)); }
+
+    .kern {
+      /* ab 11-02n: Höhe der Schnellzugriff-Zeile (≈ 80 px) abziehen, damit bei 1280×900 alle vier Kacheln ohne Scrollen sichtbar bleiben */
+      width: min(460px, calc(46vh - 80px));
+      aspect-ratio: 1;
+      min-width: 220px;
+    }
+    .kern canvas { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 16px rgba(0, 234, 255, 0.35)); }
+    .kern-text {
+      margin: 0;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      text-align: center;
+      color: var(--gedimmt);
+      overflow-wrap: anywhere;
+      max-width: 360px;
+    }
+    /* Untertitel: letzte echte Frage und Antwort aus dem Gespräch */
+    .untertitel { max-width: 520px; min-height: 2.6em; text-align: center; }
+    .untertitel p { margin: 0; overflow-wrap: anywhere; }
+    #untertitel-frage { font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.12em; color: var(--gedimmt); text-transform: uppercase; }
+    #untertitel-antwort {
+      font-size: 0.9375rem;
+      color: #9ff3ff;
+      text-shadow: 0 0 10px rgba(0, 234, 255, 0.45);
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* Statusleiste über dem Kern */
+    .kern-knoten { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 10px; list-style: none; margin: 0; padding: 0; }
+    .kern-knoten li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px 5px 10px;
+      border: 1px solid var(--linie);
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.25);
+      font-family: var(--mono);
+    }
+    .kern-knoten li::before {
+      content: "";
+      flex: none;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--gedimmt);
+    }
+    .kern-knoten .name { font-size: 0.625rem; letter-spacing: 0.16em; color: var(--gedimmt); text-transform: uppercase; }
+    .kern-knoten .wert { font-size: 0.75rem; color: var(--text); }
+    .kern-knoten [data-zustand="ok"]::before { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .kern-knoten [data-zustand="warn"]::before { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+    .kern-knoten [data-zustand="fehler"]::before { background: var(--fehler); box-shadow: 0 0 8px var(--fehler); }
+
+    /* Module (Schnellzugriff) */
+    .aktion {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 58px;
+      padding: 8px 16px 8px 8px;
+      background: linear-gradient(90deg, rgba(0, 234, 255, 0.13), rgba(0, 234, 255, 0.02) 70%);
+      border: 1px solid var(--linie-stark);
+      border-radius: 29px 6px 6px 29px;
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    /* Module links vom Kern: gespiegelt, die runde Seite zeigt zum Kern */
+    .orbit:not(.kompakt) .aktion.links {
+      flex-direction: row-reverse;
+      padding: 8px 8px 8px 16px;
+      border-radius: 6px 29px 29px 6px;
+      background: linear-gradient(270deg, rgba(0, 234, 255, 0.13), rgba(0, 234, 255, 0.02) 70%);
+      text-align: right;
+    }
+    .aktion:hover, .aktion:focus-visible { border-color: var(--akzent); box-shadow: 0 0 16px rgba(0, 234, 255, 0.35); }
+    .aktion-symbol {
+      display: grid;
+      place-items: center;
+      flex: none;
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 234, 255, 0.18), rgba(0, 234, 255, 0.02) 70%);
+      box-shadow: inset 0 0 10px rgba(0, 234, 255, 0.25);
+    }
+    .aktion:hover .aktion-symbol { box-shadow: inset 0 0 12px rgba(0, 234, 255, 0.5), 0 0 10px rgba(0, 234, 255, 0.4); }
+    .aktion svg { width: 22px; height: 22px; fill: none; stroke: var(--akzent); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .aktion b { display: block; font-family: var(--mono); font-size: 0.8125rem; letter-spacing: 0.14em; text-transform: uppercase; }
+    .aktion small { display: block; margin-top: 2px; font-size: 0.6875rem; color: var(--gedimmt); }
+
+    /* Befehlszeile unter dem Kern */
+    .befehlszeile {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: min(680px, 100%);
+      padding: 4px 4px 4px 14px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 6px;
+      background: rgba(2, 10, 20, 0.9);
+      box-shadow: 0 0 16px rgba(0, 234, 255, 0.18), inset 0 0 12px rgba(0, 234, 255, 0.05);
+    }
+    .befehlszeile:focus-within { border-color: var(--akzent); box-shadow: 0 0 22px rgba(0, 234, 255, 0.35); }
+    .befehl-symbol { color: var(--akzent); font-size: 0.875rem; }
+    .befehlszeile .feld { flex: 1; min-width: 0; border: 0; background: transparent; }
+    .befehlszeile .feld:focus-visible { outline: none; }
+
+    /* Mikrofonknopf mit sichtbarem Zustand: bereit, zuhören, verarbeiten, Fehler */
+    .mikro {
+      /* Gedrückt halten (Push-to-talk): kleine Fingerbewegung darf kein Scrollen starten – sonst bricht der Browser die
+         Zeiger-Eingabe ab (pointercancel) und damit die Aufnahme; langes Drücken markiert keinen Text */
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex: none;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--akzent);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .mikro svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; }
+    .mikro:hover { border-color: var(--akzent); }
+    .mikro[data-zustand="zuhoeren"] { color: #fff; background: rgba(255, 107, 107, 0.2); border-color: var(--fehler); animation: mikro-puls 1.2s ease-in-out infinite; }
+    .mikro[data-zustand="verarbeiten"] { color: var(--warn); border-color: var(--warn); }
+    .mikro[data-zustand="fehler"] { color: var(--fehler); border-color: rgba(255, 107, 107, 0.6); }
+    .mikro[aria-disabled="true"] { opacity: 0.55; cursor: not-allowed; }
+    @keyframes mikro-puls { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.55); } 50% { box-shadow: 0 0 0 7px rgba(255, 107, 107, 0); } }
+
+    .sprach-status { width: min(680px, 100%); margin: 0; text-align: center; font-size: 0.8125rem; color: var(--gedimmt); }
+    .sprach-status:empty { display: none; }
+    .sprach-status[data-art="fehler"] { color: #ff9b9b; }
+    .sprach-vorschau {
+      width: min(680px, 100%);
+      padding: 10px 12px;
+      border: 1px solid var(--warn);
+      border-radius: 6px;
+      background: rgba(255, 204, 102, 0.05);
+    }
+    .sprach-vorschau label { display: block; margin-bottom: 6px; font-size: 0.75rem; color: var(--warn); }
+    .sprach-vorschau textarea { width: 100%; min-height: 56px; resize: vertical; font: inherit; }
+    .sprach-knoepfe { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .sprachleiste { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; width: min(680px, 100%); font-size: 0.75rem; color: var(--gedimmt); }
+    .schalter {
+      min-height: 36px;
+      padding: 6px 12px;
+      border: 1px solid var(--linie);
+      border-radius: 999px;
+      background: transparent;
+      color: var(--gedimmt);
+      font-family: var(--mono);
+      font-size: 0.6875rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+    .schalter[aria-pressed="true"] { color: var(--akzent); border-color: var(--linie-stark); background: rgba(0, 234, 255, 0.08); }
+    .schalter:disabled { opacity: 0.45; cursor: default; }
+    .stimme-wahl { display: flex; align-items: center; gap: 6px; }
+    .stimme-wahl .feld { min-height: 36px; max-width: min(420px, 100%); padding: 4px 8px; font-size: 0.75rem; }
+    .stimme-wahl { max-width: 100%; min-width: 0; }
+    /* Lange Stimmennamen (z. B. „Automatisch (beste deutsche Stimme)“) dürfen das Feld nicht über den Rand schieben */
+    .stimme-wahl .feld { min-width: 0; flex: 1 1 auto; width: 100%; }
+    /* Tablet/Touch: alle kleinen Schalter und Auswahlfelder mindestens 44 px hoch (Fingerbedienung) */
+    @media (pointer: coarse) {
+      .schalter, .stimme-wahl .feld, .stimmtest-wahl .feld { min-height: 44px; }
+      .verlauf-schalter input, .aufgaben-liste input[type="checkbox"] { width: 26px; height: 26px; }
+      /* Tablet: alle Knöpfe, Felder und aufklappbaren Kartentitel der Karten mit dem Finger treffbar */
+      .karte-inhalt .knopf, .karte-inhalt select.feld, .karte-inhalt input.feld, summary.karte-titel, .routine-import, .bild-waehlen,
+      .paper-frage-knoepfe .knopf, .profil-auswahl label { min-height: 44px; }
+    }
+    .stimmtest {
+      width: min(680px, 100%);
+      padding: 10px 12px;
+      border: 1px solid var(--linie-stark);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.25);
+      font-size: 0.8125rem;
+    }
+    .stimmtest-wahl { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: var(--gedimmt); }
+    .stimmtest-wahl .feld { min-height: 40px; max-width: 100%; font-size: 0.8125rem; }
+    .stimmtest-titel { margin: 12px 0 6px; font-family: var(--mono); font-size: 0.6875rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--akzent); }
+    .stimmtest-protokoll, .stimmen-liste { margin: 0; padding-left: 18px; font-family: var(--mono); font-size: 0.75rem; overflow-wrap: anywhere; }
+    .stimmtest-protokoll li, .stimmen-liste li { padding: 3px 0; border-bottom: 1px solid var(--linie); }
+    .stimmtest-protokoll .fehler { color: #ff9b9b; }
+    .stimmen-liste { max-height: 200px; overflow-y: auto; }
+    .stimmen-liste .gewaehlt { color: var(--akzent); }
+    .sprach-hinweis { flex-basis: 100%; text-align: center; font-size: 0.6875rem; }
+    .sprach-hinweis:empty { display: none; }
+
+    /* ---------- Chat ---------- */
+    .chat-karte { flex: 1 1 0; min-height: 190px; }
+    .mitte { overflow-y: auto; }
+    .chat-karte .karte-inhalt { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    #chatverlauf { flex: 1; min-height: 120px; overflow-y: auto; padding-right: 4px; }
+    #chatverlauf:empty::before {
+      content: "Noch keine Unterhaltung.";
+      color: var(--gedimmt);
+      font-size: 0.8125rem;
+    }
+    .nachricht {
+      margin: 8px 0;
+      padding: 10px 13px;
+      border-radius: 4px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .nachricht.nutzer { margin-left: 14%; background: #0c2a44; color: #fff; }
+    .nachricht.jarvis { margin-right: 14%; border: 1px solid var(--linie-stark); background: #061a2c; box-shadow: 0 0 10px rgba(0, 234, 255, 0.12); }
+    .nachricht.fehler { margin-right: 14%; border: 1px solid var(--fehler); color: #ff9b9b; }
+    .nachricht.denkt { opacity: 0.7; font-style: italic; }
+    .eingabe { display: flex; gap: 8px; }
+    .eingabe .feld { flex: 1; min-width: 0; }
+
+    /* ---------- Tabellen, Protokoll ---------- */
+    table { width: 100%; border-collapse: collapse; color: #fff; font-size: 0.875rem; }
+    td { padding: 6px 4px; border-bottom: 1px solid var(--linie); }
+    td.zahl { text-align: right; font-family: var(--mono); }
+    .plus { color: var(--ok); }
+    .minus { color: #ff9b9b; }
+    td.leer { color: var(--gedimmt); font-size: 0.8125rem; }
+    .mini-chart { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--linie); }
+    .mini-chart svg { display: block; width: 100%; height: 70px; }
+    #mini-linie { fill: none; stroke: var(--akzent); stroke-width: 1.6; vector-effect: non-scaling-stroke; filter: drop-shadow(0 0 3px rgba(0, 234, 255, 0.7)); }
+    #mini-flaeche { fill: rgba(0, 234, 255, 0.08); stroke: none; }
+    .protokoll-karte { flex: 1 1 0; min-height: 220px; }
+    .protokoll-karte .karte-inhalt { flex: 1; overflow-y: auto; max-height: 460px; }
+    #protokoll { list-style: none; padding: 0; margin: 0; font-size: 0.8125rem; }
+    #protokoll li {
+      margin: 0 0 6px;
+      padding: 6px 8px;
+      border: 1px solid var(--linie);
+      border-left: 3px solid var(--gedimmt);
+      background: rgba(0, 0, 0, 0.2);
+      overflow-wrap: anywhere;
+    }
+    #protokoll .p-order { color: var(--ok); border-left-color: var(--ok); }
+    #protokoll .p-abgelehnt { color: var(--warn); border-left-color: var(--warn); }
+    #protokoll .p-fehler { color: #ff9b9b; border-left-color: var(--fehler); }
+    #protokoll .p-notaus { color: var(--fehler); border-left-color: var(--fehler); font-weight: bold; }
+    #protokoll .zeit { display: block; color: var(--gedimmt); font-family: var(--mono); font-size: 0.6875rem; }
+
+    /* ---------- Marktanalyse ---------- */
+    .analyse-steuerung { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .legende { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.8125rem; color: #9fc7d6; margin-bottom: 8px; }
+    .legende span::before { content: ""; display: inline-block; width: 14px; height: 3px; margin-right: 6px; vertical-align: middle; background: var(--farbe); }
+    .chart { width: 100%; height: 600px; }
+    /* Portfolio-Labor (ab 11-02u): Tabelle; in schmalen Karten jede Zeile als Block mit Beschriftung (kein seitlicher Überlauf) */
+    .pl-bereich { margin-top: 12px; min-width: 0; }
+    .pl-tabelle-huelle { container-type: inline-size; min-width: 0; }
+    .pl-tabelle { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    .pl-tabelle caption { text-align: left; }
+    /* break-word statt anywhere: Spaltenbreiten richten sich nach ganzen Wörtern („Symbol“ bricht nicht mehr) */
+    .pl-tabelle th, .pl-tabelle td { padding: 4px 6px; border-bottom: 1px solid var(--linie); text-align: left; vertical-align: middle; overflow-wrap: break-word; }
+    .pl-gruppe { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+    /* Szenarien (ab 11-02v) */
+    .pl-notiz-gruppe { flex: 1 1 100%; }
+    .pl-notiz-gruppe textarea { flex: 1 1 18rem; min-width: 0; max-width: 100%; }
+    .pl-sz-liste { list-style: none; padding: 0; margin: 8px 0; }
+    .pl-sz-liste li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linie); }
+    .pl-sz-liste li > div { flex: 1 1 100%; overflow-wrap: break-word; min-width: 0; }
+    .pl-sz-liste li[aria-current="true"] { border-left: 3px solid var(--akzent); padding-left: 8px; }
+    .pl-sz-liste li[aria-current="true"] > div { font-weight: 600; }
+    .pl-sz-liste button { min-height: 44px; }
+    .pl-sz-vorschau { border: 1px solid var(--warn); border-radius: 4px; padding: 8px; }
+    #pl-sz-vergleich ul, .pl-sz-vorschau ul { padding-left: 18px; overflow-wrap: break-word; }
+    .pl-tabelle .pl-gewicht { width: 6rem; max-width: 100%; }
+    .pl-tabelle button { min-height: 44px; min-width: 44px; }
+    .pl-balken { display: block; height: 0.75rem; min-width: 2px; max-width: 100%; background: var(--akzent); border-radius: 2px; }
+    .pl-balken-huelle { display: block; width: 8rem; max-width: 100%; background: rgba(0, 234, 255, 0.08); border-radius: 2px; }
+    @container (max-width: 40rem) {
+      /* Kopf ausblenden: jede Zelle trägt ihre Beschriftung sichtbar (td::before, wird auch vorgelesen). Ein nur visuell versteckter
+         Kopf ragte mit seinem Text bei großer Schrift über den Rand (Schrift-Abnahme 11-02u) */
+      .pl-tabelle thead { display: none; }
+      .pl-tabelle tr { display: block; border-bottom: 1px solid var(--linie); padding: 4px 0; }
+      .pl-tabelle td { display: block; border-bottom: 0; }
+      .pl-tabelle td::before { content: attr(data-beschriftung) ": "; color: var(--gedimmt); }
+    }
+    /* Kurschart der Aktienanalyse (ab 11-02s) */
+    .ablauf-chart-bereich { margin: 6px 0 10px; min-width: 0; }
+    /* ab 11-13r: Kerzenwahl per Tastatur – Bedienziel mindestens 32 px, wächst mit der Schrift */
+    .ablauf-kerze-wahl { display: block; margin-top: 4px; }
+    #ablauf-chart-kerze { display: block; width: 100%; font: inherit; height: max(36px, 2.2em); margin: 2px 0 0; }
+    .ablauf-chart { width: 100%; height: max(320px, 16rem); }
+    #ablauf-chart-titel, #ablauf-chart-text { overflow-wrap: anywhere; }
+    #analyse-status { font-family: var(--mono); font-size: 0.8125rem; }
+    #analyse-hinweise { list-style: none; padding: 0; margin: 8px 0 0; color: var(--warn); font-size: 0.875rem; overflow-wrap: anywhere; }
+    #analyse-hinweise li { padding: 3px 0; }
+    .analyse-zweispaltig { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+
+    /* ---------- Trading ---------- */
+    .trading-raster {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+      grid-template-areas: "modus modus" "notaus konto" "notaus order" "aktien aktien" "ablauf ablauf" "werkzeuge werkzeuge" "paper paper" "simkern simkern";
+      align-items: start;
+    }
+    .aktien-karte { grid-area: aktien; }
+    .werkzeug-karte { grid-area: werkzeuge; }
+    .wz-kopf { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .wz-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 6px 0; }
+    .wz-zeile label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; color: var(--gedimmt); min-width: 0; }
+    .wz-zeile .feld { min-width: 0; }
+    .wz-liste { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+    .wz-liste > li { border: 1px solid var(--linie); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; }
+    .wz-liste .gruende { margin: 4px 0 0; padding-left: 18px; font-size: 0.8125rem; }
+    .wz-liste .knopf { margin-top: 6px; margin-right: 6px; }
+    .wz-ausgabe { white-space: pre-line; overflow-wrap: anywhere; }
+    .wz-tabelle { width: 100%; border-collapse: collapse; font-size: 0.8125rem; display: block; overflow-x: auto; }
+    .wz-tabelle th, .wz-tabelle td { padding: 3px 6px; border-bottom: 1px solid var(--linie); text-align: right; white-space: nowrap; }
+    .wz-tabelle th:first-child, .wz-tabelle td:first-child { text-align: left; }
+    /* 13F-Tabellen: umbrechen statt waagerecht scrollen – bei 320 px ragten die Zeilen sonst über den Bildschirm (Nacht 13.11.) */
+    .wz-tabelle.wz-umbruch { display: table; table-layout: fixed; }
+    .wz-tabelle.wz-umbruch th, .wz-tabelle.wz-umbruch td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+    .wz-tabelle.wz-umbruch th:first-child { width: 2.2em; }
+    /* ab 14w: breite 13F-Berichtstabellen (10 Spalten) unter 640 px als Karten je Zeile, Spaltenname vor jedem Wert */
+    @media (max-width: 640px) {
+      .wz-tabelle.wz-stapel, .wz-tabelle.wz-stapel tbody, .wz-tabelle.wz-stapel tr, .wz-tabelle.wz-stapel td { display: block; width: auto; }
+      .wz-tabelle.wz-stapel tr:first-child { display: none; }
+      .wz-tabelle.wz-stapel tr { border-bottom: 1px solid var(--linie); padding: 4px 0; }
+      .wz-tabelle.wz-stapel td { border-bottom: 0; text-align: left; padding: 1px 4px; }
+      .wz-tabelle.wz-stapel td::before { content: attr(data-label) ": "; color: var(--gedimmt); }
+    }
+    .wz-wichtig { color: var(--warn); font-weight: bold; }
+    /* Aktien-Stand: meldet der Worker krypto_aktiv false, verschwinden die Krypto-Karten (Code bleibt erhalten) */
+    body.krypto-aus .krypto-teil { display: none; }
+    .krypto-aus-hinweis { display: none; }
+    body.krypto-aus .krypto-aus-hinweis { display: block; }
+    .aktien-plan { display: grid; grid-template-columns: minmax(0, 160px) minmax(0, 1fr); gap: 8px 12px; align-items: start; }
+    .aktien-plan label { display: flex; flex-direction: column; gap: 4px; font-size: 0.8125rem; color: var(--gedimmt); min-width: 0; }
+    .aktien-plan textarea.feld { min-height: 84px; resize: vertical; width: 100%; font-family: var(--mono); }
+    .aktien-plan .knopf { grid-column: 1 / -1; justify-self: start; }
+    #aktien-aufteilung { white-space: pre-line; }
+    #aktien-tickets .knopf { margin-top: 6px; }
+    #aktien-tickets { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 8px; }
+    #aktien-tickets li { border: 1px solid var(--linie); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; }
+    #aktien-tickets li[data-urteil="BLOCK"] { border-color: rgba(255, 107, 107, 0.5); }
+    #aktien-tickets .gruende { margin: 4px 0 0; padding-left: 18px; color: var(--warn); font-size: 0.8125rem; }
+    #aktien-tickets .knopf { margin-top: 6px; }
+    .aktien-ergebnis { margin: 6px 0 0; font-size: 0.8125rem; }
+    @media (max-width: 640px) { .aktien-plan { grid-template-columns: minmax(0, 1fr); } }
+    .notaus-karte { grid-area: notaus; border-color: rgba(255, 107, 107, 0.5); }
+    .notaus-karte::before, .notaus-karte::after { border-color: var(--fehler); }
+    .konto-karte { grid-area: konto; }
+    .order-karte { grid-area: order; }
+    .paper-karte { grid-area: paper; }
+    .simkern-karte { grid-area: simkern; }
+    .ablauf-karte { grid-area: ablauf; }
+    .ablauf-schritte { list-style: none; padding: 0; margin: 8px 0; }
+    .ablauf-schritte li { padding: 6px 8px; margin: 4px 0; border-left: 3px solid #4b5c7a; white-space: pre-line; }
+    .ablauf-schritte li[data-status="ok"] { border-color: #2fbf71; }
+    .ablauf-schritte li[data-status="warnung"] { border-color: #ffcc66; }
+    .ablauf-schritte li[data-status="blockiert"] { border-color: #ff6b6b; }
+    .ablauf-schritte li[data-status="nicht_verfuegbar"] { border-color: #8a94a8; opacity: 0.9; }
+    .ablauf-blockaden li { margin: 4px 0; }
+    .sim-ledger li { cursor: pointer; }
+    .sim-ledger li button { min-height: 44px; width: 100%; text-align: left; background: none; border: 1px solid transparent; color: inherit; font: inherit; padding: 6px; }
+    .sim-ledger li button:focus-visible { border-color: var(--akzent); }
+    .sim-modus { font-weight: bold; color: #ffcc66; letter-spacing: 0.04em; }
+    .paper-frage .paper-frage-knoepfe { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    .verlauf-steuerung { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 8px; }
+    #briefing-knopf { margin-top: 10px; width: 100%; }
+    .briefing { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--linie); }
+    .briefing-titel { margin: 0 0 6px; font-size: 0.875rem; letter-spacing: 0.08em; }
+    #briefing-tabelle { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+    #briefing-tabelle th { text-align: left; vertical-align: top; padding: 4px 6px 4px 0; color: var(--akzent); font-weight: 600; white-space: nowrap; }
+    #briefing-tabelle td { padding: 4px 0; overflow-wrap: anywhere; }
+    /* ab 11-07i: lange Zeilentitel (z. B. „US-Aktien AAPL (kein Zeitraum – alle Tageskerzen)“) liefen bei 320 px über den Rand */
+    @media (max-width: 700px) { #briefing-tabelle th { white-space: normal; width: 38%; overflow-wrap: anywhere; } }
+    #briefing-tabelle .quelle { display: block; font-size: 0.6875rem; color: var(--gedimmt); }
+    #briefing-tabelle .fehlt { color: var(--warn); }
+    .aufgabe-form { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .aufgabe-form #aufgabe-titel { flex: 1 1 100%; min-width: 0; }
+    .aufgabe-form .feld, .aufgabe-form .knopf { min-height: 40px; }
+    .aufgaben-liste { list-style: none; margin: 0; padding: 0; font-size: 0.875rem; }
+    .aufgaben-liste li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; border-bottom: 1px solid var(--linie); }
+    .aufgaben-liste li.erledigt .aufgabe-text { text-decoration: line-through; color: var(--gedimmt); }
+    .aufgaben-liste li.ueberfaellig .aufgabe-faellig { color: var(--fehler); }
+    .aufgaben-liste input[type="checkbox"] { width: 22px; height: 22px; }
+    .aufgabe-text { flex: 1 1 150px; min-width: 0; overflow-wrap: anywhere; }
+    .aufgabe-faellig, .aufgabe-prio { font-size: 0.75rem; color: var(--gedimmt); }
+    /* ab 11-07e: Kategorie, Unterpunkte */
+    .aufgabe-form #aufgabe-unterpunkte { flex: 1 1 100%; min-width: 0; }
+    .aufgabe-form #aufgabe-kategorie { flex: 1 1 10em; min-width: 0; }
+    .aufgabe-kategorie { font-size: 0.75rem; padding: 1px 6px; border: 1px solid var(--linie-stark); border-radius: var(--radius-klein, 4px); overflow-wrap: anywhere; max-width: 100%; }
+    .aufgaben-liste .aufgabe-unterpunkte { flex: 1 1 100%; list-style: none; margin: 0 0 0 30px; padding: 0; min-width: 0; }
+    .aufgaben-liste .aufgabe-unterpunkte li { border-bottom: 0; padding: 2px 0; }
+    .aufgaben-liste .aufgabe-unterpunkte li.erledigt span { text-decoration: line-through; color: var(--gedimmt); }
+    .aufgabe-prio.hoch { color: var(--warn); }
+    .routine-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .einrichtung { position: fixed; inset: 12px auto auto 50%; transform: translateX(-50%); z-index: 50; width: min(620px, calc(100vw - 24px));
+      max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box; padding: 16px; border: 1px solid var(--linie-stark); border-radius: 8px;
+      background: #04101e; color: var(--text); box-shadow: 0 0 40px rgba(0, 234, 255, 0.18); }
+    .einrichtung h2 { margin: 0 0 10px; font-size: 1rem; letter-spacing: 0.06em; color: var(--akzent); }
+    .einrichtung h2:focus-visible { outline: 2px solid var(--akzent); outline-offset: 2px; }
+    .einrichtung-feld { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; font-size: 0.8125rem; color: var(--gedimmt); }
+    .einrichtung-liste { list-style: none; margin: 10px 0; padding: 0; font-size: 0.875rem; }
+    .einrichtung-liste li { padding: 5px 0; border-bottom: 1px solid var(--linie); overflow-wrap: anywhere; }
+    .einrichtung-liste li::before { content: "○ "; }
+    .einrichtung-liste .einrichtung-funktioniert::before { content: "✓ "; color: var(--ok); }
+    .einrichtung-liste .einrichtung-attrappe::before { content: "◇ "; color: var(--warn); }
+    .einrichtung-liste .einrichtung-fehler::before { content: "✗ "; color: var(--fehler); }
+    .einrichtung-liste .einrichtung-einzurichten::before, .einrichtung-liste .einrichtung-uebersprungen::before { content: "→ "; color: var(--warn); }
+    .routine-form textarea { min-height: 96px; font-family: var(--mono); font-size: 0.8125rem; resize: vertical; }
+    .routine-import { display: inline-flex; align-items: center; cursor: pointer; }
+    .profil-leiste { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; font-size: 0.8125rem; color: var(--gedimmt); }
+    .profil-leiste #profil-anzeige { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    .profil-leiste.aktiv #profil-anzeige { color: var(--akzent); }
+    .profil-auswahl { flex: 1 1 100%; display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; border: 1px solid var(--linie); border-radius: 6px; }
+    .profil-auswahl label { display: flex; align-items: center; gap: 8px; min-height: 32px; overflow-wrap: anywhere; }
+    .profil-auswahl input[type="checkbox"] { width: 22px; height: 22px; flex: none; }
+    .profil-auswahl .profil-gruppe { margin-top: 4px; font-size: 0.75rem; color: var(--akzent); }
+    .netz-status { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); z-index: 40; max-width: calc(100vw - 32px);
+      box-sizing: border-box; margin: 0; padding: 8px 14px; border: 1px solid var(--warn); border-radius: 6px; background: #1a1404;
+      color: var(--warn); font-size: 0.8125rem; box-shadow: 0 0 20px rgba(0, 0, 0, 0.5); }
+    .uebersicht-tabelle { width: 100%; border-collapse: collapse; font-size: 0.8125rem; margin: 8px 0; table-layout: fixed; }
+    .uebersicht-tabelle td { padding: 4px 4px; border-bottom: 1px solid var(--linie); vertical-align: top; overflow-wrap: anywhere; }
+    .uebersicht-tabelle td:first-child { width: 38%; color: var(--gedimmt); }
+    /* ab 11-02p: In schmalen Karten (z. B. linke Spalte bei 1280 px) stehen Name und Wert untereinander,
+       statt Wörter wie „Spracherkennung“ in einer 38-%-Spalte mitten im Wort umzubrechen */
+    #integrationen-karte > .karte-inhalt, #daten-karte > .karte-inhalt { container-type: inline-size; }
+    @container (max-width: 24rem) {
+      .uebersicht-tabelle tr { display: block; border-bottom: 1px solid var(--linie); }
+      .uebersicht-tabelle td { display: block; width: auto; border-bottom: 0; }
+      .uebersicht-tabelle td:first-child { width: auto; padding-bottom: 0; }
+    }
+    .uebersicht-tabelle .ok { color: var(--ok); } .uebersicht-tabelle .warn { color: var(--warn); }
+    .uebersicht-tabelle .fehler { color: var(--fehler); } .uebersicht-tabelle .aus { color: var(--gedimmt); }
+    #faehigkeiten-liste li { align-items: flex-start; }
+    #faehigkeiten-liste .faehigkeit-text { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+    #faehigkeiten-liste select { min-height: 36px; max-width: 100%; }
+    .diagnose-liste { list-style: none; margin: 6px 0; padding: 0; max-height: 260px; overflow-y: auto; font: 0.75rem/1.4 var(--mono); }
+    .diagnose-liste li { padding: 4px 0; border-bottom: 1px solid var(--linie); overflow-wrap: anywhere; }
+    .verlauf-suche { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px; padding: 8px; border: 1px solid var(--linie); border-radius: 6px; }
+    .verlauf-suche-zeile { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 0.8125rem; color: var(--gedimmt); }
+    .verlauf-suche-zeile label { display: inline-flex; align-items: center; gap: 4px; }
+    .verlauf-suche-zeile input[type="date"] { min-height: 36px; max-width: 160px; }
+    .verlauf-treffer { max-height: 320px; overflow-y: auto; }
+    .verlauf-treffer .angeheftet .aufgabe-text::before { content: "📌 "; }
+    .nachricht.hervorgehoben { outline: 2px solid var(--akzent); outline-offset: 2px; }
+    .bild-waehlen { display: inline-flex; align-items: center; cursor: pointer; }
+    .bild-bild { display: block; max-width: 100%; max-height: 220px; object-fit: contain; border: 1px solid var(--linie); border-radius: 6px; }
+    .recherche-quellen { margin: 6px 0 0; padding-left: 20px; font-size: 0.75rem; color: var(--gedimmt); overflow-wrap: anywhere; }
+    .recherche-quellen a { color: var(--akzent); }
+    .nachricht .profil-hinweis { display: block; margin-top: 4px; font-size: 0.6875rem; color: var(--gedimmt); }
+    #routine-schrittliste li.erledigt { color: var(--ok); }
+    #routine-schrittliste li.laeuft { color: var(--akzent); }
+    #routine-schrittliste li.fehlgeschlagen { color: var(--fehler); }
+    #routine-schrittliste li.uebersprungen, #routine-schrittliste li.abgebrochen { color: var(--gedimmt); }
+    .verlauf-schalter { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+    .verlauf-schalter input { width: 20px; height: 20px; }
+    /* Touch: steht bewusst nach den Grundregeln oben (#faehigkeiten-liste select, .verlauf-schalter), sonst überschreiben
+       diese die Touch-Größen bei gleicher Gewichtung */
+    @media (pointer: coarse) {
+      .verlauf-schalter, #faehigkeiten-liste select { min-height: 44px; }
+      .verlauf-schalter input { width: 26px; height: 26px; }
+    }
+    /* Paper-Bot-Karte (nur Simulation) */
+    .bot-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin: 8px 0; }
+    .bot-zeile label { display: flex; flex-direction: column; gap: 2px; font-size: 0.75rem; color: var(--gedimmt); flex: 1 1 90px; min-width: 0; }
+    .bot-zeile .feld { width: 100%; min-width: 0; }
+    .bot-zeile .knopf { flex: 1 1 110px; }
+    .bot-konto { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; margin: 8px 0; font-size: 0.8125rem; }
+    .bot-konto dt { color: var(--gedimmt); }
+    .bot-konto dd { margin: 0; overflow-wrap: anywhere; }
+    #bot-journal { max-height: 260px; overflow-y: auto; font-size: 0.75rem; }
+    #bot-status[data-art="fehler"] { color: var(--fehler); }
+    #bot-status[data-art="warn"] { color: var(--warn); }
+    #verlauf-modus { flex: 1 1 100%; }
+    .modus-karte { grid-area: modus; }
+    #handelsmodus-kopf { margin: 0 0 8px; font-family: var(--mono); font-size: 1rem; color: var(--text); }
+    #handelsmodus-details { margin: 0; padding: 0; list-style: none; font-size: 0.875rem; }
+    #handelsmodus-details li { padding: 2px 0; }
+    .ki-analyse { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--linie); }
+    .testnet-hinweis { margin: 0 0 12px; color: var(--warn); font-size: 0.875rem; }
+    .notaus {
+      width: 100%;
+      min-height: 96px;
+      padding: 18px;
+      background: #c81e1e;
+      color: #fff;
+      font-size: 1.375rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      border: 2px solid #ff8a8a;
+      border-radius: 6px;
+      box-shadow: 0 0 22px rgba(255, 70, 70, 0.35);
+      cursor: pointer;
+    }
+    .notaus.aktiv {
+      background: repeating-linear-gradient(-45deg, #3a0d10 0 14px, #2a0a0c 14px 28px);
+      border-color: var(--fehler);
+      color: #ffd0d0;
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+    }
+    #trading-zustand { font-family: var(--mono); font-size: 0.875rem; color: var(--text); }
+    .order-zeile { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    /* Aktien-Watchlist (11-02a): Einträge umbrechend, Touchziele ≥ 44 px, aktives Symbol sichtbar markiert */
+    .wl-liste { list-style: none; padding: 0; margin: 8px 0; }
+    .wl-liste li { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--rand, rgba(255,255,255,0.12)); }
+    .wl-liste li > div { flex: 1 1 100%; overflow-wrap: anywhere; }
+    .wl-liste li[aria-current="true"] > div { font-weight: 600; }
+    .wl-liste button, #wl-bestaetigung button, #wl-detail button { min-height: 44px; min-width: 44px; }
+    #wl-bestaetigung { padding: 8px; margin: 8px 0; }
+    #wl-detail ul, #ab-briefing ul { padding-left: 18px; overflow-wrap: anywhere; }
+    #sl-vorschau, #sl-ergebnis { white-space: pre-line; overflow-wrap: anywhere; }
+    .order-zeile input[type="number"] { width: 110px; }
+    #order-ergebnis { min-height: 1.4em; }
+
+    /* ---------- Anpassung an kleinere Bildschirme ---------- */
+    @media (max-width: 1199px) {
+      .cockpit {
+        height: auto;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas: "mitte mitte" "links rechts";
+      }
+      .links { overflow: visible; }
+      .kern-karte { min-height: 0; }
+      .chat-karte { flex: none; }
+      #chatverlauf { max-height: 360px; }
+      .kopf-untertitel { display: none; }
+    }
+    @media (max-width: 760px) {
+      body { padding-bottom: calc(68px + env(safe-area-inset-bottom)); }
+      main { padding: 10px; }
+      .kopf { padding: 8px 10px; gap: 8px; }
+      .logo { font-size: 0.9375rem; letter-spacing: 0.16em; }
+      .kopf-rechts { gap: 6px; }
+      .pille { padding: 3px 6px; letter-spacing: 0.04em; }
+      .uhr { font-size: 0.8125rem; }
+      #chatverlauf { min-height: 48px; }
+      /* Reiter als feste Leiste unten – gut mit dem Daumen erreichbar */
+      .reiter {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 30;
+        margin: 0;
+        padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+        background: rgba(2, 9, 18, 0.97);
+        border-top: 1px solid var(--linie-stark);
+      }
+      .reiter button { flex: 1; min-width: 0; }
+      .cockpit { grid-template-columns: minmax(0, 1fr); grid-template-areas: "mitte" "links" "rechts"; gap: 10px; }
+      .spalte { gap: 10px; }
+      .kern-buehne { padding: 12px; }
+      .befehl-symbol { display: none; }
+      /* Eingabefeld in eigener Zeile, darunter Mikrofon und Senden groß nebeneinander */
+      .befehlszeile { flex-wrap: wrap; padding: 4px; gap: 6px; }
+      .befehlszeile .feld { flex: 1 1 100%; }
+      .befehlszeile .mikro, .befehlszeile .knopf { flex: 1 1 0; justify-content: center; }
+      .befehlszeile .mikro { font-size: 0.6875rem; letter-spacing: 0.02em; white-space: nowrap; }
+      .sprachleiste { justify-content: flex-start; }
+      .kern-knoten li { padding: 4px 9px 4px 8px; }
+      .kern { width: min(330px, 84vw); min-width: 0; }
+      .orbit.kompakt .kern-aktionen { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      /* Schmal passt die Umlaufbahn nie: Raster per CSS erzwingen, damit beim Drehen/Verkleinern nichts kurz über den Rand ragt */
+      .kern-aktionen { position: static; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; margin-top: 12px; }
+      .kern-aktionen .aktion { position: relative; width: auto; transform: none; visibility: visible; }
+      .verbindungen { display: none; }
+      /* ab 11-02p: rechts 6 statt 10 px und engere Laufweite, damit „AKTUALISIEREN“ auch bei 320 px nicht mitten im Wort bricht */
+      .aktion { min-width: 0; padding-right: 6px; gap: 8px; }
+      .aktion small { display: none; }
+      .aktion b { font-size: 0.6875rem; letter-spacing: 0.03em; }
+      .aktion-symbol { width: 34px; height: 34px; }
+      .aktion svg { width: 18px; height: 18px; }
+      #chatverlauf { max-height: 50vh; }
+      .chat-karte, .protokoll-karte { min-height: 0; }
+      .protokoll-karte .karte-inhalt { max-height: 320px; }
+      .nachricht.nutzer { margin-left: 8%; }
+      .nachricht.jarvis, .nachricht.fehler { margin-right: 8%; }
+      /* Fußzeile auch schmal sichtbar (Stand-Kennung), umbrechend; Platz für die feste Reiterleiste hat body bereits */
+      .fuss { display: block; text-align: center; font-size: 0.625rem; letter-spacing: 0.02em; padding: 6px 10px; min-height: 0; }
+      .chart { height: 520px; }
+      .ablauf-chart { height: max(260px, 13rem); }
+      .analyse-zweispaltig { grid-template-columns: minmax(0, 1fr); }
+      .trading-raster { grid-template-columns: minmax(0, 1fr); grid-template-areas: "modus" "notaus" "aktien" "ablauf" "werkzeuge" "konto" "order" "paper" "simkern"; }
+      .notaus { min-height: 80px; font-size: 1.1875rem; }
+    }
+
+    /* Reduzierte Bewegung: alle Animationen aus */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+    }
+
+    /* Größere Browser-Schrift (ab 11-02j, per Schrift-Abnahme bei 150/200 % gefunden): umbrechen statt überlaufen oder abschneiden.
+       Bei Standardschrift unverändert – umgebrochen wird nur, wenn der Platz fehlt. Die Schrift wird nirgends verkleinert. */
+    .kopf, .kopf-rechts, .karte-titel, .funktionen li { flex-wrap: wrap; }
+    .kopf-rechts { min-width: 0; justify-content: flex-end; }
+    .kopf-untertitel, .kopf .pille, .uhr { white-space: normal; overflow-wrap: anywhere; }
+    .karte-titel .zusatz, .funktionen b, .karte-inhalt code { min-width: 0; overflow-wrap: anywhere; }
+    /* Einzelne lange Wörter bei sehr großer Schrift („Verbindung“ in den Aktionskacheln, „SIMULATIONSMODUS“) dürfen umbrechen */
+    .aktion, .aktion > span { min-width: 0; }
+    .aktion span, .sim-modus, .testnet-hinweis, .knopf { overflow-wrap: anywhere; }
+    /* Schnellzugriff US-Aktien im Kern (ab 11-02m) */
+    .schnellzugriff { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 0; }
+    .schnellzugriff .knopf { min-height: 44px; }
+    /* Große Browser-Schrift in der Kern-Karte (ab 11-02o; Klasse .schrift-gross per Skript ab 1rem ≥ 18 px, also ab etwa 112 %):
+       umordnen statt Schrift verkleinern. Schnellzugriffe als flexibles Raster, Modulkacheln vor dem dekorativen Reaktor
+       (Fokusreihenfolge bleibt gleich, der Reaktor ist nicht fokussierbar), Reaktor schrumpft mit wachsender Schrift.
+       Bei Standardschrift greift nichts davon. */
+    /* Raster: zwei gleich breite Spalten, eine Spalte, sobald eine Spalte schmaler als 8rem würde (nie 3 + 1) */
+    .schrift-gross .schnellzugriff { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(8rem, calc(50% - 5px))), 1fr)); width: 100%; }
+    .schrift-gross .schnellzugriff .knopf { padding: 8px 10px; }
+    .schrift-gross .kern { width: clamp(110px, calc(46vh - 80px - (1rem - 16px) * 10), 330px); min-width: 0; }
+    .schrift-gross .orbit.kompakt .kern-aktionen { order: -1; margin: 0 0 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(6rem, calc(50% - 5px))), 1fr)); }
+    /* Schmale Kachel bei großer Schrift: Platz für den Titel statt für das (dekorative) Symbol */
+    .kern-aktionen .aktion { container-type: inline-size; }
+    .schrift-gross .aktion b { letter-spacing: 0.03em; }
+    @container (max-width: 12rem) { .schrift-gross .aktion-symbol { display: none; } }
+    /* ab 11-02p auch bei Standardschrift: sehr schmale Kachel (z. B. 320 px Bildschirm) – Titel statt Symbol, kein Bruch mitten im Wort */
+    @container (max-width: 8rem) { .aktion-symbol { display: none; } }
+    /* Ablaufschritte, Blockaden und Profil-Sektionen enthalten lange Fachbegriffe (z. B. Variablennamen, Regelnamen) */
+    .ablauf-schritte, .ablauf-blockaden, #profil-sektionen, .wz-wichtig { overflow-wrap: anywhere; }
+    input, textarea { max-width: 100%; } /* Felder mit size-Attribut wachsen sonst mit der Schrift über den Rand */
+  
+    /* ab 11-06i: Kennzahlenübersicht als Liste (lange Herkunftsangaben umbrechen) */
+    .kennzahlen-liste { margin: 4px 0; padding-left: 1.1em; }
+    .kennzahlen-liste li { margin: 6px 0; overflow-wrap: anywhere; }
+    .kennzahlen-liste li[data-status="veraltet"] b, .kennzahlen-liste li[data-status="fehlt"] b { color: var(--gedimmt); }
+    /* ---------- ab 11-06j: Navigation, Touch und lange Texte ---------- */
+    .sprungleiste { position: relative; }
+    .sprung-gruppe { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+    .sprung-knoepfe { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+    .sprung { font: inherit; font-size: 0.8125rem; color: var(--text); background: transparent; border: 1px solid var(--linie-stark); border-radius: 4px; padding: 4px 8px; min-height: 32px; cursor: pointer; max-width: 100%; overflow-wrap: anywhere; text-align: left; }
+    .sprung:hover { border-color: var(--akzent); }
+    /* ab 11-07b: Suche, Favoriten-Knopf je Karte */
+    .sprung-suchzeile { flex-wrap: nowrap; }
+    .sprung-suche { flex: 1 1 auto; min-width: 0; }
+    .sprung-eintrag { display: inline-flex; gap: 2px; max-width: 100%; }
+    .sprung-fav { min-width: 44px; text-align: center; padding: 4px 6px; color: var(--warn); }
+    .sprung-ort { color: var(--gedimmt); }
+    #sprung-suche-status:empty { display: none; }
+    /* ab 11-09c: Auftragsbaum */
+    .auftrag-baum { list-style: none; margin: 4px 0; padding-left: 0; }
+    .auftrag-baum ul { list-style: none; padding-left: 18px; border-left: 1px solid var(--linie); margin: 2px 0 2px 6px; }
+    .auftrag-baum li { overflow-wrap: anywhere; }
+    .aufgaben-liste progress { width: 100%; max-width: 20em; height: 8px; }
+    /* ab 11-07n: Touch – kein Doppeltipp-Zoom auf Bedienelementen (Verzögerung entfällt), Dialoge passen auf kleine Bildschirme */
+    button, a, summary, label, select, input, textarea, [role=button], [role=tab] { touch-action: manipulation; }
+    dialog { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow: auto; box-sizing: border-box; }
+    /* ab 11-07k: Zusatzangaben im Watchlist-Detail – Beschriftung und Feld umbrechen (200 % Schrift bei 320 px lief 1 px über) */
+    .wl-meta-form label { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
+    .wl-meta-form input.feld { min-width: 0; max-width: 100%; flex: 1 1 8em; }
+    /* ab 11-07i: Kennzahl-Erklärungen, Stärken/Schwächen */
+    .kennzahl-erklaerung > summary { cursor: pointer; font-size: 0.75rem; color: var(--gedimmt); min-height: 32px; display: flex; align-items: center; }
+    @media (pointer: coarse), (max-width: 1024px) { .kennzahl-erklaerung > summary { min-height: 44px; } }
+    .staerken-schwaechen h4 { margin: 8px 0 2px; font-size: 0.8125rem; }
+    .staerken-schwaechen ul { margin: 0 0 4px; padding-left: 18px; overflow-wrap: anywhere; }
+    /* ab 11-07g: Hinweiszentrale, Übersicht anpassen */
+    .briefing-details { margin-top: 8px; }
+    .briefing-details > summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; }
+    .briefing-feldgruppe { border: 1px solid var(--linie); border-radius: var(--radius-klein, 4px); margin: 6px 0; padding: 4px 8px; min-width: 0; }
+    .briefing-wahlen { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+    .briefing-wahl { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; overflow-wrap: anywhere; }
+    .briefing-wahl input { width: 22px; height: 22px; }
+    #hinweis-liste li[data-prio="hoch"] .aufgabe-text { color: var(--fehler); }
+    @media (pointer: coarse), (max-width: 1024px) { .briefing-wahl { min-height: 44px; } .briefing-details > summary { min-height: 44px; } }
+    /* ab 11-07f: Automatisierungen */
+    .auto-felder { display: inline-flex; flex-wrap: wrap; gap: 6px; min-width: 0; max-width: 100%; }
+    .auto-felder[hidden] { display: none; }
+    #auto-name, #auto-text { min-width: 0; flex: 1 1 12em; }
+    /* ab 11-07d: offene Rückfrage */
+    .dialog-zustand { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0 0; padding: 6px 10px; border: 1px solid var(--warn); border-radius: var(--radius-klein); background: var(--warn-hg); font-size: var(--schrift-s, 0.875rem); }
+    .dialog-zustand[hidden] { display: none; }
+    #dialog-zustand-text { flex: 1 1 16em; min-width: 0; overflow-wrap: anywhere; }
+    .kopf-sprache { font-size: 0.75rem; }
+    .kopf-sprache[data-mikro="hört zu"] { color: var(--ok); border-color: var(--ok); }
+    @media (max-width: 640px) { .kopf-sprache { display: none; } }
+    /* Lange Texte (Notizen, Herkunftsangaben, Meldungen) umbrechen statt den Rahmen zu sprengen */
+    .karte-inhalt .info, .karte-inhalt .klein, .aufgaben-liste li, .notiz-inhalt, .statusliste li { overflow-wrap: anywhere; }
+    .notiz-inhalt { white-space: pre-wrap; margin: 4px 0 0; flex-basis: 100%; }
+    /* Touch (Tablet, grober Zeiger): Bedienelemente mindestens 44 px hoch, mehr Abstand zwischen interaktiven Elementen */
+    @media (pointer: coarse) {
+      .knopf, .schalter, .sprung, button, select, input:not([type="checkbox"]):not([type="radio"]), textarea { min-height: 44px; }
+      input[type="checkbox"], input[type="radio"] { min-width: 24px; min-height: 24px; }
+      .order-zeile, .aufgabe-form, .sprung-knoepfe, .wz-zeile { gap: 10px; }
+      /* ab 11-09f: „.aufgabe-form .knopf“ (40 px) überstimmte sonst die 44 px, sobald der Knopf allein in einer Zeile umbricht */
+      .aufgabe-form .knopf { min-height: 44px; }
+      .aufgaben-liste li { gap: 10px; padding-top: 6px; padding-bottom: 6px; }
+    }
+    .sprung-summary { cursor: pointer; list-style: none; }
+    .sprung-summary::-webkit-details-marker { display: none; }
+    /* Feld öffnet sich über dem Inhalt – keine Verschiebung (der Not-Aus bleibt oben) */
+    .sprung-panel { position: fixed; right: 16px; top: calc(var(--kopf-hoehe) + 6px); z-index: 50; width: min(560px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 10px; border: 1px solid var(--linie-stark); border-radius: 6px; background: var(--bg); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5); }
+
+    /* ---------- ab 11-07a: Designsystem – Tokens für Schrift, Abstände, Radien, Statusfarben ---------- */
+    :root {
+      --schrift-xs: 0.75rem; --schrift-s: 0.8125rem; --schrift-m: 0.9375rem; --schrift-l: 1.0625rem; --schrift-xl: 1.25rem;
+      --abstand-1: 4px; --abstand-2: 8px; --abstand-3: 12px; --abstand-4: 16px; --radius: 6px; --radius-klein: 4px;
+      --warn-hg: rgba(255, 204, 102, 0.08); --fehler-hg: rgba(255, 107, 107, 0.08); --ok-hg: rgba(122, 255, 196, 0.08);
+    }
+    /* Einklappbare Karten */
+    .karte-klappe { font: inherit; font-size: var(--schrift-s); line-height: 1; color: var(--gedimmt); background: transparent; border: 1px solid var(--linie); border-radius: var(--radius-klein); min-width: 44px; min-height: 44px; margin-right: var(--abstand-2); cursor: pointer; vertical-align: middle; }
+    .karte-klappe:hover, .karte-klappe:focus-visible { color: var(--akzent); border-color: var(--akzent); }
+    .karte-zu > .karte-titel { margin-bottom: 0; }
+    /* Not-Aus in der Kopfzeile: deutlich, aber nur Sprung */
+    .kopf-notaus { font: inherit; font-size: var(--schrift-xs); cursor: pointer; color: var(--fehler); border-color: var(--fehler); background: var(--fehler-hg); }
+    .kopf-notaus:hover, .kopf-notaus:focus-visible { background: rgba(255, 107, 107, 0.2); }
+    /* Einheitliche Hinweisarten (Symbol + Farbe + Text, nie nur Farbe) */
+    .hinweis-ok, .hinweis-warn, .hinweis-fehler { border-left: 3px solid; padding: var(--abstand-1) var(--abstand-2); border-radius: var(--radius-klein); }
+    .hinweis-ok { border-color: var(--ok); background: var(--ok-hg); }
+    .hinweis-warn { border-color: var(--warn); background: var(--warn-hg); }
+    .hinweis-fehler { border-color: var(--fehler); background: var(--fehler-hg); }
+    @media (pointer: coarse) { .karte-klappe, .kopf-notaus { min-height: 44px; min-width: 44px; } }
+    @media (max-width: 480px) { .kopf-notaus-text { display: none; } }
+    /* Klapp-Symbol nur per CSS – der Titeltext der Karte bleibt unverändert */
+    .karte-klappe::before { content: "\25BE"; }
+    .karte-zu .karte-klappe::before { content: "\25B8"; }
+    @media (max-width: 1500px) { .kopf-notaus-text { display: none; } }
+    /* Klappe nicht höher als die Titelzeile (sonst verschiebt sie den Not-Aus nach unten); bei Touch gilt 44 px (oben) */
+    @media (min-width: 1025px) and (pointer: fine) { .karte-klappe { min-height: 32px; min-width: 32px; height: 32px; padding: 0; margin-top: -10px; margin-bottom: -10px; } }
+
+/* ab 11-09d: Dateivorschau */
+.datei-text { max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem; }
+.datei-bild { max-width: 100%; max-height: 320px; display: block; }
+/* ab 11-09e: Dokumentvergleich */
+.dok-neu { color: var(--ok); }
+.dok-weg { color: var(--fehler); text-decoration: line-through; }
+/* ab 11-09f: Projekte */
+.projekt progress { width: 100%; height: 10px; }
+.projekt-meilensteine { list-style: none; padding-left: 0; margin: 4px 0; }
+/* ab 11-09g: Arbeitsplatz, Dokument-Markdown */
+.ap-kacheln { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 10px; margin: 8px 0; }
+.ap-kachel { border: 1px solid var(--linie, rgba(127, 127, 127, 0.35)); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.ap-kachel h3 { margin: 0 0 4px; font-size: 0.875rem; }
+.ap-zeilen { list-style: none; margin: 0; padding: 0; font-size: 0.8125rem; overflow-wrap: anywhere; }
+.ap-kompakt .karte-inhalt > p.klein:not([id]):not([role]) { display: none; }
+.ap-kompakt .karte { margin-bottom: 8px; }
+.ap-kompakt .ap-kacheln { gap: 6px; }
+.dok-markdown blockquote { margin: 4px 0; padding-left: 8px; border-left: 3px solid var(--warn); }
+.dok-markdown pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* ab 11-09i: Kennzeichnung in KI-Antworten (Merkmal, der Antworttext bleibt unverändert) */
+.nachricht.jarvis[data-unsicher]::after, .nachricht.jarvis[data-annahmen]::after, .nachricht.jarvis[data-links-ungeprueft]::after { display: block; margin-top: 4px; font-size: 0.75rem; color: var(--warn); }
+.nachricht.jarvis[data-unsicher]::after { content: "⚠ enthält Unsicherheit"; }
+.nachricht.jarvis[data-annahmen]::after { content: "⚠ enthält Annahmen"; }
+.nachricht.jarvis[data-links-ungeprueft]::after { content: "⚠ Links stammen vom Modell und sind nicht geprüft"; }
+.nachricht.jarvis[data-unsicher][data-links-ungeprueft]::after, .nachricht.jarvis[data-annahmen][data-links-ungeprueft]::after { content: "⚠ enthält Unsicherheit/Annahmen · Links nicht geprüft"; }
+.nachricht.hinweis-kontext { opacity: 0.8; font-style: italic; }
+/* ab 11-09m/09n: Tabellen im Aktien-Überblick und Rechner, Kennzeichnung Renditeversprechen */
+.rechner-tabelle-rahmen, #csv-tabelle { overflow-x: auto; max-width: 100%; }
+.rechner-tabelle { border-collapse: collapse; font-size: 0.8125rem; }
+.rechner-tabelle th, .rechner-tabelle td { border: 1px solid var(--linie); padding: 2px 6px; text-align: left; white-space: nowrap; }
+.nachricht.jarvis[data-rendite]::before { content: "⚠ enthält ein Renditeversprechen – keine Anlageberatung, Gewinne sind nie sicher"; display: block; font-size: 0.75rem; color: var(--fehler); }
+.rechner-diagramm { width: 100%; height: auto; max-height: 240px; }
+.rechner-diagramm .rechner-linie-0 { stroke: var(--ok); }
+.rechner-diagramm .rechner-linie-1 { stroke: var(--warn); }
+.rechner-diagramm .rechner-achse { font-size: 0.6875rem; fill: currentColor; }
+/* ab 11-10m: Kennzeichnung von Handelsaufforderungen in KI-Antworten (Merkmal, Text unverändert) */
+.nachricht.jarvis[data-signal]::before { content: "⚠ enthält eine Handelsaufforderung – JARVIS gibt keine Echtzeitsignale"; display: block; font-size: 0.75rem; color: var(--fehler); }
+/* ab 11-10o: kompakte Seitenleiste (nur auf Wunsch, nur ab 1100 px) */
+.seitenleiste { position: fixed; left: 0; top: 0; bottom: 0; width: 11rem; overflow-y: auto; background: var(--panel); border-right: 1px solid var(--linie); padding: 10px 8px; z-index: 30; }
+.seitenleiste ul { list-style: none; margin: 0; padding: 0; }
+.seitenleiste-ziel { width: 100%; min-height: 36px; margin: 2px 0; padding: 4px 8px; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; color: var(--text); font: inherit; font-size: 0.8125rem; cursor: pointer; }
+.seitenleiste-ziel:hover, .seitenleiste-ziel:focus-visible { border-color: var(--linie-stark); }
+.seitenleiste-fuss { margin-top: 8px; font-size: 0.6875rem; color: var(--gedimmt); overflow-wrap: anywhere; }
+body.mit-seitenleiste { padding-left: 11.5rem; }
+#seitenleiste-schalter[hidden], .seitenleiste[hidden] { display: none; }
+@media (max-width: 1099px) { .seitenleiste, #seitenleiste-schalter { display: none !important; } body.mit-seitenleiste { padding-left: 0; } }
+@media (pointer: coarse) { .seitenleiste-ziel { min-height: 44px; } }
+/* ab 11-11a: Schnellaktionen unter dem Chat, erkannter Befehl */
+.bedien-schnell { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
+.bedien-schnell[hidden] { display: none; }
+.nachricht.nutzer[data-erkannt]::after { content: attr(data-erkannt); display: block; margin-top: 2px; font-size: 0.75rem; opacity: 0.75; }
+/* ab 11-11f: Kopfschalter der Seitenleiste mit ausreichend großem Ziel (vorher knapp unter 24 px; so hoch wie der NOT-AUS-Kopfknopf, damit der Kopf nicht wächst) */
+#seitenleiste-schalter { min-height: 25px; font: inherit; font-size: var(--schrift-xs); cursor: pointer; }
+@media (pointer: coarse) { #seitenleiste-schalter { min-height: 44px; } }
+/* ab 11-13g: letzte zu kleine Ziele aus der Oberflächen-Abnahme (tests/oberflaeche-abnahme.ps1, Emulation per CDP) */
+/* Kontrollkästchen mit Beschriftung: die Beschriftung ist das Ziel – mindestens 24 px (WCAG 2.5.8), bei Touch 44 px (vorher 22 bzw. 33 px) */
+label:has(> #wl-nur-analysiert), label:has(> #wl-nur-favoriten), label:has(> #order-nur-pruefen) { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; }
+/* innere Aufklapper in Karten (z. B. „Wie wird gerechnet?“, Analysehistorie) waren 17 px hoch; Marker bleibt (kein flex) */
+.karte-inhalt summary:not(.karte-titel) { padding-block: 4px; cursor: pointer; }
+@media (pointer: coarse) {
+  label:has(> #wl-nur-analysiert), label:has(> #wl-nur-favoriten), label:has(> #order-nur-pruefen) { min-height: 44px; }
+  .karte-inhalt summary:not(.karte-titel) { min-height: 44px; padding-block: 12px; box-sizing: border-box; }
+  /* schmale Schalter (↑/↓ der Kacheln, 33 px breit) */
+  .schalter { min-width: 44px; }
+  .sprung-summary { display: inline-flex; align-items: center; min-height: 44px; }
+}
+/* ab 11-13g: einheitliche Ladeanzeige – Worker-Anfragen über 700 ms (73) und aria-busy überall gleich; über dem Netzhinweis, nie klickbar */
+.anfrage-laeuft { position: fixed; right: 12px; bottom: 60px; z-index: 39; box-sizing: border-box; margin: 0; padding: 6px 10px; max-width: calc(100vw - 24px); border: 1px solid var(--linie-stark); border-radius: var(--radius-klein, 4px); background: var(--bg); color: var(--gedimmt); font-size: var(--schrift-xs, 0.75rem); pointer-events: none; }
+.anfrage-laeuft[hidden] { display: none; }
+.anfrage-laeuft::before, [aria-busy="true"]:is(button, .knopf)::after { content: ""; display: inline-block; width: 0.8em; height: 0.8em; margin: 0 6px; vertical-align: -0.1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: lade-dreh 0.9s linear infinite; }
+[aria-busy="true"] { cursor: progress; }
+@keyframes lade-dreh { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .anfrage-laeuft::before, [aria-busy="true"]:is(button, .knopf)::after { animation: none; border-right-color: currentColor; opacity: 0.6; } }
+/* ab 14ze: Weitere Werkzeuge – seltener genutzte Cockpit-Karten eingeklappt (Karten bleiben im Dokument, nichts gelöscht) */
+body.weitere-zu .karte.weitere { display: none; }
+.weitere-leiste { margin: 0 0 12px; }
